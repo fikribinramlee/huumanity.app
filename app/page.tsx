@@ -1,31 +1,31 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
+import Link from "next/link";
 
 // ---------- Constants ----------
 
-const TABS = ["Email", "DMs", "X & Linkedin posts"] as const;
+const TABS = ["Email", "DMs", "Posts"] as const;
 type Tab = (typeof TABS)[number];
 
-const TONES = ["Unpolished", "Raw", "Informal", "Shorter", "Humorous"] as const;
+const TONES = ["Humanize", "Unpolished", "Controversial", "Direct"] as const;
 
 const SAMPLES: Record<Tab, string> = {
-  Email: `Dear [name],
+  Email: `Hey Dimitri,
 
-I hope this email finds you well. I am reaching out to introduce myself and explore potential synergies between our organizations. Based on my research, I believe there is significant value in connecting, and I would love to schedule a brief call at your earliest convenience to discuss how we might collaborate moving forward.
+I am reaching out to introduce myself and explore potential synergies between our organizations. Based on my research, I believe there is significant value in connecting, and I would love to schedule a brief call at your earliest convenience to discuss how we might collaborate moving forward.
 
-Please let me know what time works best for your schedule.
+Would love to chat with you. I'm free this afternoon at 4pm if you're available, or let me know what time works best for your schedule.
 
 Best regards,
 Alex`,
 
-  DMs: `Hi [name]!
-
-I came across your profile and was thoroughly impressed by your professional accomplishments and the value you continue to deliver in your industry. I would love to connect and explore opportunities for mutual collaboration.
+  DMs: `Yo Shawn, I came across your profile and was thoroughly impressed by your professional accomplishments and the value you continue to deliver in your industry. I would love to connect and explore opportunities for mutual collaboration.
 
 Looking forward to engaging with your insightful content and hearing back from you at your earliest convenience.`,
 
-  "X & Linkedin posts": `After conducting extensive research and analysis over the past several months, I am thrilled to share that AI is fundamentally transforming the way we approach productivity and workflow optimization.
+  Posts: `After conducting extensive research and analysis over the past several months, I am thrilled to share that AI is fundamentally transforming the way we approach productivity and workflow optimization.
 
 The implications of this technological revolution truly cannot be overstated.
 
@@ -33,117 +33,44 @@ I will be sharing more in-depth insights in the coming days. Stay tuned for what
 };
 
 const NAV_LINKS = [
-  { href: "#features", label: "Features" },
-  { href: "#personas", label: "For You" },
+  { href: "#benefit", label: "Why huu" },
+  { href: "#demo", label: "Demo" },
+  { href: "#use-cases", label: "Use Cases" },
   { href: "#pricing", label: "Pricing" },
-  { href: "#demo", label: "Web Demo" },
 ];
 
 const BRAND_LOGOS = [
   "OpenAI", "YC", "a16z", "Stripe", "Notion", "Vercel", "Linear", "Figma", "Loom", "Superhuman", "Anthropic", "Mercury",
 ];
 
-type Persona = {
-  id: string;
+type UseCase = {
+  id: "outreach" | "posts" | "scripts";
   label: string;
   title: string;
   blurb: string;
 };
 
-const PERSONAS: Persona[] = [
+const USE_CASES: UseCase[] = [
   {
-    id: "founders",
-    label: "Founders",
-    title: "huu for Founders",
+    id: "outreach",
+    label: "Outreach",
+    title: "huu for Outreach",
     blurb:
-      "You're raising, hiring, and shipping at the same time. Stop sending investor updates that read like a press release. huu rewrites your drafts so they sound like you, not like ChatGPT did it at 2am.",
+      "Cold emails, LinkedIn DMs, follow-ups. Stop sending “I hope this email finds you well” and start sending messages people actually open, read, and reply to.",
   },
   {
-    id: "marketers",
-    label: "Marketers",
-    title: "huu for Marketers",
+    id: "posts",
+    label: "Posts",
+    title: "huu for Posts",
     blurb:
-      "Your landing pages, ads, and emails all sound the same — because the AI behind them is the same. huu adds the human edge that makes copy actually convert.",
+      "X threads, LinkedIn posts, newsletters. huu adds the personality that gets reposts, comments, and DMs — not crickets and corporate cringe.",
   },
   {
-    id: "sales",
-    label: "Sales",
-    title: "huu for Sales",
+    id: "scripts",
+    label: "Scripts",
+    title: "huu for Scripts",
     blurb:
-      "Cold emails that say \"I hope this finds you well\" get deleted. huu turns generic outbound into messages that get opened, read, and replied to.",
-  },
-  {
-    id: "writers",
-    label: "Writers",
-    title: "huu for Writers",
-    blurb:
-      "Use AI to draft fast, then humanize with huu so the final piece sounds like you actually wrote it. No more readers spotting the em-dashes from a mile away.",
-  },
-  {
-    id: "creators",
-    label: "Creators",
-    title: "huu for Creators",
-    blurb:
-      "Captions, threads, and DMs that don't read like a corporate intern wrote them. huu helps your voice come through, even when AI helped draft the first pass.",
-  },
-  {
-    id: "recruiters",
-    label: "Recruiters",
-    title: "huu for Recruiters",
-    blurb:
-      "Candidates ghost generic outreach. huu turns your sequences into messages that feel like a real human is on the other end — because they are.",
-  },
-  {
-    id: "students",
-    label: "Students",
-    title: "huu for Students",
-    blurb:
-      "Draft essays, cover letters, and applications fast with AI. Then run them through huu so they sound like a person, not a prompt.",
-  },
-  {
-    id: "support",
-    label: "Customer Support",
-    title: "huu for Customer Support",
-    blurb:
-      "Reply 10x faster without the canned-response energy. huu makes scripted answers sound human, every single time.",
-  },
-];
-
-type Device = {
-  id: string;
-  label: string;
-  title: string;
-  blurb: string;
-};
-
-const DEVICES: Device[] = [
-  {
-    id: "web",
-    label: "Web",
-    title: "huu in your browser",
-    blurb:
-      "No install. Open huu.app, paste your text, and rewrite. Works in every browser on every OS.",
-  },
-  {
-    id: "chrome",
-    label: "Chrome",
-    title: "huu in Gmail, LinkedIn, X & more",
-    blurb:
-      "The Chrome extension adds a one-click rewrite button to every text box on the internet. Gmail, LinkedIn, X, Notion, Substack — wherever you write.",
-  },
-  {
-    id: "mac",
-    label: "Mac",
-    title: "huu, system-wide on macOS",
-    blurb:
-      "A native menubar app. Select text anywhere on your Mac, hit a shortcut, and watch it rewrite in place.",
-  },
-  {
-    id: "ios",
-    label: "iOS",
-    title: "huu on iPhone",
-    blurb:
-      "A custom keyboard that humanizes anything you type. Replies, DMs, captions — all in your voice.",
+      "YouTube intros, podcast openers, sales decks, pitch reels. huu makes your words sound like you actually said them — not like you typed them.",
   },
 ];
 
@@ -156,7 +83,7 @@ const TESTIMONIALS = [
   },
   {
     quote:
-      "I draft with ChatGPT and finish with huu. It's the only tool that strips the AI smell without changing what I'm trying to say.",
+      "I draft with ChatGPT and finish with huu. It’s the only tool that strips the AI smell without changing what I’m trying to say.",
     name: "Daniel Cho",
     role: "Head of Content, Mercury",
   },
@@ -169,7 +96,7 @@ const TESTIMONIALS = [
   {
     quote:
       "I rewrite every cold email with huu before sending. My reps used to ignore my Loom requests. Now they reply same day.",
-    name: "James O'Connor",
+    name: "James O’Connor",
     role: "Sales Lead, Bracket",
   },
   {
@@ -182,28 +109,7 @@ const TESTIMONIALS = [
     quote:
       "I write 30+ DMs a day. huu makes them sound like me without me having to rewrite from scratch. Genuinely life-changing.",
     name: "Owen Bell",
-    role: "Creator, 480k followers on X",
-  },
-];
-
-const FEATURED_QUOTES = [
-  {
-    headline: "11x more replies",
-    quote: "huu took our cold email reply rate from 1% to 11% in 14 days.",
-    name: "Maya Patel",
-    role: "Founder, Loomly",
-  },
-  {
-    headline: "0 AI tells",
-    quote: "I run every draft through huu before publishing. Nothing slips through.",
-    name: "Daniel Cho",
-    role: "Head of Content, Mercury",
-  },
-  {
-    headline: "Sounds like me",
-    quote: "It learned my voice in two presets and now everything I send sounds like I actually wrote it.",
-    name: "Rina Suzuki",
-    role: "Growth at Linear",
+    role: "Creator, 480k on X",
   },
 ];
 
@@ -227,7 +133,6 @@ const PRICING = [
       "All 5 tones",
       "Unlimited presets",
       "History & versions",
-      "Chrome extension",
     ],
     cta: "Go Pro",
     accent: true,
@@ -249,32 +154,164 @@ const PRICING = [
 ];
 
 const FOOTER_LINKS: { title: string; links: string[] }[] = [
-  { title: "Product", links: ["Features", "Pricing", "Web Demo", "Chrome Extension", "Changelog"] },
-  { title: "Use Cases", links: ["Founders", "Marketers", "Sales", "Creators", "Recruiters"] },
-  { title: "Company", links: ["About", "Careers", "Blog", "Contact"] },
-  { title: "Resources", links: ["Help Center", "Guides", "API", "Status", "Privacy"] },
+  { title: "Product", links: ["Demo", "Pricing", "Changelog"] },
+  { title: "Use Cases", links: ["Outreach", "Posts", "Scripts"] },
+  { title: "Company", links: ["About", "Blog", "Contact"] },
+  { title: "Legal", links: ["Terms", "Privacy"] },
 ];
+
+type DownloadPlatform = "macos" | "windows" | "linux";
+
+function detectDownloadPlatform(): DownloadPlatform {
+  if (typeof navigator === "undefined") return "macos";
+
+  const value = `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
+  if (value.includes("win")) return "windows";
+  if (value.includes("linux") || value.includes("x11")) return "linux";
+  return "macos";
+}
+
+function downloadCtaLabel(platform: DownloadPlatform) {
+  if (platform === "windows") return "Download for Windows";
+  if (platform === "linux") return "Download for Linux";
+  return "Download for macOS";
+}
+
+function PlatformIcon({ platform }: { platform: DownloadPlatform }) {
+  if (platform === "windows") {
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M3 4.4 10.7 3v8.2H3V4.4Zm0 8.4h7.7V21L3 19.6v-6.8Zm9.3-10.1L21 1.2v10h-8.7V2.7Zm0 10.1H21v10l-8.7-1.5v-8.5Z" />
+      </svg>
+    );
+  }
+
+  if (platform === "linux") {
+    return (
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <path d="M12 2c2.1 0 3.8 1.8 3.8 4.1 0 1.2.4 2.3 1 3.4l2.3 4.2c.8 1.5.2 3.3-1.3 4l-1.5.7c-.8 2.1-2.4 3.6-4.3 3.6s-3.5-1.5-4.3-3.6l-1.5-.7c-1.5-.7-2.1-2.5-1.3-4l2.3-4.2c.6-1.1 1-2.2 1-3.4C8.2 3.8 9.9 2 12 2Zm-1.4 5.2c.5 0 .9-.4.9-.9s-.4-.9-.9-.9-.9.4-.9.9.4.9.9.9Zm2.8 0c.5 0 .9-.4.9-.9s-.4-.9-.9-.9-.9.4-.9.9.4.9.9.9Z" />
+      </svg>
+    );
+  }
+
+  return (
+    <svg width="15" height="18" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+      <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z" />
+    </svg>
+  );
+}
+
+function DownloadCtaContent({ platform }: { platform: DownloadPlatform }) {
+  return (
+    <>
+      <PlatformIcon platform={platform} />
+      <span>{downloadCtaLabel(platform)}</span>
+    </>
+  );
+}
 
 type SelectionAnchor = {
   tabTop: number;
   tabLeft: number;
   popupTop: number;
   popupLeft: number;
+  popupWidth: number;
 } | null;
 
-const POPUP_WIDTH = 340;
+type PopupStage = "select" | "loading" | "result" | "limit";
+
+const POPUP_MAX_WIDTH = 480;
+const POPUP_MIN_WIDTH = 280;
+const FREE_LIMIT = 8;
+const ANON_LIMIT = 5;
+const ANON_RESET_MS = 24 * 60 * 60 * 1000;
+const ANON_USAGE_KEY = "huu_anon_usage";
+
+type AnonUsage = { count: number; firstUseTime: number };
+
+function readAnonUsage(): AnonUsage {
+  if (typeof window === "undefined") return { count: 0, firstUseTime: 0 };
+  try {
+    const raw = localStorage.getItem(ANON_USAGE_KEY);
+    if (!raw) return { count: 0, firstUseTime: 0 };
+    const parsed = JSON.parse(raw) as AnonUsage;
+    if (
+      parsed.firstUseTime &&
+      Date.now() - parsed.firstUseTime > ANON_RESET_MS
+    ) {
+      localStorage.removeItem(ANON_USAGE_KEY);
+      return { count: 0, firstUseTime: 0 };
+    }
+    return parsed;
+  } catch {
+    return { count: 0, firstUseTime: 0 };
+  }
+}
+
+function writeAnonUsage(next: AnonUsage) {
+  try {
+    localStorage.setItem(ANON_USAGE_KEY, JSON.stringify(next));
+  } catch {}
+}
+const BRAND = "#fff700";
 
 // ---------- Component ----------
 
 export default function LandingPage() {
+  const { isSignedIn, isLoaded, user } = useUser();
+  const downloadPlatform = detectDownloadPlatform();
+  const [usageCount, setUsageCount] = useState<number>(0);
+  const [showLimitModal, setShowLimitModal] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("Email");
   const [anchor, setAnchor] = useState<SelectionAnchor>(null);
   const [expanded, setExpanded] = useState(false);
+  const [popupStage, setPopupStage] = useState<PopupStage>("select");
+  const [selectedTones, setSelectedTones] = useState<string[]>([]);
+  const [resultText, setResultText] = useState<string>("");
+  const [generatedSignature, setGeneratedSignature] = useState("");
+  const [copied, setCopied] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [activePersona, setActivePersona] = useState<Persona>(PERSONAS[0]);
-  const [activeDevice, setActiveDevice] = useState<Device>(DEVICES[0]);
+  const [activeSection, setActiveSection] = useState<string>("");
+  const [activeUseCase, setActiveUseCase] = useState<UseCase>(USE_CASES[0]);
+  const [animStep, setAnimStep] = useState(0);
+  const [arrowFlash, setArrowFlash] = useState(false);
+  const [animStarted, setAnimStarted] = useState(false);
+  const [cursorPos, setCursorPos] = useState(0);      // 0=email, 1=Unpolished, 2=Controversial, 3=Enter
+  const [cursorVisible, setCursorVisible] = useState(false);
+  const [cursorExiting, setCursorExiting] = useState(false);
+  const [btnLefts, setBtnLefts] = useState({ u: "19%", c: "32%", e: "50%" });
+  // Feature section animation state
+  const [featAnimStep, setFeatAnimStep] = useState(0);
+  const [featArrowFlash, setFeatArrowFlash] = useState(false);
+  const [featAnimStarted, setFeatAnimStarted] = useState(false);
+  const [featCursorPos, setFeatCursorPos] = useState(0); // 0=text, 1=Humanize, 2=Unpolished, 3=Enter
+  const [featCursorVisible, setFeatCursorVisible] = useState(false);
+  const [featCursorExiting, setFeatCursorExiting] = useState(false);
+  const [featBtnLefts, setFeatBtnLefts] = useState<{ h: string; u: string; e: string; top: string }>({ h: "15%", u: "33%", e: "75%", top: "54%" });
+  const [isCustomMode, setIsCustomMode] = useState(false);
+  const savedRangeRef = useRef<Range | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const demoSectionRef = useRef<HTMLDivElement>(null);
+  const benefitSectionRef = useRef<HTMLElement>(null);
+  const rightColumnRef = useRef<HTMLDivElement>(null);
+  const featSectionRef = useRef<HTMLElement>(null);
+  const featVizRef = useRef<HTMLDivElement>(null);
+  const popupRef = useRef<HTMLDivElement>(null);
+  const popupStageRef = useRef<PopupStage>("select");
+
+  // Keep the ref in sync so the global selectionchange listener can read the latest value.
+  useEffect(() => {
+    popupStageRef.current = popupStage;
+  }, [popupStage]);
+
+  useEffect(() => {
+    if (user?.publicMetadata?.usageCount !== undefined) {
+      const id = window.setTimeout(() => {
+        setUsageCount(user.publicMetadata.usageCount as number);
+      }, 0);
+      return () => window.clearTimeout(id);
+    }
+  }, [user]);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 40);
@@ -283,8 +320,175 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  // Start animation only when the benefit section scrolls into view.
+  useEffect(() => {
+    const el = benefitSectionRef.current;
+    if (!el || animStarted) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setAnimStarted(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.25 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [animStarted]);
+
+  // Compute cursor target positions from real DOM layout (updates on resize too).
+  useEffect(() => {
+    const compute = () => {
+      const col = rightColumnRef.current;
+      if (!col) return;
+      const u = col.querySelector('[data-btn-id="unpolished"]') as HTMLElement | null;
+      const c = col.querySelector('[data-btn-id="controversial"]') as HTMLElement | null;
+      const e = col.querySelector('[data-btn-id="enter"]') as HTMLElement | null;
+      if (!u || !c || !e) return;
+      const colRect = col.getBoundingClientRect();
+      const pct = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        const cx = r.left + r.width / 2 - 1; // -1 for cursor tip offset
+        return `${(((cx - colRect.left) / colRect.width) * 100).toFixed(1)}%`;
+      };
+      setBtnLefts({ u: pct(u), c: pct(c), e: pct(e) });
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
+
+  // Benefit-section demo animation — runs once after animStarted flips true.
+  useEffect(() => {
+    if (!animStarted) return;
+    // ── Fade in at email ──
+    const t1  = window.setTimeout(() => { setCursorPos(0); setCursorVisible(true); }, 600);
+    // Selection highlight
+    const t2  = window.setTimeout(() => setAnimStep(2), 1800);
+
+    // ── Tone picker appears, cursor moves up to Unpolished (visible, smooth) ──
+    const t3a = window.setTimeout(() => setAnimStep(3), 3300);
+    const t3b = window.setTimeout(() => setCursorPos(1), 3400); // move while visible
+    // Unpolished turns yellow once cursor has arrived (~800ms travel)
+    const t4  = window.setTimeout(() => setAnimStep(4), 4400);
+
+    // ── Cursor moves to Controversial (visible, smooth) ──
+    const t5a = window.setTimeout(() => setCursorPos(2), 5000);
+    // Controversial turns yellow
+    const t5b = window.setTimeout(() => setAnimStep(5), 5900);
+
+    // ── Cursor moves to Enter (visible, smooth) ──
+    const t6a = window.setTimeout(() => setCursorPos(3), 6500);
+    // Enter button flashes (click!)
+    const t6b = window.setTimeout(() => {
+      setArrowFlash(true);
+      window.setTimeout(() => setArrowFlash(false), 600);
+    }, 7300);
+
+    // ── Cursor exits: slides right and fades out ──
+    const t7a = window.setTimeout(() => { setCursorExiting(true); setCursorVisible(false); }, 7900);
+    const t7b = window.setTimeout(() => setCursorExiting(false), 8600); // reset
+
+    // ── Result ──
+    const t8 = window.setTimeout(() => setAnimStep(6), 8500);
+    const t9 = window.setTimeout(() => setAnimStep(7), 9500);
+
+    return () => {
+      [t1,t2,t3a,t3b,t4,t5a,t5b,t6a,t6b,t7a,t7b,t8,t9]
+        .forEach((t) => window.clearTimeout(t));
+    };
+  }, [animStarted]);
+
+  // Feature section: trigger animation when scrolled into view.
+  useEffect(() => {
+    const el = featSectionRef.current;
+    if (!el || featAnimStarted) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) { setFeatAnimStarted(true); observer.disconnect(); }
+      },
+      { threshold: 0.25 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [featAnimStarted]);
+
+  // Feature section: compute tone-button DOM positions for cursor targeting.
+  useEffect(() => {
+    const compute = () => {
+      const viz = featVizRef.current;
+      if (!viz) return;
+      const h = viz.querySelector('[data-feat-btn-id="humanize"]') as HTMLElement | null;
+      const u = viz.querySelector('[data-feat-btn-id="unpolished"]') as HTMLElement | null;
+      const e = viz.querySelector('[data-feat-btn-id="enter"]') as HTMLElement | null;
+      if (!h || !u || !e) return;
+      const vr = viz.getBoundingClientRect();
+      const pctLeft = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        return `${(((r.left + r.width / 2 - 1 - vr.left) / vr.width) * 100).toFixed(1)}%`;
+      };
+      const pctTop = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        return `${(((r.top + r.height / 2 - vr.top) / vr.height) * 100).toFixed(1)}%`;
+      };
+      setFeatBtnLefts({ h: pctLeft(h), u: pctLeft(u), e: pctLeft(e), top: pctTop(h) });
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
+
+  // Feature section: animation sequence (runs once after featAnimStarted).
+  useEffect(() => {
+    if (!featAnimStarted) return;
+    const f1  = window.setTimeout(() => { setFeatCursorPos(0); setFeatCursorVisible(true); }, 600);
+    const f2  = window.setTimeout(() => setFeatAnimStep(2), 1800);   // text selected
+    const f3a = window.setTimeout(() => setFeatAnimStep(3), 3000);   // tone bar appears
+    const f3b = window.setTimeout(() => setFeatCursorPos(1), 3200);  // cursor → Humanize
+    const f4  = window.setTimeout(() => setFeatAnimStep(4), 4100);   // Humanize yellow
+    const f5a = window.setTimeout(() => setFeatCursorPos(2), 4700);  // cursor → Unpolished
+    const f5b = window.setTimeout(() => setFeatAnimStep(5), 5600);   // Unpolished yellow
+    const f6a = window.setTimeout(() => setFeatCursorPos(3), 6200);  // cursor → Enter
+    const f6b = window.setTimeout(() => {
+      setFeatArrowFlash(true);
+      window.setTimeout(() => setFeatArrowFlash(false), 600);
+    }, 7000);
+    const f7a = window.setTimeout(() => { setFeatCursorExiting(true); setFeatCursorVisible(false); }, 7600);
+    const f7b = window.setTimeout(() => setFeatCursorExiting(false), 8300);
+    const f8  = window.setTimeout(() => setFeatAnimStep(6), 7900);   // loading
+    const f9  = window.setTimeout(() => setFeatAnimStep(7), 9200);   // result
+    return () => {
+      [f1,f2,f3a,f3b,f4,f5a,f5b,f6a,f6b,f7a,f7b,f8,f9].forEach((t) => window.clearTimeout(t));
+    };
+  }, [featAnimStarted]);
+
+  // Track which section is in view for crossed-out nav effect
+  useEffect(() => {
+    const sectionIds = NAV_LINKS.map((l) => l.href.replace("#", ""));
+    const observers: IntersectionObserver[] = [];
+
+    sectionIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) setActiveSection(id);
+        },
+        { rootMargin: "-40% 0px -40% 0px", threshold: 0 }
+      );
+      obs.observe(el);
+      observers.push(obs);
+    });
+
+    return () => observers.forEach((o) => o.disconnect());
+  }, []);
+
   useEffect(() => {
     const handleSelectionChange = () => {
+      // Don't dismiss popup while loading or showing result.
+      if (popupStageRef.current !== "select") return;
+
       const selection = window.getSelection();
       const editor = editorRef.current;
       const section = demoSectionRef.current;
@@ -313,20 +517,31 @@ export default function LandingPage() {
       const sectionWidth = section.offsetWidth;
 
       const relRight = rangeRect.right - sectionRect.left;
+      const relLeft = rangeRect.left - sectionRect.left;
       const relTop = rangeRect.top - sectionRect.top;
       const relHeight = rangeRect.height;
 
       const tabLeft = Math.min(relRight + 10, sectionWidth - 40);
       const tabTop = relTop + relHeight / 2 - 14;
 
-      const desiredLeft = relRight + 16;
+      // Popup width adapts to section so it never causes horizontal page overflow.
+      const popupWidth = Math.max(
+        POPUP_MIN_WIDTH,
+        Math.min(POPUP_MAX_WIDTH, sectionWidth - 16)
+      );
+
+      // Always centered horizontally above the selection, translated upward
+      // via CSS transform so its bottom edge sits 12px above the selection top.
+      const rangeCenter = (relLeft + relRight) / 2;
+      const desiredLeft = rangeCenter - popupWidth / 2;
       const popupLeft = Math.min(
         Math.max(8, desiredLeft),
-        sectionWidth - POPUP_WIDTH - 8
+        Math.max(8, sectionWidth - popupWidth - 8)
       );
-      const popupTop = Math.max(8, relTop - 12);
+      const popupTop = relTop;
 
-      setAnchor({ tabTop, tabLeft, popupTop, popupLeft });
+      setAnchor({ tabTop, tabLeft, popupTop, popupLeft, popupWidth });
+      savedRangeRef.current = range.cloneRange();
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
@@ -335,820 +550,1261 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
+    const id = window.setTimeout(() => {
+      setAnchor(null);
+      setExpanded(false);
+      setPopupStage("select");
+      setSelectedTones([]);
+      setResultText("");
+      setGeneratedSignature("");
+      window.getSelection()?.removeAllRanges();
+    }, 0);
+
+    return () => window.clearTimeout(id);
+  }, [activeTab]);
+
+  // Click outside the popup (and outside the editor) closes the popup.
+  useEffect(() => {
+    if (!expanded) return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (popupRef.current?.contains(target)) return;
+      if (editorRef.current?.contains(target)) return;
+      closePopup();
+    };
+
+    // Defer one tick so the click that opened the popup doesn't immediately close it.
+    const id = window.setTimeout(() => {
+      document.addEventListener("mousedown", handleMouseDown);
+    }, 0);
+    return () => {
+      window.clearTimeout(id);
+      document.removeEventListener("mousedown", handleMouseDown);
+    };
+  }, [expanded]);
+
+  const isAtLimit = () => {
+    if (isSignedIn) return usageCount >= FREE_LIMIT;
+    return readAnonUsage().count >= ANON_LIMIT;
+  };
+
+  function closePopup() {
     setAnchor(null);
     setExpanded(false);
+    setPopupStage("select");
+    setSelectedTones([]);
+    setResultText("");
+    setGeneratedSignature("");
+    setCopied(false);
+    savedRangeRef.current = null;
+  }
+
+  const openPopup = () => {
+    setExpanded(true);
+    setSelectedTones([]);
+    setResultText("");
+    setGeneratedSignature("");
+    setCopied(false);
+    setPopupStage("select");
+  };
+  const handleCustomModeToggle = () => {
+    const entering = !isCustomMode;
+    setIsCustomMode(entering);
+    if (entering) {
+      setAnchor(null);
+      setExpanded(false);
+      setPopupStage("select");
+      setSelectedTones([]);
+      setResultText("");
+      setGeneratedSignature("");
+      window.getSelection()?.removeAllRanges();
+    }
+  };
+
+  const handleBack = () => {
+    setCopied(false);
+    setPopupStage("select");
+  };
+
+  // After the user dismisses the download modal, transform the popup into the
+  // locked "out of rewrites" state with the black header bar.
+  const handleDismissLimitModal = () => {
+    setShowLimitModal(false);
+    setPopupStage("limit");
+  };
+
+  const toggleTone = (tone: string) => {
+    setSelectedTones((prev) =>
+      prev.includes(tone) ? prev.filter((t) => t !== tone) : [...prev, tone]
+    );
+  };
+
+  const handleGenerate = async () => {
+    const range = savedRangeRef.current;
+    if (!range || selectedTones.length === 0) return;
+
+    const text = range.toString();
+    if (!text.trim()) return;
+
+    const signature = `${text}\n---huu-tones---\n${selectedTones.join("|")}`;
+    if (resultText && generatedSignature === signature) {
+      setPopupStage("result");
+      return;
+    }
+
+    // Hard gate: at limit → show the download modal first. Once the user
+    // dismisses it, the popup transitions to the locked "limit" stage.
+    if (isAtLimit()) {
+      setShowLimitModal(true);
+      return;
+    }
+
+    setPopupStage("loading");
+
+    try {
+      const res = await fetch("/api/humanize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, tones: selectedTones }),
+      });
+
+      const data = await res.json();
+
+      if (
+        res.status === 401 ||
+        res.status === 429 ||
+        data.error === "sign_up_required" ||
+        data.error === "usage_limit_reached"
+      ) {
+        setPopupStage("select");
+        setShowLimitModal(true);
+        return;
+      }
+      if (!data.result) {
+        console.error("Humanize API returned no result:", data);
+        setPopupStage("select");
+        return;
+      }
+
+      // Update usage counters.
+      if (isSignedIn && data.usageCount !== undefined) {
+        setUsageCount(data.usageCount);
+      } else if (!isSignedIn) {
+        const current = readAnonUsage();
+        const next: AnonUsage = {
+          count: current.count + 1,
+          firstUseTime: current.firstUseTime || Date.now(),
+        };
+        writeAnonUsage(next);
+      }
+
+      setResultText(data.result);
+      setGeneratedSignature(signature);
+      setPopupStage("result");
+    } catch (err) {
+      console.error(err);
+      setPopupStage("select");
+    }
+  };
+
+  const handleAccept = () => {
+    const range = savedRangeRef.current;
+    if (!range || !resultText) {
+      closePopup();
+      return;
+    }
+    range.deleteContents();
+    range.insertNode(document.createTextNode(resultText));
+    editorRef.current?.normalize();
     window.getSelection()?.removeAllRanges();
-  }, [activeTab]);
+    closePopup();
+  };
+
+  const handleCopy = async () => {
+    if (!resultText) return;
+    try {
+      await navigator.clipboard.writeText(resultText);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error("Copy failed:", err);
+    }
+  };
 
   return (
     <div className="min-h-screen flex flex-col">
-      {/* Announcement banner */}
-      <div className="fixed top-0 inset-x-0 z-[60] bg-black text-white text-xs sm:text-sm py-2 px-4 text-center">
-        <span className="opacity-80">huu is in public beta — </span>
-        <a href="#demo" className="underline underline-offset-2 hover:opacity-80">
-          Get 50 free rewrites, no card →
-        </a>
-      </div>
+      {/* Limit modal — first intervention when user clicks generate at the limit.
+          Dismissing it transitions the popup into the locked "limit" stage. */}
+      {showLimitModal && (
+        <div
+          onClick={handleDismissLimitModal}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative bg-white rounded-3xl shadow-2xl max-w-md w-full p-10 text-center"
+          >
+            <button
+              onClick={handleDismissLimitModal}
+              aria-label="Close"
+              className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-neutral-400 hover:text-black hover:bg-neutral-100 transition"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+            <div className="text-5xl mb-4 text-[#fff700] [text-shadow:0_2px_0_rgba(0,0,0,0.08)]">
+              ✦
+            </div>
+            <h3 className="font-display text-3xl text-black mb-3 leading-tight">
+              Download the app for the full experience
+            </h3>
+            <p className="text-neutral-500 text-sm mb-8 leading-relaxed">
+              You&rsquo;ve used all your free web rewrites for today. Get the
+              desktop app for unlimited rewrites and the ability to humanize
+              text in any field, anywhere on your computer.
+            </p>
+            <div className="flex flex-col gap-3">
+              <a
+                href="/download"
+                onClick={handleDismissLimitModal}
+                className="w-full px-6 py-3.5 text-base font-bold text-black bg-[#fff700] rounded-full hover:brightness-95 transition"
+              >
+                Download the app
+              </a>
+              <button
+                onClick={handleDismissLimitModal}
+                className="text-sm text-neutral-400 hover:text-black transition"
+              >
+                Maybe later
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating island header */}
-      <header className="fixed top-12 sm:top-14 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+      <header className="fixed top-4 sm:top-6 left-0 right-0 z-50 flex justify-center px-6 pointer-events-none">
         <div
-          className={`pointer-events-auto flex items-center gap-3 sm:gap-6 px-3 sm:px-4 py-2 rounded-full border transition-all duration-300 ${
+          className={`pointer-events-auto flex items-center w-full max-w-4xl px-6 py-3 rounded-full border transition-all duration-300 ${
             scrolled
-              ? "bg-white/80 backdrop-blur-md border-black/10 shadow-md"
-              : "bg-white/60 backdrop-blur border-black/[0.06] shadow-sm"
+              ? "bg-white/90 backdrop-blur-md border-black/10 shadow-lg"
+              : "bg-white/80 backdrop-blur border-black/[0.08] shadow-sm"
           }`}
         >
+          {/* Logo — left */}
           <a
             href="#top"
-            className="text-2xl text-black px-2"
-            style={{
-              fontFamily: "ui-serif, Georgia, serif",
-              fontStyle: "italic",
-            }}
+            className="font-display text-3xl text-black leading-none shrink-0 mr-8"
           >
             huu
           </a>
-          <nav className="hidden md:flex items-center gap-1">
-            {NAV_LINKS.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="px-3 py-1.5 text-sm text-neutral-700 hover:text-black rounded-full hover:bg-black/[0.04] transition-colors"
-              >
-                {link.label}
-              </a>
-            ))}
+
+          {/* Nav links — center, flex-1 */}
+          <nav className="hidden md:flex items-center gap-1 flex-1">
+            {NAV_LINKS.map((link) => {
+              const id = link.href.replace("#", "");
+              const isCurrent = activeSection === id;
+              return (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className={`relative px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                    isCurrent
+                      ? "text-neutral-400"
+                      : "text-neutral-700 hover:text-black hover:bg-black/[0.04]"
+                  }`}
+                >
+                  {isCurrent && (
+                    <span
+                      aria-hidden
+                      className="pointer-events-none absolute inset-x-4 top-1/2 h-px bg-neutral-400 -translate-y-1/2"
+                    />
+                  )}
+                  {link.label}
+                </a>
+              );
+            })}
           </nav>
-          <a
-            href="#demo"
-            className="px-4 py-1.5 text-sm font-medium text-white bg-black rounded-full hover:bg-neutral-800 transition-colors"
-          >
-            Try it free
-          </a>
+
+          {/* Divider */}
+          <div className="hidden md:block w-px h-5 bg-black/15 mx-6 shrink-0" />
+
+          {/* Auth controls — right */}
+          <div className="shrink-0 flex items-center gap-3">
+            {isLoaded && isSignedIn ? (
+              <a
+                href="/download"
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+              >
+                <DownloadCtaContent platform={downloadPlatform} />
+              </a>
+            ) : (
+              <>
+               <SignUpButton mode="redirect" forceRedirectUrl="/download">
+                <button className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
+                  <DownloadCtaContent platform={downloadPlatform} />
+                </button>
+              </SignUpButton>
+              </>
+            )}
+          </div>
         </div>
       </header>
 
-      {/* Hero */}
+      {/* 1. HERO (white) */}
       <section
         id="top"
-        className="flex flex-col items-center text-center px-6 pt-44 pb-20 sm:pt-52"
+        className="bg-white px-4 sm:px-6 pt-24 sm:pt-28 pb-8"
       >
-        <h1 className="text-5xl sm:text-6xl md:text-7xl font-bold tracking-tight leading-[1.02] text-black max-w-4xl">
-          Don&apos;t write like AI.
-        </h1>
-        <p className="text-neutral-500 text-base sm:text-lg mt-6 mb-8 max-w-xl">
-          The text humanizer that turns AI-generated copy into real,
-          human-sounding writing — in every app you already use.
-        </p>
-        <a
-          href="#demo"
-          className="px-6 py-2.5 text-sm font-medium text-white bg-black rounded-full hover:bg-neutral-800 transition-colors"
-        >
-          Try it free
-        </a>
-        <p className="text-xs text-neutral-400 mt-4">
-          Available on Web, Chrome, Mac and iPhone
-        </p>
+        {/* Big hero card — contains everything */}
+        <div className="huu-hero-card w-full min-h-[78vh] rounded-3xl border border-black/[0.08] shadow-[0_4px_32px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center px-8 py-16 sm:py-20">
 
-        {/* Before / After comparison (Wispr-style) */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-5xl w-full mt-20 text-left">
-          <div className="rounded-3xl bg-white border border-black/[0.08] p-6 sm:p-8 shadow-sm">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] uppercase tracking-widest text-neutral-500">
-                Written by AI
-              </span>
-            </div>
-            <p className="text-[15px] leading-7 text-neutral-700">
-              I hope this email finds you well. I am reaching out to introduce
-              myself and explore potential synergies between our organizations.
-              Based on my research, I believe there is significant value in
-              connecting, and I would love to schedule a brief call at your
-              earliest convenience to discuss how we might collaborate moving
-              forward.
-            </p>
-          </div>
-          <div className="rounded-3xl bg-black text-white p-6 sm:p-8 shadow-md">
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-[10px] uppercase tracking-widest text-amber-300">
-                Rewritten with huu
-              </span>
-            </div>
-            <p className="text-[15px] leading-7 text-neutral-200">
-              Hey — saw what you&apos;re building at [company] and figured I&apos;d
-              reach out. We&apos;re working on something pretty close to your
-              problem space and I think there&apos;s a real shot we could be
-              useful to each other. Worth a quick 15 min next week?
-            </p>
-          </div>
-        </div>
-      </section>
+          <h1 className="font-display text-6xl sm:text-7xl md:text-8xl leading-[1.02] text-black max-w-4xl">
+            &ldquo;Stop writing like a f*cking robot.&rdquo;
+          </h1>
 
-      {/* Brand logos */}
-      <section className="w-full max-w-6xl mx-auto px-6 pb-24">
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-8">
-          Used by founders, marketers and creators at
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-x-10 gap-y-4 opacity-60">
-          {BRAND_LOGOS.map((brand) => (
-            <span
-              key={brand}
-              className="text-sm sm:text-base font-semibold text-neutral-500 tracking-tight"
+          <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-md">
+            Select any text. Pick a tone. Sound like a human.
+          </p>
+
+          {/* Download CTA */}
+          {isLoaded && isSignedIn ? (
+            <a
+              href="/download"
+              className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
             >
-              {brand}
-            </span>
-          ))}
+              <DownloadCtaContent platform={downloadPlatform} />
+            </a>
+          ) : (
+            <SignUpButton mode="redirect" forceRedirectUrl="/download">
+              <button className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
+                <DownloadCtaContent platform={downloadPlatform} />
+              </button>
+            </SignUpButton>
+          )}
+
+          {/* Handwritten annotation */}
+          <div className="mt-10 flex flex-col items-center gap-1">
+            <svg width="20" height="34" viewBox="0 0 18 30" fill="none" aria-hidden="true" className="text-neutral-400">
+              <path d="M9 28C9 28 7 18 9 2M9 2L3 10M9 2L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+            <p className="font-handwritten text-2xl sm:text-3xl text-neutral-400 -rotate-2">
+              no more &ldquo;I hope this email finds you well&rdquo;
+            </p>
+          </div>
+
         </div>
       </section>
 
-      {/* "10x more replies" benefit comparison */}
+      {/* 2. BENEFIT — Rephrase anything */}
       <section
-        id="features"
-        className="w-full max-w-6xl mx-auto px-6 pb-28"
+        id="benefit"
+        ref={benefitSectionRef}
+        className="bg-white px-4 sm:px-6 pt-24 sm:pt-28 pb-4 sm:pb-6"
       >
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-4">
-          Why huu
-        </p>
-        <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight text-black text-center leading-[1.05] max-w-3xl mx-auto">
-          11x more replies
-        </h2>
-        <p className="text-neutral-500 text-base sm:text-lg mt-6 max-w-xl mx-auto text-center">
-          Cold emails that sound like a human get opened, read, and replied to.
-          Templates don&apos;t. huu turns one into the other in two clicks.
-        </p>
+        {/* Everything lives inside the black box */}
+        <div className="bg-black rounded-[2.5rem] w-full overflow-hidden">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr]">
 
-        <div className="mt-14 grid grid-cols-1 md:grid-cols-2 gap-5">
-          <div className="rounded-3xl bg-white border border-black/[0.08] p-7">
-            <p className="text-[11px] uppercase tracking-widest text-neutral-500 mb-3">
-              AI Template
-            </p>
-            <p className="text-4xl font-bold text-black tracking-tight mb-1">
-              1%
-            </p>
-            <p className="text-sm text-neutral-500 mb-6">reply rate</p>
-            <div className="space-y-2">
-              <div className="h-1.5 rounded-full bg-neutral-100 w-full" />
-              <div className="h-1.5 rounded-full bg-neutral-100 w-11/12" />
-              <div className="h-1.5 rounded-full bg-neutral-100 w-3/4" />
-              <div className="h-1.5 rounded-full bg-neutral-100 w-9/12" />
+            {/* ── LEFT COLUMN — headline + CTA ── */}
+            <div className="flex flex-col justify-center gap-7 p-10 sm:p-14 lg:border-r lg:border-white/10">
+
+              {/* Platform pills */}
+              <div className="flex flex-wrap gap-2">
+                <span className="border border-white/30 text-white text-xs font-sans rounded-full px-4 py-1.5 flex items-center gap-1.5">
+                  <svg width="11" height="13" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                    <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                  </svg>
+                  Mac
+                </span>
+                <span className="border border-white/30 text-white text-xs font-sans rounded-full px-4 py-1.5 flex items-center gap-1.5">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M3 4.4 10.7 3v8.2H3V4.4Zm0 8.4h7.7V21L3 19.6v-6.8Zm9.3-10.1L21 1.2v10h-8.7V2.7Zm0 10.1H21v10l-8.7-1.5v-8.5Z"/>
+                  </svg>
+                  Windows
+                </span>
+              </div>
+
+              <h2 className="font-display text-4xl sm:text-5xl text-white leading-[1.05]">
+                Rephrase anything to sound human.{" "}
+                In under 2 seconds.
+              </h2>
+
+              <p className="font-sans text-white/55 text-base leading-7">
+                Select any text in your draft, a cold email, a LinkedIn DM, a post.
+                Pick a tone. huumanity rewrites it so it sounds like a real person wrote it.
+              </p>
+
+              <div>
+                <Link
+                  href="/sign-up"
+                  className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+                >
+                  Try it free
+                </Link>
+              </div>
             </div>
-          </div>
-          <div className="rounded-3xl bg-black text-white p-7">
-            <p className="text-[11px] uppercase tracking-widest text-amber-300 mb-3">
-              huu
-            </p>
-            <p className="text-4xl font-bold tracking-tight mb-1">11%</p>
-            <p className="text-sm text-neutral-400 mb-6">reply rate</p>
-            <div className="space-y-2">
-              <div className="h-1.5 rounded-full bg-amber-300 w-full" />
-              <div className="h-1.5 rounded-full bg-amber-300 w-11/12" />
-              <div className="h-1.5 rounded-full bg-amber-300 w-10/12" />
-              <div className="h-1.5 rounded-full bg-amber-300 w-9/12" />
+
+            {/* ── RIGHT COLUMN — animation ── */}
+            <div
+              ref={rightColumnRef}
+              className="relative flex flex-col gap-4 p-6 sm:p-10 min-h-[540px]"
+              style={{ paddingTop: "84px" }}
+            >
+
+              {/* macOS cursor — position controlled by cursorPos, visibility by cursorVisible */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  // pos 0 = in email body; pos 1-3 = at tone picker (34px from column top)
+                  top: cursorPos === 0 ? "58%" : "34px",
+                  left: (["8%", btnLefts.u, btnLefts.c, btnLefts.e] as string[])[Math.min(cursorPos, 3)] ?? "8%",
+                  opacity: cursorVisible ? 1 : 0,
+                  transform: cursorExiting ? "translateX(30px)" : "translateX(0)",
+                  // Position animates smoothly while visible; only fade in/out at start and end
+                  transition: "top 1.0s cubic-bezier(0.33,1,0.68,1), left 0.75s cubic-bezier(0.33,1,0.68,1), opacity 0.4s ease, transform 0.55s ease-in",
+                  pointerEvents: "none",
+                  zIndex: 30,
+                }}
+              >
+                {/* Classic macOS arrow cursor: white outline + black fill */}
+                <svg width="16" height="22" viewBox="0 0 22 30" fill="none">
+                  {/* Soft drop shadow */}
+                  <path
+                    d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z"
+                    fill="rgba(0,0,0,0.22)"
+                    transform="translate(1.5,1.5)"
+                  />
+                  {/* White outer border (stroke paints outside the black fill) */}
+                  <path
+                    d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z"
+                    fill="white"
+                    stroke="white"
+                    strokeWidth="4.5"
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                  />
+                  {/* Black fill on top */}
+                  <path
+                    d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z"
+                    fill="black"
+                  />
+                </svg>
+              </div>
+
+              {/* Tone picker — floats above Gmail card, slides in at step 3 */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  top: "22px",
+                  left: "1.5rem",
+                  right: "1.5rem",
+                  zIndex: 20,
+                  pointerEvents: "none",
+                  opacity: animStep >= 3 ? 1 : 0,
+                  transform: animStep >= 3 ? "translateY(0)" : "translateY(8px)",
+                  transition: "opacity 0.5s ease-out, transform 0.5s ease-out",
+                }}
+              >
+                <div className="bg-white rounded-full px-3 py-2 flex items-center gap-1.5 w-fit shadow-lg">
+                  {[
+                    { label: "Humanize", id: "", step: 99 },
+                    { label: "Unpolished", id: "unpolished", step: 4 },
+                    { label: "Controversial", id: "controversial", step: 5 },
+                    { label: "Direct", id: "", step: 99 },
+                  ].map(({ label, id, step }) => (
+                    <span
+                      key={label}
+                      data-btn-id={id || undefined}
+                      className={`font-sans text-xs font-semibold whitespace-nowrap px-2.5 py-0.5 rounded-full transition-all duration-300 ${
+                        animStep >= step ? "bg-[#fff700] text-black" : "text-neutral-500"
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                  <span
+                    data-btn-id="enter"
+                    className={`ml-1 w-7 h-7 rounded-full border flex-shrink-0 flex items-center justify-center transition-colors duration-300 ${
+                      arrowFlash
+                        ? "bg-[#fff700] border-[#fff700] text-black"
+                        : "border-neutral-300 text-neutral-400"
+                    }`}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                  </span>
+                </div>
+              </div>
+
+              {/* Gmail-format email card */}
+              <div className="bg-white rounded-2xl overflow-hidden">
+                {/* Gmail header */}
+                <div className="flex items-center px-4 py-3">
+                  <span
+                    aria-label="Gmail"
+                    className="font-black text-xl leading-none select-none"
+                    style={{
+                      background: "linear-gradient(135deg, #EA4335 0%, #FBBC04 45%, #34A853 72%, #4285F4 100%)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                      backgroundClip: "text",
+                    }}
+                  >
+                    M
+                  </span>
+                </div>
+                <div className="h-px bg-neutral-200" />
+                {/* Email body */}
+                <div className="px-4 py-4 whitespace-pre-wrap min-h-[180px]">
+                  <span
+                    className={`font-sans text-[12px] leading-[1.75] ${
+                      animStep >= 2 ? "huu-selecting" : "text-neutral-800"
+                    }`}
+                  >
+                    {`Hi Dimitri!\n\nWe haven't met but I'm reaching out to you because it's always great to network with other executives. I'm Andrea from Acme company, a Meta ads agency for discerning and successful professionals across Asia.\n\nIf you are looking to get 10 extra booked calls in your calendar, I'd like to introduce myself and connect with you, to see if you can benefit from our professional ads expertise.`}
+                  </span>
+                </div>
+              </div>
+
+              {/* Result card — slides in at step 6, offset right like a Grammarly popup */}
+              <div
+                className="bg-white rounded-2xl p-4 border-2 border-[#fff700] shadow-[0_4px_20px_rgba(255,247,0,0.18)]"
+                style={{
+                  marginLeft: "1rem",
+                  opacity: animStep >= 6 ? 1 : 0,
+                  transform: animStep >= 6 ? "translateY(0)" : "translateY(14px)",
+                  transition: "opacity 0.7s ease-out, transform 0.7s ease-out",
+                }}
+              >
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#fff700]" aria-hidden="true" />
+                  <span className="font-sans text-[10px] uppercase tracking-wider font-semibold text-neutral-400">
+                    Rewritten by huu
+                  </span>
+                </div>
+                <p className="font-sans text-[12px] leading-[1.75] text-neutral-800 whitespace-pre-line">
+                  {`Dimitri, we haven't met but I'm gonna skip the networking bullshit and just say it.\n\nI'm Andrea from Acme. We run Meta ads for people across Asia who actually know what they're doing. If your calendar isn't full, that's a problem we fix. 10 extra booked calls, not leads that ghost you, actual calls with people who show up.`}
+                </p>
+                <div
+                  className="flex gap-2 mt-3"
+                  style={{
+                    opacity: animStep >= 7 ? 1 : 0,
+                    transition: "opacity 0.5s ease-out",
+                  }}
+                >
+                  <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Back</button>
+                  <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Copy</button>
+                  <button className="bg-[#fff700] text-black font-sans text-xs font-bold rounded-full px-4 py-1.5 border border-black">Accept</button>
+                </div>
+              </div>
+
             </div>
           </div>
         </div>
       </section>
 
-      {/* Web demo */}
+      {/* 3. WEB DEMO (white) — main selling point */}
       <section
         id="demo"
         ref={demoSectionRef}
-        className="relative w-full max-w-3xl mx-auto px-6 pb-28"
+        className="relative bg-white px-6 pt-6 pb-10 sm:pt-8 sm:pb-12"
       >
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-4">
-          Web Demo
-        </p>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-black text-center mb-3">
-          Try huu, right here.
-        </h2>
-        <p className="text-center text-neutral-500 text-base mb-10 max-w-md mx-auto">
-          No signup. Paste any AI-sounding copy, select a phrase, and rewrite it
-          on the spot.
-        </p>
-
-        <div className="flex justify-center mb-6">
-          <div className="inline-flex items-center gap-1 p-1 rounded-full bg-white border border-black/[0.08]">
-            {TABS.map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`px-4 py-1.5 text-sm rounded-full transition-colors ${
-                  activeTab === tab
-                    ? "bg-black text-white font-medium"
-                    : "text-neutral-500 hover:text-black"
-                }`}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <p className="text-center text-sm text-neutral-500 mb-5">
-          Select any part of the text below to unpolish it.
-        </p>
-
-        <div className="relative rounded-3xl bg-white border border-black/[0.08] shadow-sm">
-          <div
-            key={activeTab}
-            ref={editorRef}
-            contentEditable
-            suppressContentEditableWarning
-            spellCheck={false}
-            className="min-h-[360px] p-8 sm:p-10 text-[15px] sm:text-base leading-7 text-neutral-700 whitespace-pre-wrap selection:bg-sky-200/70 selection:text-black focus:outline-none"
+        {/* Headline block — wider container so text stays on one line on desktop */}
+        <div className="max-w-5xl mx-auto text-center mb-20">
+          <h2
+            className="font-display text-black leading-[1.02] tracking-tight mb-5 md:whitespace-nowrap"
+            style={{ fontSize: "clamp(2rem, 4.8vw, 3.75rem)" }}
           >
-            {SAMPLES[activeTab]}
-          </div>
-        </div>
-
-        {anchor && !expanded && (
-          <button
-            type="button"
-            onMouseDown={(e) => {
-              e.preventDefault();
-              setExpanded(true);
-            }}
-            className="absolute z-20 w-8 h-8 rounded-full bg-amber-300 hover:bg-amber-400 border border-amber-500/40 shadow-md flex items-center justify-center text-neutral-800 transition-colors"
-            style={{ top: anchor.tabTop, left: anchor.tabLeft }}
-            aria-label="Open rephrase options"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.25"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="12" y1="19" x2="12" y2="5" />
-              <polyline points="5 12 12 5 19 12" />
-            </svg>
-          </button>
-        )}
-
-        {anchor && expanded && (
-          <div
-            className="absolute z-20"
-            style={{
-              top: anchor.popupTop,
-              left: anchor.popupLeft,
-              width: POPUP_WIDTH,
-            }}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <div className="bg-white rounded-2xl border-2 border-amber-300 shadow-xl p-4">
-              <div className="space-y-2 mb-4">
-                <div className="h-2.5 rounded-full bg-neutral-200 w-full" />
-                <div className="h-2.5 rounded-full bg-neutral-200 w-11/12" />
-                <div className="h-2.5 rounded-full bg-neutral-200 w-4/5" />
-              </div>
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {TONES.map((tone) => (
-                    <button
-                      key={tone}
-                      className="px-2.5 py-1 text-[11px] rounded-full bg-neutral-100 text-neutral-700 hover:bg-neutral-200 transition-colors whitespace-nowrap"
-                    >
-                      {tone}
-                    </button>
-                  ))}
-                </div>
-                <button
-                  aria-label="Apply"
-                  className="shrink-0 w-7 h-7 rounded-full border border-amber-300 flex items-center justify-center text-neutral-700 hover:bg-amber-50 transition-colors"
-                >
-                  <svg
-                    width="12"
-                    height="12"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <line x1="5" y1="12" x2="19" y2="12" />
-                    <polyline points="12 5 19 12 12 19" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* Made for the way you write — persona tabs */}
-      <section
-        id="personas"
-        className="w-full max-w-6xl mx-auto px-6 pb-28"
-      >
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-4">
-          For the way you write
-        </p>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-black text-center max-w-3xl mx-auto leading-[1.1] mb-3">
-          Made for the way <em className="font-bold not-italic underline decoration-amber-300 decoration-4 underline-offset-4">you</em> write
-        </h2>
-        <p className="text-center text-neutral-500 text-base mb-10 max-w-xl mx-auto">
-          Select one to see huu in action for your role.
-        </p>
-
-        <div className="flex flex-wrap justify-center gap-2 mb-10">
-          {PERSONAS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => setActivePersona(p)}
-              className={`px-4 py-2 text-sm rounded-full border transition-colors ${
-                activePersona.id === p.id
-                  ? "bg-black text-white border-black"
-                  : "bg-white text-neutral-700 border-black/[0.08] hover:border-black/30"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="rounded-3xl bg-white border border-black/[0.08] p-8 sm:p-12 max-w-3xl mx-auto">
-          <h3 className="text-2xl sm:text-3xl font-bold tracking-tight text-black mb-3">
-            {activePersona.title}
-          </h3>
-          <p className="text-base sm:text-lg text-neutral-600 leading-7">
-            {activePersona.blurb}
-          </p>
-          <div className="flex gap-3 mt-7">
-            <a
-              href="#demo"
-              className="px-5 py-2 text-sm font-medium text-white bg-black rounded-full hover:bg-neutral-800 transition-colors"
-            >
-              Try it free
-            </a>
-            <a
-              href="#pricing"
-              className="px-5 py-2 text-sm font-medium text-neutral-700 hover:text-black transition-colors"
-            >
-              See pricing →
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* One tool. Your workflow. */}
-      <section className="w-full max-w-6xl mx-auto px-6 pb-28">
-        <div className="rounded-[2.5rem] bg-gradient-to-br from-amber-50 via-white to-emerald-50 border border-black/[0.06] p-10 sm:p-16 text-center">
-          <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-black max-w-2xl mx-auto leading-[1.1]">
-            One tool. Your workflow.
+            People know it&apos;s written by AI
           </h2>
-          <p className="text-neutral-500 text-base sm:text-lg mt-5 max-w-xl mx-auto">
-            Whether you&apos;re sending cold emails, drafting LinkedIn posts, or
-            replying to your group chat, huu fits into how you already work.
-            Highlight, rewrite, send.
+          <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7 max-w-xl mx-auto mb-10">
+            huumanity turns your AI copy into writing that sounds like you.
+            Select any text, pick a tone, and accept.
           </p>
-          <a
-            href="#demo"
-            className="inline-block mt-8 px-6 py-2.5 text-sm font-medium text-white bg-black rounded-full hover:bg-neutral-800 transition-colors"
-          >
-            Try it free
-          </a>
-        </div>
-      </section>
-
-      {/* Core feature 1: text selection visual */}
-      <section className="w-full max-w-5xl mx-auto px-6 pb-32">
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-4">
-          Core feature · 01
-        </p>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-black text-center max-w-3xl mx-auto leading-[1.1] mb-4">
-          Select. Rephrase. Send.
-        </h2>
-        <p className="text-center text-neutral-500 text-base mb-14 max-w-xl mx-auto">
-          Highlight any phrase. Pick a tone. Done.
-        </p>
-
-        <div className="relative h-[360px] sm:h-[400px] max-w-3xl mx-auto">
-          <div className="absolute left-0 bottom-0 w-[78%] sm:w-[70%] bg-white border border-black/[0.08] rounded-2xl shadow-md p-6 text-[13px] sm:text-sm leading-6 text-neutral-700">
-            <p className="mb-3">
-              <span className="bg-sky-200/70 text-black">Dear [name]</span>
-            </p>
-            <p>
-              <span className="bg-sky-200/70 text-black">
-                I hope this email finds you well. I am reaching out to introduce
-                myself and explore potential synergies between our
-                organizations. Based on my research, I believe there is
-                significant value in connecting, and I would love to schedule a
-                brief call at your earliest convenience to discuss how we might
-                collaborate moving forward.
-              </span>
-            </p>
-          </div>
-
-          <div className="absolute right-0 top-0 w-[78%] sm:w-[62%] bg-white rounded-2xl border-2 border-amber-300 shadow-xl p-5">
-            <p className="text-[13px] sm:text-sm leading-6 text-neutral-700 mb-4">
-              Yo [name]
-              <br />
-              <br />
-              Rather than a generic &ldquo;lets connect&rdquo; kind of thing, I
-              think we could actually add specific value for your team, and on
-              our end we&rsquo;d love to learn more about how you handle
-              [something relevant to them]. Would you be up for a quick 15 min
-              call this week or next?
-            </p>
-
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {TONES.map((tone) => {
-                  const isSelected = tone === "Unpolished";
-                  return (
-                    <span
-                      key={tone}
-                      className={`px-2.5 py-1 text-[11px] rounded-full whitespace-nowrap ${
-                        isSelected
-                          ? "bg-emerald-500 text-white"
-                          : "bg-neutral-100 text-neutral-700"
-                      }`}
-                    >
-                      {tone}
-                    </span>
-                  );
-                })}
-              </div>
-              <span className="shrink-0 w-7 h-7 rounded-full border border-amber-300 flex items-center justify-center text-neutral-700">
-                <svg
-                  width="12"
-                  height="12"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <line x1="5" y1="12" x2="19" y2="12" />
-                  <polyline points="12 5 19 12 12 19" />
-                </svg>
-              </span>
-            </div>
-          </div>
-        </div>
-
-        <p className="text-center text-sm sm:text-base text-neutral-500 mt-10 max-w-xl mx-auto">
-          Pick the tone that fits — Unpolished, Raw, Informal, Shorter, or
-          Humorous. huu handles the rewrite in under two seconds.
-        </p>
-      </section>
-
-      {/* Core feature 2 + 3 + 4 — three columns (Wispr's Dictionary/Snippets/Languages) */}
-      <section className="w-full max-w-6xl mx-auto px-6 pb-28">
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-4">
-          Core features · 02 — 04
-        </p>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-black text-center max-w-3xl mx-auto leading-[1.1] mb-14">
-          Built around your voice.
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Tone presets */}
-          <div className="bg-white border border-black/[0.08] rounded-3xl p-7">
-            <h3 className="text-lg font-semibold text-black mb-2">
-              Tone presets
-            </h3>
-            <p className="text-sm text-neutral-500 mb-5">
-              Save your favourite tone combos. One click and your style is back.
-            </p>
-            <div className="space-y-2">
-              {[
-                { name: "Cold email energy", tones: ["Unpolished", "Shorter"] },
-                { name: "LinkedIn brain", tones: ["Informal", "Humorous"] },
-                { name: "Founder voice", tones: ["Raw", "Shorter"] },
-              ].map((preset) => (
-                <div
-                  key={preset.name}
-                  className="flex items-center justify-between p-3 rounded-xl bg-neutral-50"
-                >
-                  <span className="text-sm text-neutral-700">{preset.name}</span>
-                  <div className="flex gap-1">
-                    {preset.tones.map((t) => (
-                      <span
-                        key={t}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-white border border-black/[0.08] text-neutral-600"
-                      >
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Personal voice */}
-          <div className="bg-white border border-black/[0.08] rounded-3xl p-7">
-            <h3 className="text-lg font-semibold text-black mb-2">
-              Personal voice
-            </h3>
-            <p className="text-sm text-neutral-500 mb-5">
-              Paste 3 samples of your real writing. huu learns and rewrites in
-              your style — not a generic &ldquo;casual&rdquo; preset.
-            </p>
-            <div className="space-y-2.5">
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-neutral-50">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-sm text-neutral-700">
-                  Sample · Tuesday memo
-                </span>
-              </div>
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-neutral-50">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-sm text-neutral-700">
-                  Sample · X thread on hiring
-                </span>
-              </div>
-              <div className="flex items-center gap-2 p-3 rounded-xl bg-neutral-50">
-                <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                <span className="text-sm text-neutral-700">
-                  Sample · Investor update Q3
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 30+ languages */}
-          <div className="bg-white border border-black/[0.08] rounded-3xl p-7">
-            <h3 className="text-lg font-semibold text-black mb-2">
-              30+ languages
-            </h3>
-            <p className="text-sm text-neutral-500 mb-5">
-              huu detects the language and rewrites in it — automatically.
-            </p>
-            <div className="flex flex-wrap gap-1.5">
-              {[
-                "English",
-                "Français",
-                "Español",
-                "Deutsch",
-                "Português",
-                "日本語",
-                "한국어",
-                "中文",
-                "Bahasa",
-                "Italiano",
-                "Polski",
-                "Türkçe",
-              ].map((lang) => (
-                <span
-                  key={lang}
-                  className="text-xs px-2.5 py-1 rounded-full bg-neutral-100 text-neutral-700"
-                >
-                  {lang}
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Device tabs */}
-      <section className="w-full max-w-6xl mx-auto px-6 pb-28">
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-4">
-          Every device
-        </p>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-black text-center max-w-3xl mx-auto leading-[1.1] mb-3">
-          huu, wherever you write.
-        </h2>
-        <p className="text-center text-neutral-500 text-base mb-10 max-w-xl mx-auto">
-          Native on the platforms you already use. Your tone, presets and voice
-          sync across all of them.
-        </p>
-
-        <div className="flex justify-center mb-8">
-          <div className="inline-flex items-center gap-1 p-1 rounded-full bg-white border border-black/[0.08]">
-            {DEVICES.map((d) => (
-              <button
-                key={d.id}
-                onClick={() => setActiveDevice(d)}
-                className={`px-4 py-1.5 text-sm rounded-full transition-colors ${
-                  activeDevice.id === d.id
-                    ? "bg-black text-white font-medium"
-                    : "text-neutral-500 hover:text-black"
-                }`}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="rounded-[2rem] bg-white border border-black/[0.08] p-8 sm:p-12 max-w-4xl mx-auto">
-          <h3 className="text-2xl sm:text-3xl font-bold tracking-tight text-black mb-3">
-            {activeDevice.title}
-          </h3>
-          <p className="text-base sm:text-lg text-neutral-600 leading-7 max-w-xl">
-            {activeDevice.blurb}
-          </p>
-
-          {/* Placeholder mock window */}
-          <div className="mt-8 rounded-2xl bg-neutral-50 border border-black/[0.06] aspect-[16/9] flex items-center justify-center">
-            <span className="text-sm text-neutral-400">
-              {activeDevice.label} mockup
-            </span>
-          </div>
-        </div>
-      </section>
-
-      {/* Featured quotes */}
-      <section className="w-full max-w-6xl mx-auto px-6 pb-20">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {FEATURED_QUOTES.map((q) => (
-            <div
-              key={q.headline}
-              className="rounded-3xl bg-black text-white p-7"
+          <div className="flex justify-center">
+            <Link
+              href="/download"
+              className="inline-flex items-center gap-2.5 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
             >
-              <p className="text-3xl font-bold tracking-tight text-amber-300 mb-3">
-                {q.headline}
-              </p>
-              <p className="text-sm text-neutral-200 leading-6 mb-5">
-                &ldquo;{q.quote}&rdquo;
-              </p>
-              <div className="text-xs text-neutral-400">
-                <span className="font-medium text-white">{q.name}</span> ·{" "}
-                {q.role}
-              </div>
-            </div>
-          ))}
+              <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+              </svg>
+              Download for macOS
+            </Link>
+          </div>
         </div>
-      </section>
 
-      {/* Love letters / testimonials grid */}
-      <section className="w-full max-w-6xl mx-auto px-6 pb-32">
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-4">
-          Love letters
-        </p>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-black text-center max-w-3xl mx-auto leading-[1.1] mb-14">
-          Love letters to huu
-        </h2>
+        <div className="max-w-3xl mx-auto">
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {TESTIMONIALS.map((t) => (
-            <div
-              key={t.name}
-              className="rounded-3xl bg-white border border-black/[0.08] p-7"
-            >
-              <p className="text-base text-neutral-700 leading-7 mb-5">
-                &ldquo;{t.quote}&rdquo;
-              </p>
-              <div className="text-sm">
-                <span className="font-medium text-black">{t.name}</span>
-                <span className="text-neutral-500"> · {t.role}</span>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section id="pricing" className="w-full max-w-5xl mx-auto px-6 pb-32">
-        <p className="text-center text-xs uppercase tracking-[0.2em] text-neutral-500 mb-4">
-          Pricing
-        </p>
-        <h2 className="text-3xl sm:text-4xl md:text-5xl font-bold tracking-tight text-black text-center max-w-3xl mx-auto leading-[1.1] mb-14">
-          Simple, honest pricing.
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {PRICING.map((tier) => (
-            <div
-              key={tier.name}
-              className={`rounded-3xl p-7 flex flex-col ${
-                tier.accent
-                  ? "bg-black text-white border border-black"
-                  : "bg-white border border-black/[0.08]"
-              }`}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <h3 className="text-lg font-semibold">{tier.name}</h3>
-                {tier.accent && (
-                  <span className="text-[10px] uppercase tracking-widest bg-amber-300 text-black px-2 py-0.5 rounded-full">
-                    Popular
-                  </span>
-                )}
-              </div>
-              <p
-                className={`text-sm mb-6 ${
-                  tier.accent ? "text-neutral-300" : "text-neutral-500"
-                }`}
-              >
-                {tier.blurb}
-              </p>
-              <div className="flex items-baseline mb-6">
-                <span className="text-4xl font-bold tracking-tight">
-                  {tier.price}
-                </span>
-                <span
-                  className={`ml-1 text-sm ${
-                    tier.accent ? "text-neutral-400" : "text-neutral-500"
+          {/* Yellow tab bar + Paste yours button */}
+          <div className="flex items-center justify-center gap-10 mb-6 flex-wrap">
+            <div className="inline-flex items-center gap-2 p-1.5 rounded-2xl bg-[#fff700] shadow-[0_4px_0_rgba(0,0,0,0.08)]">
+              {TABS.map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => { setActiveTab(tab); setIsCustomMode(false); }}
+                  className={`px-6 py-2.5 text-base sm:text-lg font-bold rounded-xl transition-colors ${
+                    activeTab === tab && !isCustomMode
+                      ? "bg-black text-[#fff700]"
+                      : "text-black hover:bg-black/5"
                   }`}
                 >
-                  {tier.cadence}
-                </span>
-              </div>
-              <ul className="space-y-2.5 mb-8 flex-1">
-                {tier.features.map((feat) => (
-                  <li key={feat} className="flex items-start gap-2 text-sm">
-                    <span
-                      className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${
-                        tier.accent ? "bg-amber-300" : "bg-emerald-500"
-                      }`}
-                    />
-                    <span>{feat}</span>
-                  </li>
-                ))}
-              </ul>
-              <a
-                href="#"
-                className={`block text-center px-4 py-2.5 text-sm font-medium rounded-full transition-colors ${
-                  tier.accent
-                    ? "bg-amber-300 text-black hover:bg-amber-200"
-                    : "bg-black text-white hover:bg-neutral-800"
-                }`}
-              >
-                {tier.cta}
-              </a>
+                  {tab}
+                </button>
+              ))}
             </div>
-          ))}
+
+            <button
+              onClick={handleCustomModeToggle}
+              style={{
+                transform: isCustomMode ? "rotate(-9deg) translateY(-2px)" : "rotate(0deg) translateY(0)",
+                boxShadow: isCustomMode ? "4px 4px 0 rgba(0,0,0,0.85)" : "0 4px 0 rgba(0,0,0,0.08)",
+                transition: "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease",
+              }}
+              className="px-6 py-2.5 text-base sm:text-lg font-bold rounded-xl bg-[#fff700] border-2 border-black text-black"
+            > 
+              Paste yours
+            </button>
+          </div>
+
+          {/* Bold one-line tutorial */}
+          <p className="text-center font-display text-lg sm:text-xl text-black mb-2">
+            Select any text below and choose a style.
+          </p>
+          <p className="text-center text-sm text-neutral-500 mb-8">
+            Just like the example illustration further down ↓
+          </p>
+
+          {/* Editable demo box */}
+          <div className="relative rounded-3xl bg-white border-2 border-black shadow-[0_8px_0_rgba(0,0,0,0.08)]">
+            <div className="absolute top-4 left-5 flex gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
+              <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
+              <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
+            </div>
+            <div
+              key={activeTab}
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              spellCheck={false}
+              className="min-h-[380px] p-8 pt-12 sm:p-10 sm:pt-12 text-[15px] sm:text-base leading-7 text-neutral-700 whitespace-pre-wrap focus:outline-none font-sans"
+              style={{ caretColor: BRAND }}
+            >
+              {SAMPLES[activeTab]}
+            </div>
+          </div>
+
+          {anchor && !expanded && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                openPopup();
+              }}
+              className="absolute z-20 w-9 h-9 rounded-full bg-[#fff700] hover:brightness-95 border-2 border-black shadow-md flex items-center justify-center text-black transition"
+              style={{ top: anchor.tabTop, left: anchor.tabLeft }}
+              aria-label="Open rephrase options"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="12" y1="19" x2="12" y2="5" />
+                <polyline points="5 12 12 5 19 12" />
+              </svg>
+            </button>
+          )}
+
+          {anchor && expanded && (
+            <div
+              ref={popupRef}
+              className="absolute z-20"
+              style={{
+                top: anchor.popupTop,
+                left: anchor.popupLeft,
+                width: anchor.popupWidth,
+                transform: "translateY(calc(-100% - 12px))",
+              }}
+              onMouseDown={(e) => e.preventDefault()}
+            >
+              <div className="relative bg-white rounded-2xl border-2 border-[#fff700] shadow-xl overflow-hidden transition-all">
+                {/* STAGE: LIMIT — Grammarly-style "out of rewrites" header bar */}
+                {popupStage === "limit" && (
+                  <div className="bg-black text-white px-5 py-3 flex items-center justify-between gap-4">
+                    <span className="text-[12px] sm:text-[13px] font-semibold flex items-center gap-2 min-w-0">
+                      <span className="text-[#fff700] shrink-0">✦</span>
+                      <span className="truncate">
+                        You&rsquo;re out of free rewrites for today
+                      </span>
+                    </span>
+                    <a
+                      href="/download"
+                      className="shrink-0 px-3.5 py-1.5 text-[11px] font-bold text-black bg-[#fff700] rounded-full hover:brightness-95 transition whitespace-nowrap"
+                    >
+                      Download the app
+                    </a>
+                  </div>
+                )}
+
+                {/* X close button — visible only in the result stage */}
+                {popupStage === "result" && (
+                  <button
+                    onClick={closePopup}
+                    aria-label="Close"
+                    className="absolute top-2.5 right-2.5 w-6 h-6 rounded-full flex items-center justify-center text-neutral-400 hover:text-black hover:bg-neutral-100 transition z-10"
+                  >
+                    <svg
+                      width="12"
+                      height="12"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.5"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                )}
+
+                <div className="p-5">
+                  {/* STAGE: SELECT */}
+                  {popupStage === "select" && (
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {TONES.map((tone) => {
+                          const isOn = selectedTones.includes(tone);
+                          return (
+                            <button
+                              key={tone}
+                              onClick={() => toggleTone(tone)}
+                              className={`px-3.5 py-1.5 text-[12px] font-semibold rounded-full whitespace-nowrap transition-colors ${
+                                isOn
+                                  ? "bg-[#fff700] text-black ring-2 ring-black"
+                                  : "bg-neutral-100 text-black hover:bg-neutral-200"
+                              }`}
+                            >
+                              {tone}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={handleGenerate}
+                        disabled={selectedTones.length === 0}
+                        aria-label="Generate"
+                        className="shrink-0 w-8 h-8 rounded-full border-2 border-[#fff700] flex items-center justify-center text-black hover:bg-[#fff700] transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <svg
+                          width="14"
+                          height="14"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <line x1="5" y1="12" x2="19" y2="12" />
+                          <polyline points="12 5 19 12 12 19" />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+
+                  {/* STAGE: LOADING (Grammarly-style skeleton with wave shimmer) */}
+                  {popupStage === "loading" && (
+                    <div className="space-y-2.5 py-1">
+                      <div className="h-2.5 rounded-full huu-shimmer w-full" />
+                      <div className="h-2.5 rounded-full huu-shimmer w-11/12" />
+                      <div className="h-2.5 rounded-full huu-shimmer w-4/5" />
+                      <div className="h-2.5 rounded-full huu-shimmer w-3/4" />
+                      <p className="text-[11px] text-neutral-500 mt-3 text-center">
+                        Rewriting…
+                      </p>
+                    </div>
+                  )}
+
+                  {/* STAGE: RESULT */}
+                  {popupStage === "result" && (
+                    <>
+                      <p className="pr-6 text-[13px] sm:text-sm text-neutral-800 leading-6 mb-4 whitespace-pre-wrap">
+                        {resultText}
+                      </p>
+                      <div className="flex items-center justify-between gap-2">
+                        <button
+                          onClick={handleBack}
+                          className="flex items-center gap-1 px-3.5 py-1.5 text-[11px] font-semibold rounded-full border-2 border-[#fff700] text-black hover:bg-[#fff700]/30 transition-colors"
+                        >
+                          <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <line x1="19" y1="12" x2="5" y2="12" />
+                            <polyline points="12 19 5 12 12 5" />
+                          </svg>
+                          Back
+                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={handleCopy}
+                            aria-label="Copy"
+                            className="flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold rounded-full bg-neutral-100 text-black hover:bg-neutral-200 transition-colors"
+                          >
+                            {copied ? (
+                              <>
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2.5"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <polyline points="20 6 9 17 4 12" />
+                                </svg>
+                                Copied
+                              </>
+                            ) : (
+                              <>
+                                <svg
+                                  width="12"
+                                  height="12"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                >
+                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                                Copy
+                              </>
+                            )}
+                          </button>
+                          <button
+                            onClick={handleAccept}
+                            className="px-3 py-1.5 text-[11px] font-bold rounded-full bg-[#fff700] text-black hover:brightness-95 transition border-2 border-black"
+                          >
+                            Accept
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {/* STAGE: LIMIT — disabled tone buttons (no enter button) */}
+                  {popupStage === "limit" && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {TONES.map((tone) => (
+                        <button
+                          key={tone}
+                          disabled
+                          className="px-3.5 py-1.5 text-[12px] font-semibold rounded-full whitespace-nowrap bg-neutral-100 text-neutral-400 cursor-not-allowed"
+                        >
+                          {tone}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
         </div>
       </section>
 
-      {/* Start sounding human CTA */}
-      <section className="w-full max-w-6xl mx-auto px-6 pb-32">
-        <div className="rounded-[2.5rem] bg-black text-white px-8 py-20 sm:py-28 text-center">
-          <h2 className="text-4xl sm:text-5xl md:text-6xl font-bold tracking-tight leading-[1.05] max-w-3xl mx-auto">
-            Start sounding human.
+      {/* 4. MADE FOR THE WAY YOU WRITE (black) — use-cases */}
+      <section id="use-cases" className="bg-black text-white px-6 py-24 sm:py-32">
+        <div className="max-w-6xl mx-auto">
+          <h2 className="font-display text-4xl sm:text-5xl md:text-6xl text-center leading-[1.05] max-w-3xl mx-auto">
+            Made for the way <span className="text-[#fff700]">you</span> write.
           </h2>
-          <p className="text-neutral-400 text-base sm:text-lg mt-6 mb-10 max-w-md mx-auto">
-            50 free rewrites. No card. No catch. Available on Web, Chrome, Mac
-            and iPhone.
+          <p className="text-neutral-400 text-base sm:text-lg mt-6 max-w-xl mx-auto text-center">
+            Whether it&apos;s cold outreach, public posts, or scripts you&apos;ll
+            actually read out loud — huu fits.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 items-center justify-center">
-            <a
-              href="#demo"
-              className="px-6 py-2.5 text-sm font-medium text-black bg-white rounded-full hover:bg-neutral-200 transition-colors"
-            >
-              Try it free
-            </a>
-            <a
-              href="#pricing"
-              className="px-6 py-2.5 text-sm font-medium text-white border border-white/20 rounded-full hover:bg-white/10 transition-colors"
-            >
-              See pricing
-            </a>
+
+          <div className="flex flex-wrap justify-center gap-2 mt-12 mb-10">
+            {USE_CASES.map((uc) => (
+              <button
+                key={uc.id}
+                onClick={() => setActiveUseCase(uc)}
+                className={`px-5 py-2.5 text-sm font-bold rounded-full border-2 transition-colors ${
+                  activeUseCase.id === uc.id
+                    ? "bg-[#fff700] text-black border-[#fff700]"
+                    : "bg-transparent text-white border-white/20 hover:border-white/60"
+                }`}
+              >
+                {uc.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="rounded-3xl bg-white text-black p-8 sm:p-12 max-w-3xl mx-auto">
+            <h3 className="font-display text-3xl sm:text-4xl mb-4">
+              {activeUseCase.title}
+            </h3>
+            <p className="text-base sm:text-lg text-neutral-700 leading-7">
+              {activeUseCase.blurb}
+            </p>
+            <div className="flex gap-3 mt-7">
+              <Link
+                href="/sign-up"
+                className="px-5 py-2 text-sm font-bold text-black bg-[#fff700] rounded-full hover:brightness-95 transition"
+              >
+                Try it free
+              </Link>
+              <a
+                href="#pricing"
+                className="px-5 py-2 text-sm font-semibold text-neutral-700 hover:text-black transition-colors"
+              >
+                See pricing →
+              </a>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* Ask ChatGPT / Claude / Perplexity */}
-      <section className="w-full max-w-3xl mx-auto px-6 pb-32 text-center">
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-black max-w-xl mx-auto mb-3">
-          Still not sure that huu is right for you?
-        </h2>
-        <p className="text-neutral-500 text-base mb-8 max-w-md mx-auto">
-          Let ChatGPT, Claude or Perplexity do the thinking for you. Click and
-          see what your favourite AI says about huu.
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          {["Ask ChatGPT", "Ask Claude", "Ask Perplexity"].map((label) => (
-            <a
-              key={label}
-              href="#"
-              className="px-5 py-2 text-sm font-medium text-black bg-white border border-black/[0.08] rounded-full hover:bg-neutral-100 transition-colors"
+      {/* 5. FEATURE: Rephrase anything (white) */}
+      <section ref={featSectionRef} className="bg-white px-6 py-24 sm:py-32">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+
+          {/* LEFT: Animated Instagram post visualization */}
+          <div
+            ref={featVizRef}
+            className="relative rounded-2xl bg-black overflow-hidden flex flex-col"
+            style={{ minHeight: "680px" }}
+          >
+            {/* Cursor — starts over white caption box (pos 0), moves UP to tone bar (pos 1-3) */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                top: featCursorPos === 0 ? "80%" : featBtnLefts.top,
+                left: ([
+                  "30%",
+                  featBtnLefts.h,
+                  featBtnLefts.u,
+                  featBtnLefts.e,
+                ] as string[])[Math.min(featCursorPos, 3)] ?? "30%",
+                opacity: featCursorVisible ? 1 : 0,
+                transform: featCursorExiting ? "translateX(30px)" : "translateX(0)",
+                transition: "top 1.0s cubic-bezier(0.33,1,0.68,1), left 0.75s cubic-bezier(0.33,1,0.68,1), opacity 0.4s ease, transform 0.55s ease-in",
+                pointerEvents: "none",
+                zIndex: 30,
+              }}
             >
-              {label}
-            </a>
-          ))}
+              <svg width="16" height="22" viewBox="0 0 22 30" fill="none">
+                <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="rgba(0,0,0,0.22)" transform="translate(1.5,1.5)"/>
+                <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="white" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round"/>
+                <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="black"/>
+              </svg>
+            </div>
+
+            {/* ── TOP: result text on dark (no card) — fills available space ── */}
+            <div className="flex-1 px-8 pt-10 min-h-[180px]">
+              {featAnimStep === 6 && (
+                <div className="space-y-2.5 pt-1">
+                  {[1, 0.8, 1, 0.65, 0.9].map((w, i) => (
+                    <div
+                      key={i}
+                      className="h-2 rounded-full"
+                      style={{
+                        width: `${w * 100}%`,
+                        backgroundColor: "#2a2a2a",
+                        backgroundImage: "linear-gradient(90deg,transparent 0%,rgba(255,255,255,0.09) 50%,transparent 100%)",
+                        backgroundSize: "200% 100%",
+                        animation: `huu-shimmer 1.5s ease-in-out infinite ${i * 0.07}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+              {featAnimStep >= 7 && (
+                <div className="space-y-2.5">
+                  <p className="text-white text-[15px] font-semibold leading-[1.35]">real talk most dropshipping stores dont fail bc of bad ads</p>
+                  <p className="text-white text-[15px] font-semibold leading-[1.35]">they fail bc they have no clue how to find products that actually sell</p>
+                  <p className="text-white text-[15px] font-semibold leading-[1.35]">im in china rn and ive been talking to suppliers, manufacturers, ppl who are actually moving volume. and got all the info on whats working</p>
+                  <p className="text-white text-[15px] font-semibold leading-[1.35]">this weekend im doing a free mastermind on how to find winning products before everyone else catches on</p>
+                  <p className="text-white text-[15px] font-semibold leading-[1.35]">comment &ldquo;FREE&rdquo; and ill send u the invite</p>
+                </div>
+              )}
+            </div>
+
+            {/* ── TONE BAR — always in DOM for cursor position computation; appears above white box ── */}
+            <div
+              className="px-8 pt-5 pb-3 transition-opacity duration-300"
+              style={{ opacity: featAnimStep >= 3 ? 1 : 0 }}
+            >
+              <div className="inline-flex items-center gap-1 bg-white rounded-full px-3 py-2">
+                {[
+                  { label: "Humanize",     id: "humanize",     step: 4  },
+                  { label: "Unpolished",   id: "unpolished",   step: 5  },
+                  { label: "Controversial",id: "",             step: 99 },
+                  { label: "Direct",       id: "",             step: 99 },
+                ].map(({ label, id, step }) => (
+                  <span
+                    key={label}
+                    data-feat-btn-id={id || undefined}
+                    className={`font-sans text-xs font-semibold whitespace-nowrap px-2.5 py-1 rounded-full transition-all duration-300 ${
+                      featAnimStep >= step ? "bg-[#fff700] text-black" : "text-neutral-500"
+                    }`}
+                  >
+                    {label}
+                  </span>
+                ))}
+                <span
+                  data-feat-btn-id="enter"
+                  className={`ml-0.5 w-7 h-7 rounded-full border flex-shrink-0 flex items-center justify-center transition-colors duration-300 ${
+                    featArrowFlash
+                      ? "bg-[#fff700] border-[#fff700] text-black"
+                      : "border-neutral-300 text-neutral-400"
+                  }`}
+                >
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                  </svg>
+                </span>
+              </div>
+            </div>
+
+            {/* ── WHITE INSTAGRAM CAPTION BOX at bottom ── */}
+            <div className="mx-6 mb-6 rounded-2xl bg-white overflow-hidden">
+              <div className="px-6 pt-6 pb-4 space-y-3">
+                {featAnimStep < 2 ? (
+                  <>
+                    <p className="text-[15px] font-semibold leading-[1.35] text-neutral-800">Most dropshipping stores don&apos;t fail because of ads.</p>
+                    <p className="text-[15px] font-semibold leading-[1.35] text-neutral-800">They fail because they don&apos;t know how to find winning products.</p>
+                    <p className="text-[15px] font-semibold leading-[1.35] text-neutral-800">I&apos;m visiting China 🇨🇳 and got all the inside info from suppliers, manufacturers, and top sellers.</p>
+                    <p className="text-[15px] font-semibold leading-[1.35] text-neutral-800">This weekend, I&apos;m hosting a FREE mastermind exposing the winning products and how to find them before they blow up.</p>
+                    <p className="text-[15px] font-semibold leading-[1.35] text-neutral-800">Comment &ldquo;FREE&rdquo; and I&apos;ll send you an invite</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-[15px] font-semibold leading-[1.35]"><span className="huu-selecting">Most dropshipping stores don&apos;t fail because of ads.</span></p>
+                    <p className="text-[15px] font-semibold leading-[1.35]"><span className="huu-selecting">They fail because they don&apos;t know how to find winning products.</span></p>
+                    <p className="text-[15px] font-semibold leading-[1.35]"><span className="huu-selecting">I&apos;m visiting China 🇨🇳 and got all the inside info from suppliers, manufacturers, and top sellers.</span></p>
+                    <p className="text-[15px] font-semibold leading-[1.35]"><span className="huu-selecting">This weekend, I&apos;m hosting a FREE mastermind exposing the winning products and how to find them before they blow up.</span></p>
+                    <p className="text-[15px] font-semibold leading-[1.35]"><span className="huu-selecting">Comment &ldquo;FREE&rdquo; and I&apos;ll send you an invite</span></p>
+                  </>
+                )}
+              </div>
+              <div className="flex items-center justify-between px-6 py-3 border-t border-neutral-100">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#a3a3a3" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M8 13s1.5 2 4 2 4-2 4-2"/>
+                  <line x1="9" y1="9" x2="9.01" y2="9"/>
+                  <line x1="15" y1="9" x2="15.01" y2="9"/>
+                </svg>
+                <span className="text-neutral-400 text-xs">376/2,200</span>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT: Copy */}
+          <div className="flex flex-col gap-6">
+            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">
+              Rephrase anything without leaving your work
+            </h2>
+            <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7">
+              Stop copying text into ChatGPT to fix it. Highlight whatever you want to change — a sentence, a paragraph, a whole email. And huumanity rewrites it right where it sits without switching tabs.
+            </p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <Link
+                href="/sign-up"
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-white px-6 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+              >
+                Try free
+              </Link>
+              <Link
+                href="/download"
+                className="inline-flex items-center gap-2.5 rounded-xl border-2 border-black bg-[#fff700] px-6 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+              >
+                <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                  <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                </svg>
+                Download for macOS
+              </Link>
+            </div>
+          </div>
+
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-black/[0.08] bg-white">
+      {/* 6. LOVE LETTERS (white) */}
+      <section className="bg-white px-6 py-24 sm:py-32">
+        <div className="max-w-6xl mx-auto">
+          <p className="text-center text-xs uppercase tracking-[0.2em] text-black font-bold mb-5">
+            Love letters
+          </p>
+          <h2 className="font-display text-4xl sm:text-5xl md:text-6xl text-center text-black leading-[1.05] max-w-3xl mx-auto">
+            People can&apos;t shut up about huu.
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-14">
+            {TESTIMONIALS.map((t) => (
+              <div
+                key={t.name}
+                className="rounded-3xl bg-white border-2 border-black p-7"
+              >
+                <p className="text-base text-neutral-800 leading-7 mb-6">
+                  &ldquo;{t.quote}&rdquo;
+                </p>
+                <div className="text-sm">
+                  <span className="font-bold text-black">{t.name}</span>
+                  <span className="text-neutral-500"> · {t.role}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 7. PRICING (black) */}
+      <section id="pricing" className="bg-black text-white px-6 py-24 sm:py-32">
+        <div className="max-w-5xl mx-auto">
+          <p className="text-center text-xs uppercase tracking-[0.2em] text-[#fff700] mb-5 font-semibold">
+            Pricing
+          </p>
+          <h2 className="font-display text-4xl sm:text-5xl md:text-6xl text-center leading-[1.05] max-w-3xl mx-auto">
+            Simple, honest pricing.
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-14">
+            {PRICING.map((tier) => (
+              <div
+                key={tier.name}
+                className={`rounded-3xl p-7 flex flex-col ${
+                  tier.accent
+                    ? "bg-[#fff700] text-black border-2 border-[#fff700]"
+                    : "bg-transparent text-white border-2 border-white/15"
+                }`}
+              >
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="font-display text-2xl">{tier.name}</h3>
+                  {tier.accent && (
+                    <span className="text-[10px] uppercase tracking-widest bg-black text-[#fff700] px-2 py-0.5 rounded-full font-bold">
+                      Popular
+                    </span>
+                  )}
+                </div>
+                <p
+                  className={`text-sm mb-6 ${
+                    tier.accent ? "text-black/70" : "text-neutral-400"
+                  }`}
+                >
+                  {tier.blurb}
+                </p>
+                <div className="flex items-baseline mb-6">
+                  <span className="font-display text-5xl tracking-tight">
+                    {tier.price}
+                  </span>
+                  <span
+                    className={`ml-1 text-sm ${
+                      tier.accent ? "text-black/70" : "text-neutral-400"
+                    }`}
+                  >
+                    {tier.cadence}
+                  </span>
+                </div>
+                <ul className="space-y-2.5 mb-8 flex-1">
+                  {tier.features.map((feat) => (
+                    <li key={feat} className="flex items-start gap-2 text-sm">
+                      <span
+                        className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${
+                          tier.accent ? "bg-black" : "bg-[#fff700]"
+                        }`}
+                      />
+                      <span>{feat}</span>
+                    </li>
+                  ))}
+                </ul>
+                <a
+                  href="/download"
+                  className={`block text-center px-4 py-2.5 text-sm font-bold rounded-full transition-colors ${
+                    tier.accent
+                      ? "bg-black text-[#fff700] hover:brightness-110"
+                      : "bg-[#fff700] text-black hover:brightness-95"
+                  }`}
+                >
+                  {tier.cta}
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* 8. FINAL CTA (yellow) */}
+      <section className="bg-[#fff700] px-6 py-24 sm:py-32 border-y-2 border-black">
+        <div className="max-w-3xl mx-auto text-center">
+          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-black leading-[1.02]">
+            Start sounding human.
+          </h2>
+          <p className="text-black/80 text-base sm:text-lg mt-6 mb-10 max-w-md mx-auto">
+            50 free rewrites. No card. No catch.
+          </p>
+          <Link
+            href="/sign-up"
+            className="inline-block px-8 py-3 text-sm font-bold text-[#fff700] bg-black rounded-full hover:bg-neutral-900 transition-colors"
+          >
+            Try it free
+          </Link>
+        </div>
+      </section>
+
+      {/* 9. FOOTER (black) */}
+      <footer className="bg-black text-white">
         <div className="w-full max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 sm:grid-cols-5 gap-8">
           <div className="col-span-2 sm:col-span-1">
-            <span
-              className="text-3xl text-black"
-              style={{
-                fontFamily: "ui-serif, Georgia, serif",
-                fontStyle: "italic",
-              }}
-            >
-              huu
-            </span>
-            <p className="text-sm text-neutral-500 mt-3 max-w-[14rem]">
+            <span className="font-display text-3xl text-[#fff700]">huu</span>
+            <p className="text-sm text-neutral-400 mt-3 max-w-[14rem]">
               Make your AI copy sound like you wrote it.
             </p>
           </div>
 
           {FOOTER_LINKS.map((col) => (
             <div key={col.title}>
-              <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3">
+              <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
                 {col.title}
               </h4>
               <ul className="space-y-2">
@@ -1156,7 +1812,7 @@ export default function LandingPage() {
                   <li key={link}>
                     <a
                       href="#"
-                      className="text-sm text-neutral-700 hover:text-black transition-colors"
+                      className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors"
                     >
                       {link}
                     </a>
@@ -1167,10 +1823,10 @@ export default function LandingPage() {
           ))}
         </div>
 
-        <div className="border-t border-black/[0.06]">
+        <div className="border-t border-white/10">
           <div className="w-full max-w-6xl mx-auto px-6 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="text-xs text-neutral-500">
-              © {new Date().getFullYear()} Huumanity. All rights reserved.
+              © {new Date().getFullYear()} huu. All rights reserved.
             </p>
             <p className="text-xs text-neutral-500">
               Built for people who don&apos;t want to sound like a robot.
@@ -1178,15 +1834,10 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Giant wordmark — like Wispr's huge "Flow" at the bottom */}
         <div className="overflow-hidden">
           <div
-            className="text-center text-black/80 leading-none select-none pointer-events-none px-4 pb-2"
-            style={{
-              fontFamily: "ui-serif, Georgia, serif",
-              fontStyle: "italic",
-              fontSize: "clamp(8rem, 24vw, 20rem)",
-            }}
+            className="font-display text-center text-[#fff700] leading-none select-none pointer-events-none px-4 pb-2"
+            style={{ fontSize: "clamp(8rem, 24vw, 20rem)" }}
           >
             huu
           </div>

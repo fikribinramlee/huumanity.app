@@ -1,13 +1,31 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Young_Serif, Nunito, Caveat } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
+const youngSerif = Young_Serif({
+  variable: "--font-young-serif",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+});
+
+const nunito = Nunito({
+  variable: "--font-nunito",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const caveat = Caveat({
+  variable: "--font-caveat",
+  subsets: ["latin"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "Huumanity — make AI copy sound human",
+  title: "huumanity: make your AI copy sound human",
   description:
-    "Select any text. Pick a tone. Watch your AI copy and outreach sound human.",
+    "Select any text. Pick a style. Watch it sound human. Built for cold outreach, posts, and scripts.",
 };
 
 export default function RootLayout({
@@ -16,8 +34,18 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${geistSans.variable} antialiased`}>
-      <body className="min-h-screen bg-[#f5f5f4] text-black">{children}</body>
+    <html
+      lang="en"
+      className={`${youngSerif.variable} ${nunito.variable} ${caveat.variable} antialiased`}
+    >
+      <body className="min-h-screen bg-white text-black">
+        <ClerkProvider
+          signInFallbackRedirectUrl="/download"
+          signUpFallbackRedirectUrl="/download"
+        >
+          {children}
+        </ClerkProvider>
+      </body>
     </html>
   );
 }
