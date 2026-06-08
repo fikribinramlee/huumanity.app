@@ -285,7 +285,7 @@ export default function LandingPage() {
   const [featCursorExiting, setFeatCursorExiting] = useState(false);
   const [featBtnLefts, setFeatBtnLefts] = useState<{ h: string; u: string; e: string; top: string }>({ h: "15%", u: "33%", e: "75%", top: "54%" });
   const [isCustomMode, setIsCustomMode] = useState(false);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
   const savedRangeRef = useRef<Range | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const demoSectionRef = useRef<HTMLDivElement>(null);
@@ -883,7 +883,7 @@ export default function LandingPage() {
         <div className="huu-hero-card w-full min-h-[78vh] rounded-3xl border border-black/[0.08] shadow-[0_4px_32px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center px-8 py-16 sm:py-20">
 
           <h1 className="font-display text-6xl sm:text-7xl md:text-8xl leading-[1.02] text-black max-w-4xl">
-            &ldquo;Stop writing like a f*cking robot.&rdquo;
+            Stop writing like a f*cking robot.
           </h1>
 
           <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-lg">
@@ -1163,6 +1163,11 @@ export default function LandingPage() {
         </div>
 
         <div className="max-w-3xl mx-auto">
+
+          {/* "Try it here" label above tab bar */}
+          <p className="text-center font-display text-2xl sm:text-3xl text-black mb-6">
+            Try it here
+          </p>
 
           {/* Yellow tab bar + Paste yours button */}
           <div className="flex items-center justify-center gap-10 mb-6 flex-wrap">
@@ -1478,19 +1483,28 @@ export default function LandingPage() {
                 huumanity handles it.
               </p>
               <div className="flex flex-wrap gap-2 mt-10">
-                {USE_CASES.map((uc) => (
-                  <button
-                    key={uc.id}
-                    onClick={() => setActiveUseCase(uc)}
-                    className={`px-5 py-2.5 text-sm font-bold rounded-full border-2 transition-all duration-200 ${
-                      activeUseCase.id === uc.id
-                        ? "bg-[#fff700] text-black border-[#fff700]"
-                        : "bg-transparent text-white border-white/20 hover:border-white/60"
-                    }`}
-                  >
-                    {uc.label}
-                  </button>
-                ))}
+                {USE_CASES.map((uc, i) => {
+                  const isActive = activeUseCase.id === uc.id;
+                  const tiltDir = i % 2 === 0 ? -7 : 7; // even = lean left, odd = lean right
+                  return (
+                    <button
+                      key={uc.id}
+                      onClick={() => setActiveUseCase(uc)}
+                      style={{
+                        transform: isActive ? `rotate(${tiltDir}deg) translateY(-2px)` : "rotate(0deg) translateY(0)",
+                        boxShadow: isActive ? "4px 4px 0 rgba(0,0,0,0.85)" : "none",
+                        transition: "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease",
+                      }}
+                      className={`px-5 py-2.5 text-sm font-bold rounded-full border-2 ${
+                        isActive
+                          ? "bg-[#fff700] text-black border-[#fff700]"
+                          : "bg-transparent text-white border-white/20 hover:border-white/60"
+                      }`}
+                    >
+                      {uc.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1672,7 +1686,7 @@ export default function LandingPage() {
             </p>
             <div className="flex items-center gap-3 flex-wrap">
               <Link
-                href="/sign-up"
+                href="#demo"
                 className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-white px-6 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
               >
                 Try free
@@ -1804,18 +1818,29 @@ export default function LandingPage() {
       {/* 8. FINAL CTA (yellow) */}
       <section className="bg-[#fff700] px-6 py-24 sm:py-32 border-y-2 border-black">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-black leading-[1.02]">
+          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-black leading-[1.02] whitespace-nowrap">
             Start sounding human.
           </h2>
-          <p className="text-black/80 text-base sm:text-lg mt-6 mb-10 max-w-md mx-auto">
-            5 free rewrites. No card.
+          <p className="text-black/80 text-base sm:text-lg mt-6 mb-10 max-w-xl mx-auto leading-7">
+            Every cold email, DM, and post you send deserves to sound like you and not some AI slop. Free to start now.
           </p>
-          <Link
-            href="/sign-up"
-            className="inline-block px-8 py-3 text-sm font-bold text-[#fff700] bg-black rounded-full hover:bg-neutral-900 transition-colors"
-          >
-            Try it free
-          </Link>
+          <div className="flex items-center justify-center gap-4 flex-wrap">
+            <Link
+              href="#demo"
+              className="inline-block px-8 py-3.5 text-sm font-black text-[#fff700] bg-black border-2 border-black rounded-xl shadow-[0_3px_0_rgba(0,0,0,0.25)] hover:bg-neutral-900 transition-colors"
+            >
+              Try it for free
+            </Link>
+            <Link
+              href="/download"
+              className="inline-flex items-center gap-2.5 px-8 py-3.5 text-sm font-black text-black bg-transparent border-2 border-black rounded-xl shadow-[0_3px_0_rgba(0,0,0,0.18)] hover:bg-black/5 transition-colors"
+            >
+              <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+              </svg>
+              Download
+            </Link>
+          </div>
         </div>
       </section>
 
