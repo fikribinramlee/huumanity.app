@@ -4,17 +4,28 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:desktop": "next dev -p 3000",
     "build": "next build",
+    "build:tauri-frontend": "next build && node scripts/build-tauri-frontend.mjs",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "tauri": "tauri",
+    "kill:3000": "lsof -ti :3000 | xargs kill -9 2>/dev/null || true",
+    "tauri:dev": "npm run kill:3000 && tauri dev",
+    "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.100.1",
+    "@clerk/nextjs": "^7.4.3",
+    "@tauri-apps/api": "^2.11.0",
+    "lucide-react": "^1.17.0",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@tauri-apps/cli": "^2.11.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

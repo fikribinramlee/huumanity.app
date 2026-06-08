@@ -33,7 +33,7 @@ I will be sharing more in-depth insights in the coming days. Stay tuned for what
 };
 
 const NAV_LINKS = [
-  { href: "#benefit", label: "Why huu" },
+  { href: "#benefit", label: "How it Works" },
   { href: "#demo", label: "Demo" },
   { href: "#use-cases", label: "Use Cases" },
   { href: "#pricing", label: "Pricing" },
@@ -44,7 +44,7 @@ const BRAND_LOGOS = [
 ];
 
 type UseCase = {
-  id: "outreach" | "posts" | "scripts";
+  id: "anywhere" | "outreach" | "posts" | "scripts";
   label: string;
   title: string;
   blurb: string;
@@ -52,25 +52,32 @@ type UseCase = {
 
 const USE_CASES: UseCase[] = [
   {
+    id: "anywhere",
+    label: "Anywhere",
+    title: "huu for Anywhere",
+    blurb:
+      "Highlight any text you see on your screen. Doesn't matter where it is — a webpage, a doc, a form. Pick a tone and huumanity rewrites it right there for you to clipboard it.",
+  },
+  {
     id: "outreach",
     label: "Outreach",
     title: "huu for Outreach",
     blurb:
-      "Cold emails, LinkedIn DMs, follow-ups. Stop sending “I hope this email finds you well” and start sending messages people actually open, read, and reply to.",
+      "Whether it be for cold emails, DMs, follow-ups — your prospects can smell a ChatGPT template from the subject line. huumanity rewrites your draft so it sounds like it was written by an actual human with emotions, and that you actually gave a damn before hitting send.",
   },
   {
     id: "posts",
     label: "Posts",
     title: "huu for Posts",
     blurb:
-      "X threads, LinkedIn posts, newsletters. huu adds the personality that gets reposts, comments, and DMs — not crickets and corporate cringe.",
+      "If your X and LinkedIn posts, Instagram captions, or newsletters sound obviously written by AI, no one will find that shit trustworthy. Nobody shares content that sounds like a robot wrote it. huumanity gives your posts the edge and the voice that makes people care about what you have to say.",
   },
   {
     id: "scripts",
     label: "Scripts",
     title: "huu for Scripts",
     blurb:
-      "YouTube intros, podcast openers, sales decks, pitch reels. huu makes your words sound like you actually said them — not like you typed them.",
+      "Audiences can still hear that your script is written by AI. Doesn't matter if it's for a whole YouTube video or short-form content — reading AI-written scripts out loud is painful for everyone in the room. huumanity rewrites them so the words actually sound like yours.",
   },
 ];
 
@@ -116,40 +123,29 @@ const TESTIMONIALS = [
 const PRICING = [
   {
     name: "Free",
-    price: "$0",
+    monthlyPrice: "$0",
+    annualPrice: "$0",
     cadence: "/forever",
-    blurb: "For the curious. Try huu, no card required.",
-    features: ["50 rewrites / month", "All 5 tones", "1 saved preset"],
-    cta: "Start free",
+    features: [
+      "5 rewrites per day",
+      "All 4 tones",
+      "App that works everywhere — any app, any text field on your computer",
+      "No credit card needed",
+    ],
+    cta: "Download free",
     accent: false,
   },
   {
     name: "Pro",
-    price: "$12",
-    cadence: "/month",
-    blurb: "For people who write every day and want to sound like themselves.",
+    monthlyPrice: "$10",
+    annualPrice: "$8",
+    cadence: "/mo",
     features: [
+      "Everything in the free plan",
       "Unlimited rewrites",
-      "All 5 tones",
-      "Unlimited presets",
-      "History & versions",
     ],
-    cta: "Go Pro",
+    cta: "Get Pro",
     accent: true,
-  },
-  {
-    name: "Team",
-    price: "$29",
-    cadence: "/seat / month",
-    blurb: "For teams that ship outbound, content, or support at volume.",
-    features: [
-      "Everything in Pro",
-      "Shared team tones",
-      "Centralized billing",
-      "Priority support",
-    ],
-    cta: "Talk to us",
-    accent: false,
   },
 ];
 
@@ -289,6 +285,7 @@ export default function LandingPage() {
   const [featCursorExiting, setFeatCursorExiting] = useState(false);
   const [featBtnLefts, setFeatBtnLefts] = useState<{ h: string; u: string; e: string; top: string }>({ h: "15%", u: "33%", e: "75%", top: "54%" });
   const [isCustomMode, setIsCustomMode] = useState(false);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
   const savedRangeRef = useRef<Range | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
   const demoSectionRef = useRef<HTMLDivElement>(null);
@@ -463,9 +460,12 @@ export default function LandingPage() {
     };
   }, [featAnimStarted]);
 
-  // Track which section is in view for crossed-out nav effect
+  // Track which section is in view for crossed-out nav effect.
+  // Uses a shared Set so that when ALL sections leave the viewport (i.e. hero is showing)
+  // activeSection resets to "" and no nav link is crossed out.
   useEffect(() => {
     const sectionIds = NAV_LINKS.map((l) => l.href.replace("#", ""));
+    const visible = new Set<string>();
     const observers: IntersectionObserver[] = [];
 
     sectionIds.forEach((id) => {
@@ -473,7 +473,18 @@ export default function LandingPage() {
       if (!el) return;
       const obs = new IntersectionObserver(
         ([entry]) => {
-          if (entry.isIntersecting) setActiveSection(id);
+          if (entry.isIntersecting) {
+            visible.add(id);
+            setActiveSection(id);
+          } else {
+            visible.delete(id);
+            // If nothing is in view any more (back at hero) → clear the cross-out
+            setActiveSection((prev) => {
+              if (prev !== id) return prev;           // something else is still active
+              if (visible.size > 0) return [...visible][visible.size - 1];
+              return "";                              // hero — no section active
+            });
+          }
         },
         { rootMargin: "-40% 0px -40% 0px", threshold: 0 }
       );
@@ -820,7 +831,7 @@ export default function LandingPage() {
                 <a
                   key={link.href}
                   href={link.href}
-                  className={`relative px-4 py-2 text-sm font-medium rounded-full transition-colors ${
+                  className={`relative px-4 py-2 font-display text-sm font-bold rounded-full transition-colors ${
                     isCurrent
                       ? "text-neutral-400"
                       : "text-neutral-700 hover:text-black hover:bg-black/[0.04]"
@@ -875,8 +886,8 @@ export default function LandingPage() {
             &ldquo;Stop writing like a f*cking robot.&rdquo;
           </h1>
 
-          <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-md">
-            Select any text. Pick a tone. Sound like a human.
+          <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-lg">
+            the text selection tool that rephrases AI copy into unpolished-human sounding words across every app.
           </p>
 
           {/* Download CTA */}
@@ -901,7 +912,7 @@ export default function LandingPage() {
               <path d="M9 28C9 28 7 18 9 2M9 2L3 10M9 2L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <p className="font-handwritten text-2xl sm:text-3xl text-neutral-400 -rotate-2">
-              no more &ldquo;I hope this email finds you well&rdquo;
+              &ldquo;because anyone can tell you use AI to write, you lazy f*ck&rdquo;
             </p>
           </div>
 
@@ -1451,54 +1462,65 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 4. MADE FOR THE WAY YOU WRITE (black) — use-cases */}
+      {/* 4. USE CASES (black) */}
       <section id="use-cases" className="bg-black text-white px-6 py-24 sm:py-32">
         <div className="max-w-6xl mx-auto">
-          <h2 className="font-display text-4xl sm:text-5xl md:text-6xl text-center leading-[1.05] max-w-3xl mx-auto">
-            Made for the way <span className="text-[#fff700]">you</span> write.
-          </h2>
-          <p className="text-neutral-400 text-base sm:text-lg mt-6 max-w-xl mx-auto text-center">
-            Whether it&apos;s cold outreach, public posts, or scripts you&apos;ll
-            actually read out loud — huu fits.
-          </p>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-24 items-start">
 
-          <div className="flex flex-wrap justify-center gap-2 mt-12 mb-10">
-            {USE_CASES.map((uc) => (
-              <button
-                key={uc.id}
-                onClick={() => setActiveUseCase(uc)}
-                className={`px-5 py-2.5 text-sm font-bold rounded-full border-2 transition-colors ${
-                  activeUseCase.id === uc.id
-                    ? "bg-[#fff700] text-black border-[#fff700]"
-                    : "bg-transparent text-white border-white/20 hover:border-white/60"
-                }`}
-              >
-                {uc.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="rounded-3xl bg-white text-black p-8 sm:p-12 max-w-3xl mx-auto">
-            <h3 className="font-display text-3xl sm:text-4xl mb-4">
-              {activeUseCase.title}
-            </h3>
-            <p className="text-base sm:text-lg text-neutral-700 leading-7">
-              {activeUseCase.blurb}
-            </p>
-            <div className="flex gap-3 mt-7">
-              <Link
-                href="/sign-up"
-                className="px-5 py-2 text-sm font-bold text-black bg-[#fff700] rounded-full hover:brightness-95 transition"
-              >
-                Try it free
-              </Link>
-              <a
-                href="#pricing"
-                className="px-5 py-2 text-sm font-semibold text-neutral-700 hover:text-black transition-colors"
-              >
-                See pricing →
-              </a>
+            {/* LEFT: Headline + description + tags */}
+            <div>
+              <h2 className="font-display text-5xl sm:text-6xl lg:text-[4.5rem] leading-[1.0] tracking-tight">
+                Write for every room
+              </h2>
+              <p className="text-neutral-400 text-base sm:text-lg mt-6 leading-7 max-w-md">
+                One tool for 4 ways to sound human. Whether you&apos;re closing a deal,
+                building an audience, recording yourself, or fixing text you stumbled on.
+                huumanity handles it.
+              </p>
+              <div className="flex flex-wrap gap-2 mt-10">
+                {USE_CASES.map((uc) => (
+                  <button
+                    key={uc.id}
+                    onClick={() => setActiveUseCase(uc)}
+                    className={`px-5 py-2.5 text-sm font-bold rounded-full border-2 transition-all duration-200 ${
+                      activeUseCase.id === uc.id
+                        ? "bg-[#fff700] text-black border-[#fff700]"
+                        : "bg-transparent text-white border-white/20 hover:border-white/60"
+                    }`}
+                  >
+                    {uc.label}
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* RIGHT: Active use case content */}
+            <div className="lg:pt-3">
+              <h3 className="font-display text-3xl sm:text-4xl leading-[1.1] mb-5">
+                {activeUseCase.title}
+              </h3>
+              <p className="text-neutral-300 text-base sm:text-lg leading-[1.75]">
+                {activeUseCase.blurb}
+              </p>
+              <div className="flex gap-3 mt-8 flex-wrap">
+                <Link
+                  href="/download"
+                  className="inline-flex items-center gap-2.5 rounded-xl border-2 border-white bg-white px-6 py-3 text-sm font-black text-black transition hover:brightness-95"
+                >
+                  <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                    <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                  </svg>
+                  Download for macOS
+                </Link>
+                <a
+                  href="#pricing"
+                  className="inline-flex items-center px-6 py-3 text-sm font-semibold text-white border-2 border-white/20 rounded-xl hover:border-white/50 transition"
+                >
+                  See pricing →
+                </a>
+              </div>
+            </div>
+
           </div>
         </div>
       </section>
@@ -1564,7 +1586,7 @@ export default function LandingPage() {
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">they fail bc they have no clue how to find products that actually sell</p>
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">im in china rn and ive been talking to suppliers, manufacturers, ppl who are actually moving volume. and got all the info on whats working</p>
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">this weekend im doing a free mastermind on how to find winning products before everyone else catches on</p>
-                  <p className="text-white text-[15px] font-semibold leading-[1.35]">comment &ldquo;FREE&rdquo; and ill send u the invite</p>
+                  <p className="text-white text-[15px] font-semibold leading-[1.35]">comment &ldquo;FREE&rdquo; and i'll send u the invite</p>
                 </div>
               )}
             </div>
@@ -1646,7 +1668,7 @@ export default function LandingPage() {
               Rephrase anything without leaving your work
             </h2>
             <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7">
-              Stop copying text into ChatGPT to fix it. Highlight whatever you want to change — a sentence, a paragraph, a whole email. And huumanity rewrites it right where it sits without switching tabs.
+              Stop copying text into ChatGPT to fix it. Select whatever you want to change; a sentence, a paragraph, a whole email. And huumanity rewrites it right where it sits without switching tabs.
             </p>
             <div className="flex items-center gap-3 flex-wrap">
               <Link
@@ -1670,106 +1692,225 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* 6. LOVE LETTERS (white) */}
-      <section className="bg-white px-6 py-24 sm:py-32">
-        <div className="max-w-6xl mx-auto">
-          <p className="text-center text-xs uppercase tracking-[0.2em] text-black font-bold mb-5">
-            Love letters
-          </p>
-          <h2 className="font-display text-4xl sm:text-5xl md:text-6xl text-center text-black leading-[1.05] max-w-3xl mx-auto">
-            People can&apos;t shut up about huu.
-          </h2>
+      {/* TONE BLOCKS */}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mt-14">
-            {TESTIMONIALS.map((t) => (
-              <div
-                key={t.name}
-                className="rounded-3xl bg-white border-2 border-black p-7"
-              >
-                <p className="text-base text-neutral-800 leading-7 mb-6">
-                  &ldquo;{t.quote}&rdquo;
-                </p>
-                <div className="text-sm">
-                  <span className="font-bold text-black">{t.name}</span>
-                  <span className="text-neutral-500"> · {t.role}</span>
-                </div>
-              </div>
-            ))}
+      {/* Humanize */}
+      <section className="bg-white px-6 py-24 sm:py-32 border-t border-neutral-100">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          {/* LEFT: card */}
+          <div className="rounded-2xl bg-neutral-950 overflow-hidden p-8 space-y-4">
+            <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Before</p>
+            <p className="text-neutral-400 text-[13px] leading-[1.7]">
+              I am pleased to inform you that following extensive deliberation, our team has successfully executed the strategic initiative and is now well-positioned to leverage synergies going forward.
+            </p>
+            <div className="border-t border-white/10 pt-4">
+              <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Humanize</p>
+              <p className="text-white text-[13px] leading-[1.7] font-medium">
+                After a lot of back-and-forth, we finally got it done. Here&apos;s where we&apos;re at and what&apos;s coming next.
+              </p>
+            </div>
+          </div>
+          {/* RIGHT: copy */}
+          <div className="flex flex-col gap-5">
+            <span className="inline-flex w-fit px-3 py-1 rounded-full bg-neutral-100 text-xs font-bold text-neutral-600 uppercase tracking-widest">Tone</span>
+            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">Humanize</h2>
+            <p className="text-neutral-500 text-base sm:text-lg leading-7">
+              For when your text sounds like a press release wrote itself. Humanize strips the corporate gloss and rewrites it in plain, natural language that sounds like an actual person wrote it. The AI smell? Gone.
+            </p>
+            <p className="text-sm text-neutral-400 font-medium">Best for: emails, LinkedIn posts, bios, product copy.</p>
           </div>
         </div>
       </section>
 
-      {/* 7. PRICING (black) */}
-      <section id="pricing" className="bg-black text-white px-6 py-24 sm:py-32">
-        <div className="max-w-5xl mx-auto">
-          <p className="text-center text-xs uppercase tracking-[0.2em] text-[#fff700] mb-5 font-semibold">
-            Pricing
-          </p>
-          <h2 className="font-display text-4xl sm:text-5xl md:text-6xl text-center leading-[1.05] max-w-3xl mx-auto">
-            Simple, honest pricing.
-          </h2>
+      {/* Unpolished */}
+      <section className="bg-neutral-950 px-6 py-24 sm:py-32">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          {/* LEFT: copy */}
+          <div className="flex flex-col gap-5">
+            <span className="inline-flex w-fit px-3 py-1 rounded-full bg-white/10 text-xs font-bold text-neutral-400 uppercase tracking-widest">Tone</span>
+            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-white">Unpolished</h2>
+            <p className="text-neutral-400 text-base sm:text-lg leading-7">
+              Less grammar, more voice. Like a text message or a quick voice note — the kind of writing that builds trust because it doesn&apos;t try too hard. Raw and real wins every time over polished and forgettable.
+            </p>
+            <p className="text-sm text-neutral-600 font-medium">Best for: DMs, casual outreach, X threads, Discord messages.</p>
+          </div>
+          {/* RIGHT: card */}
+          <div className="rounded-2xl bg-black border border-white/10 overflow-hidden p-8 space-y-4">
+            <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Before</p>
+            <p className="text-neutral-400 text-[13px] leading-[1.7]">
+              I wanted to follow up to see if you had a chance to review the proposal I sent over last week. Please let me know if you have any questions.
+            </p>
+            <div className="border-t border-white/10 pt-4">
+              <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Unpolished</p>
+              <p className="text-white text-[13px] leading-[1.7] font-medium">
+                hey — did you get a chance to look at that? lmk if you have questions
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mt-14">
-            {PRICING.map((tier) => (
-              <div
-                key={tier.name}
-                className={`rounded-3xl p-7 flex flex-col ${
-                  tier.accent
-                    ? "bg-[#fff700] text-black border-2 border-[#fff700]"
-                    : "bg-transparent text-white border-2 border-white/15"
+      {/* Controversial */}
+      <section className="bg-white px-6 py-24 sm:py-32 border-t border-neutral-100">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          {/* LEFT: card */}
+          <div className="rounded-2xl bg-neutral-950 overflow-hidden p-8 space-y-4">
+            <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Before</p>
+            <p className="text-neutral-400 text-[13px] leading-[1.7]">
+              I think AI is going to significantly change the way we work over the coming years and presents interesting opportunities for professionals who adapt.
+            </p>
+            <div className="border-t border-white/10 pt-4">
+              <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Controversial</p>
+              <p className="text-white text-[13px] leading-[1.7] font-medium">
+                Most people at your company will be replaceable by AI in 3 years. The ones who won&apos;t be are already adapting. Are you one of them?
+              </p>
+            </div>
+          </div>
+          {/* RIGHT: copy */}
+          <div className="flex flex-col gap-5">
+            <span className="inline-flex w-fit px-3 py-1 rounded-full bg-neutral-100 text-xs font-bold text-neutral-600 uppercase tracking-widest">Tone</span>
+            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">Controversial</h2>
+            <p className="text-neutral-500 text-base sm:text-lg leading-7">
+              For when you want to stop the scroll. Controversial takes a strong stance, flips the conventional take, or says the thing most people are thinking but won&apos;t say out loud. Built for posts and threads that spark real conversation — not polite applause.
+            </p>
+            <p className="text-sm text-neutral-400 font-medium">Best for: X threads, LinkedIn posts, YouTube hooks, newsletters.</p>
+          </div>
+        </div>
+      </section>
+
+      {/* Direct */}
+      <section className="bg-neutral-950 px-6 py-24 sm:py-32">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          {/* LEFT: copy */}
+          <div className="flex flex-col gap-5">
+            <span className="inline-flex w-fit px-3 py-1 rounded-full bg-white/10 text-xs font-bold text-neutral-400 uppercase tracking-widest">Tone</span>
+            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-white">Direct</h2>
+            <p className="text-neutral-400 text-base sm:text-lg leading-7">
+              No fluff. No setup. No &ldquo;I hope this finds you well.&rdquo; Direct gets straight to the point in as few words as possible. The tone for cold outreach, follow-ups, and any time someone&apos;s attention is precious.
+            </p>
+            <p className="text-sm text-neutral-600 font-medium">Best for: cold emails, follow-ups, Slack messages, pitches.</p>
+          </div>
+          {/* RIGHT: card */}
+          <div className="rounded-2xl bg-black border border-white/10 overflow-hidden p-8 space-y-4">
+            <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Before</p>
+            <p className="text-neutral-400 text-[13px] leading-[1.7]">
+              I hope this message finds you well. I wanted to reach out because I believe there might be some interesting synergies between our companies that could be worth exploring together.
+            </p>
+            <div className="border-t border-white/10 pt-4">
+              <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Direct</p>
+              <p className="text-white text-[13px] leading-[1.7] font-medium">
+                We help companies like yours cut reply time by 40%. Worth 15 minutes this week?
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* 6. PRICING (black) */}
+      <section id="pricing" className="bg-black text-white px-6 py-24 sm:py-32">
+        <div className="max-w-4xl mx-auto">
+          {/* Headline + description */}
+          <h2 className="font-display text-4xl sm:text-5xl md:text-6xl text-center leading-[1.05] max-w-3xl mx-auto">
+            Simple Pricing
+          </h2>
+          <p className="text-neutral-400 text-base sm:text-lg mt-5 max-w-sm mx-auto text-center leading-7">
+            Download the app and start free with 5 rewrites a day.
+            No credit card required.
+          </p>
+
+          {/* Monthly / Annual toggle */}
+          <div className="flex justify-center mt-10">
+            <div className="inline-flex items-center p-1.5 rounded-2xl bg-neutral-900 border border-white/10">
+              <button
+                onClick={() => setBillingPeriod("monthly")}
+                className={`px-5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${
+                  billingPeriod === "monthly"
+                    ? "bg-[#fff700] text-black shadow-sm"
+                    : "text-neutral-400 hover:text-white"
                 }`}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-display text-2xl">{tier.name}</h3>
-                  {tier.accent && (
-                    <span className="text-[10px] uppercase tracking-widest bg-black text-[#fff700] px-2 py-0.5 rounded-full font-bold">
-                      Popular
-                    </span>
-                  )}
-                </div>
-                <p
-                  className={`text-sm mb-6 ${
-                    tier.accent ? "text-black/70" : "text-neutral-400"
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingPeriod("annual")}
+                className={`px-5 py-2 text-sm font-semibold rounded-xl transition-all duration-200 ${
+                  billingPeriod === "annual"
+                    ? "bg-[#fff700] text-black shadow-sm"
+                    : "text-neutral-400 hover:text-white"
+                }`}
+              >
+                Annual&nbsp;&nbsp;<span className={`text-xs font-bold ${billingPeriod === "annual" ? "text-black/70" : "text-[#fff700]"}`}>20% off</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Pricing cards — 2 tiers */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-12 max-w-2xl mx-auto">
+            {PRICING.map((tier) => {
+              const price = billingPeriod === "annual" ? tier.annualPrice : tier.monthlyPrice;
+              return (
+                <div
+                  key={tier.name}
+                  className={`rounded-3xl p-8 flex flex-col ${
+                    tier.accent
+                      ? "bg-[#fff700] text-black"
+                      : "bg-transparent text-white border-2 border-white/15"
                   }`}
                 >
-                  {tier.blurb}
-                </p>
-                <div className="flex items-baseline mb-6">
-                  <span className="font-display text-5xl tracking-tight">
-                    {tier.price}
-                  </span>
-                  <span
-                    className={`ml-1 text-sm ${
-                      tier.accent ? "text-black/70" : "text-neutral-400"
+                  <div className="flex items-center justify-between mb-5">
+                    <h3 className="font-display text-2xl">{tier.name}</h3>
+                    {tier.accent && (
+                      <span className="text-[10px] uppercase tracking-widest bg-black text-[#fff700] px-2.5 py-1 rounded-full font-bold">
+                        Popular
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-baseline mb-7">
+                    <span className="font-display text-5xl tracking-tight">{price}</span>
+                    {price !== "$0" && (
+                      <span className={`ml-1.5 text-sm ${tier.accent ? "text-black/60" : "text-neutral-400"}`}>
+                        {tier.cadence}
+                        {billingPeriod === "annual" && (
+                          <span className={`ml-1.5 text-xs font-semibold ${tier.accent ? "text-black/50" : "text-neutral-500"}`}>
+                            billed annually
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    {price === "$0" && (
+                      <span className={`ml-1.5 text-sm ${tier.accent ? "text-black/60" : "text-neutral-400"}`}>/forever</span>
+                    )}
+                  </div>
+
+                  <ul className="space-y-3 mb-8 flex-1">
+                    {tier.features.map((feat) => (
+                      <li key={feat} className="flex items-start gap-2.5 text-sm leading-[1.5]">
+                        <svg
+                          className={`mt-0.5 shrink-0 ${tier.accent ? "text-black" : "text-[#fff700]"}`}
+                          width="14" height="14" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
+                        >
+                          <polyline points="20 6 9 17 4 12"/>
+                        </svg>
+                        <span>{feat}</span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <Link
+                    href="/download"
+                    className={`block text-center px-4 py-3 text-sm font-bold rounded-full transition-colors ${
+                      tier.accent
+                        ? "bg-black text-[#fff700] hover:brightness-110"
+                        : "bg-[#fff700] text-black hover:brightness-95"
                     }`}
                   >
-                    {tier.cadence}
-                  </span>
+                    {tier.cta}
+                  </Link>
                 </div>
-                <ul className="space-y-2.5 mb-8 flex-1">
-                  {tier.features.map((feat) => (
-                    <li key={feat} className="flex items-start gap-2 text-sm">
-                      <span
-                        className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${
-                          tier.accent ? "bg-black" : "bg-[#fff700]"
-                        }`}
-                      />
-                      <span>{feat}</span>
-                    </li>
-                  ))}
-                </ul>
-                <a
-                  href="/download"
-                  className={`block text-center px-4 py-2.5 text-sm font-bold rounded-full transition-colors ${
-                    tier.accent
-                      ? "bg-black text-[#fff700] hover:brightness-110"
-                      : "bg-[#fff700] text-black hover:brightness-95"
-                  }`}
-                >
-                  {tier.cta}
-                </a>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -1781,7 +1922,7 @@ export default function LandingPage() {
             Start sounding human.
           </h2>
           <p className="text-black/80 text-base sm:text-lg mt-6 mb-10 max-w-md mx-auto">
-            50 free rewrites. No card. No catch.
+            5 free rewrites. No card.
           </p>
           <Link
             href="/sign-up"
