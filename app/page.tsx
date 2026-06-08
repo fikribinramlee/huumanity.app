@@ -56,14 +56,14 @@ const USE_CASES: UseCase[] = [
     label: "Anywhere",
     title: "huu for Anywhere",
     blurb:
-      "Highlight any text you see on your screen. Doesn't matter where it is — a webpage, a doc, a form. Pick a tone and huumanity rewrites it right there for you to clipboard it.",
+      "Highlight any text you see on your screen. Doesn't matter where it is: a webpage, a doc, a form. Pick a tone and huumanity rewrites it right there for you to clipboard it.",
   },
   {
     id: "outreach",
     label: "Outreach",
     title: "huu for Outreach",
     blurb:
-      "Whether it be for cold emails, DMs, follow-ups — your prospects can smell a ChatGPT template from the subject line. huumanity rewrites your draft so it sounds like it was written by an actual human with emotions, and that you actually gave a damn before hitting send.",
+      "Whether it be for cold emails, DMs, or follow-ups. Your prospects can smell a ChatGPT template from the subject line. huumanity rewrites your draft so it sounds like it was written by an actual human with emotions, and that you actually gave a damn before hitting send.",
   },
   {
     id: "posts",
@@ -77,7 +77,7 @@ const USE_CASES: UseCase[] = [
     label: "Scripts",
     title: "huu for Scripts",
     blurb:
-      "Audiences can still hear that your script is written by AI. Doesn't matter if it's for a whole YouTube video or short-form content — reading AI-written scripts out loud is painful for everyone in the room. huumanity rewrites them so the words actually sound like yours.",
+      "Audiences can still hear that your script is written by AI. Doesn't matter if it's for a whole YouTube video or short-form content. Reading AI-written scripts out loud is painful for everyone in the room. huumanity rewrites them so the words actually sound like yours.",
   },
 ];
 
@@ -129,7 +129,7 @@ const PRICING = [
     features: [
       "5 rewrites per day",
       "All 4 tones",
-      "App that works everywhere — any app, any text field on your computer",
+      "App that works everywhere. Any app, any text field on your computer",
       "No credit card needed",
     ],
     cta: "Download free",
@@ -1730,7 +1730,7 @@ export default function LandingPage() {
             <span className="inline-flex w-fit px-3 py-1 rounded-full bg-white/10 text-xs font-bold text-neutral-400 uppercase tracking-widest">Tone</span>
             <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-white">Unpolished</h2>
             <p className="text-neutral-400 text-base sm:text-lg leading-7">
-              Less grammar, more voice. Like a text message or a quick voice note — the kind of writing that builds trust because it doesn&apos;t try too hard. Raw and real wins every time over polished and forgettable.
+              Less grammar, more voice. Like a text message or a quick voice note. The kind of writing that builds trust because it doesn&apos;t try too hard. Raw and real wins every time over polished and forgettable.
             </p>
             <p className="text-sm text-neutral-600 font-medium">Best for: DMs, casual outreach, X threads, Discord messages.</p>
           </div>
@@ -1743,7 +1743,7 @@ export default function LandingPage() {
             <div className="border-t border-white/10 pt-4">
               <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Unpolished</p>
               <p className="text-white text-[13px] leading-[1.7] font-medium">
-                hey — did you get a chance to look at that? lmk if you have questions
+                hey, did you get a chance to look at that? lmk if you have questions
               </p>
             </div>
           </div>
@@ -1771,7 +1771,7 @@ export default function LandingPage() {
             <span className="inline-flex w-fit px-3 py-1 rounded-full bg-neutral-100 text-xs font-bold text-neutral-600 uppercase tracking-widest">Tone</span>
             <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">Controversial</h2>
             <p className="text-neutral-500 text-base sm:text-lg leading-7">
-              For when you want to stop the scroll. Controversial takes a strong stance, flips the conventional take, or says the thing most people are thinking but won&apos;t say out loud. Built for posts and threads that spark real conversation — not polite applause.
+              For when you want to stop the scroll. Controversial takes a strong stance, flips the conventional take, or says the thing most people are thinking but won&apos;t say out loud. Built for posts and threads that spark real conversation, not polite applause.
             </p>
             <p className="text-sm text-neutral-400 font-medium">Best for: X threads, LinkedIn posts, YouTube hooks, newsletters.</p>
           </div>
