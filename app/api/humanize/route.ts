@@ -1,8 +1,12 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-
-const FREE_LIMIT = 8;
+import {
+  getUserMeta,
+  incrementDailyUsage,
+  FREE_DAILY_LIMIT,
+  todayUTC,
+} from "@/app/lib/subscription";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -190,19 +194,31 @@ export async function POST(req: NextRequest) {
     const { userId } = await auth();
 
     let usageCount = 0;
-    let clerk: Awaited<ReturnType<typeof clerkClient>> | null = null;
 
-    // Signed-in: enforce backend limit. Anonymous: relies on client-side localStorage gate.
+    // Signed-in users: enforce plan limits server-side.
+    // Anonymous callers: fall through (client-side localStorage gate only).
     if (userId) {
-      clerk = await clerkClient();
-      const user = await clerk.users.getUser(userId);
-      usageCount = (user.publicMetadata?.usageCount as number) ?? 0;
+      const { privateMeta, publicMeta } = await getUserMeta(userId);
 
-      if (usageCount >= FREE_LIMIT) {
-        return corsJson(
-          { error: "usage_limit_reached", usageCount, limit: FREE_LIMIT },
-          { status: 429 }
-        );
+      const isPro =
+        privateMeta.plan === "pro" &&
+        privateMeta.subscriptionStatus === "active";
+
+      if (!isPro) {
+        const today = todayUTC();
+        usageCount =
+          publicMeta.usageDate === today ? (publicMeta.usageCount ?? 0) : 0;
+
+        if (usageCount >= FREE_DAILY_LIMIT) {
+          return corsJson(
+            {
+              error: "usage_limit_reached",
+              usageCount,
+              limit: FREE_DAILY_LIMIT,
+            },
+            { status: 429 }
+          );
+        }
       }
     }
 
@@ -249,16 +265,22 @@ export async function POST(req: NextRequest) {
     const result =
       message.content[0].type === "text" ? message.content[0].text : "";
 
-    if (userId && clerk) {
-      await clerk.users.updateUserMetadata(userId, {
-        publicMetadata: { usageCount: usageCount + 1 },
-      });
+    // Increment daily usage for signed-in free users
+    let newUsageCount: number | null = null;
+    if (userId) {
+      const { privateMeta } = await getUserMeta(userId);
+      const isPro =
+        privateMeta.plan === "pro" &&
+        privateMeta.subscriptionStatus === "active";
+      if (!isPro) {
+        newUsageCount = await incrementDailyUsage(userId);
+      }
     }
 
     return corsJson({
       result,
-      usageCount: userId ? usageCount + 1 : null,
-      limit: FREE_LIMIT,
+      usageCount: newUsageCount ?? (userId ? usageCount + 1 : null),
+      limit: FREE_DAILY_LIMIT,
     });
   } catch (err) {
     console.error("Humanize API error:", err);

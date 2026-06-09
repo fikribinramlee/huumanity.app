@@ -12,6 +12,15 @@ import { HuuLogo } from "../components/HuuLogo";
 
 type View = "home" | "scratchpad";
 type AuthState = "login" | "verified" | "app";
+type Plan = "free" | "pro";
+
+type SubscriptionStatus = {
+  plan: Plan;
+  usageCount: number;
+  limit: number;
+  unlimited: boolean;
+  remaining: number | null;
+};
 
 type DesktopSelection = {
   text: string;
@@ -122,6 +131,18 @@ export default function EditorPage() {
   const [activeView, setActiveView] = useState<View>("home");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+  // Subscription / usage
+  const [subscription, setSubscription] = useState<SubscriptionStatus>({
+    plan: "free",
+    usageCount: 0,
+    limit: 5,
+    unlimited: false,
+    remaining: 5,
+  });
+  const [paywallOpen, setPaywallOpen] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [selectedPrice, setSelectedPrice] = useState<"monthly" | "annual">("monthly");
+
   // Setup
   const [hasCompletedSetup, setHasCompletedSetup] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -153,6 +174,75 @@ export default function EditorPage() {
       return PRODUCTION_API;
     return "/api/humanize";
   }, []);
+
+  const apiBase = useCallback(() => {
+    if (typeof window !== "undefined" && window.location.origin.includes("tauri"))
+      return "https://huumanity.app";
+    if (typeof window !== "undefined" && window.location.origin.includes("localhost"))
+      return "http://localhost:3000";
+    return "";
+  }, []);
+
+  const fetchSubscription = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBase()}/api/subscription/status`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data: SubscriptionStatus = await res.json();
+      setSubscription(data);
+    } catch {
+      // silently fail — UI degrades gracefully
+    }
+  }, [apiBase]);
+
+  const handleUpgradeClick = useCallback(async (priceType: "monthly" | "annual" = "monthly") => {
+    setCheckoutLoading(true);
+    try {
+      const priceId =
+        priceType === "annual"
+          ? (process.env.NEXT_PUBLIC_STRIPE_PRICE_ANNUAL ?? "price_1TgPXi2ceurudS1gBxkZIf6D")
+          : (process.env.NEXT_PUBLIC_STRIPE_PRICE_MONTHLY ?? "price_1TgPXi2ceurudS1gl7UZeNmZ");
+
+      const res = await fetch(`${apiBase()}/api/stripe/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priceId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.open(data.url, "_blank");
+        // Poll for upgrade after payment
+        const poll = window.setInterval(async () => {
+          const statusRes = await fetch(`${apiBase()}/api/subscription/status`, { cache: "no-store" });
+          const status: SubscriptionStatus = await statusRes.json();
+          if (status.plan === "pro") {
+            setSubscription(status);
+            setPaywallOpen(false);
+            window.clearInterval(poll);
+          }
+        }, 3000);
+        // Stop polling after 10 minutes
+        window.setTimeout(() => window.clearInterval(poll), 600_000);
+      }
+    } catch {
+      // ignore — user will retry
+    } finally {
+      setCheckoutLoading(false);
+    }
+  }, [apiBase]);
+
+  const handleManageBilling = useCallback(async () => {
+    try {
+      const res = await fetch(`${apiBase()}/api/stripe/portal`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.url) window.open(data.url, "_blank");
+    } catch {
+      // ignore
+    }
+  }, [apiBase]);
 
   const refreshAccessibilityPermission = useCallback(async () => {
     try {
@@ -219,9 +309,17 @@ export default function EditorPage() {
     const id = window.setTimeout(() => {
       void refreshAccessibilityPermission();
       void refreshSelectorHealth();
+      void fetchSubscription();
     }, 0);
     return () => window.clearTimeout(id);
-  }, [authState, refreshAccessibilityPermission, refreshSelectorHealth]);
+  }, [authState, refreshAccessibilityPermission, refreshSelectorHealth, fetchSubscription]);
+
+  // Refresh subscription every 30s to pick up webhook-triggered upgrades
+  useEffect(() => {
+    if (authState !== "app") return;
+    const id = window.setInterval(() => void fetchSubscription(), 30_000);
+    return () => window.clearInterval(id);
+  }, [authState, fetchSubscription]);
 
   useEffect(() => {
     if (authState !== "app") return;
@@ -591,15 +689,35 @@ export default function EditorPage() {
         {/* Bottom — upgrade widget + settings */}
         <div className="border-t border-black/[0.06] p-2 space-y-0.5">
           {sidebarOpen && (
-            <div className="mb-2 rounded-2xl bg-[#fff700] p-3.5">
-              <p className="text-xs font-black text-black">5 rewrites left</p>
-              <p className="mt-0.5 text-[11px] text-black/60 leading-4">
-                Free plan resets every 24h.
-              </p>
-              <button className="mt-2.5 w-full rounded-full bg-black py-1.5 text-[11px] font-black text-[#fff700] transition hover:bg-neutral-900">
-                Upgrade to Pro
-              </button>
-            </div>
+            subscription.plan === "pro" ? (
+              <div className="mb-2 rounded-2xl border-2 border-black bg-black p-3.5">
+                <p className="text-xs font-black text-[#fff700]">Pro plan</p>
+                <p className="mt-0.5 text-[11px] text-white/50 leading-4">
+                  Unlimited rewrites.
+                </p>
+                <button
+                  onClick={handleManageBilling}
+                  className="mt-2.5 w-full rounded-full border border-white/20 py-1.5 text-[11px] font-bold text-white/60 transition hover:border-white/40 hover:text-white"
+                >
+                  Manage billing
+                </button>
+              </div>
+            ) : (
+              <div className="mb-2 rounded-2xl bg-[#fff700] p-3.5">
+                <p className="text-xs font-black text-black">
+                  {subscription.remaining ?? 0} rewrite{subscription.remaining !== 1 ? "s" : ""} left today
+                </p>
+                <p className="mt-0.5 text-[11px] text-black/60 leading-4">
+                  Free plan · resets at midnight UTC.
+                </p>
+                <button
+                  onClick={() => setPaywallOpen(true)}
+                  className="mt-2.5 w-full rounded-full bg-black py-1.5 text-[11px] font-black text-[#fff700] transition hover:bg-neutral-900"
+                >
+                  Upgrade to Pro
+                </button>
+              </div>
+            )
           )}
           {[
             { label: "Settings", icon: <IcSettings /> },
@@ -657,8 +775,12 @@ export default function EditorPage() {
                         {user?.emailAddresses?.[0]?.emailAddress ?? ""}
                       </p>
                     </div>
-                    <span className="shrink-0 rounded-full bg-[#fff700] px-2.5 py-0.5 text-[10px] font-black text-black">
-                      Free
+                    <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-black ${
+                      subscription.plan === "pro"
+                        ? "bg-black text-[#fff700] border border-[#fff700]/30"
+                        : "bg-[#fff700] text-black"
+                    }`}>
+                      {subscription.plan === "pro" ? "Pro" : "Free"}
                     </span>
                   </div>
 
@@ -670,12 +792,27 @@ export default function EditorPage() {
                       </svg>
                       Manage account
                     </button>
-                    <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black">
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
-                      </svg>
-                      Upgrade to Pro
-                    </button>
+                    {subscription.plan === "pro" ? (
+                      <button
+                        onClick={() => { setUserMenuOpen(false); void handleManageBilling(); }}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                        </svg>
+                        Manage billing
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => { setUserMenuOpen(false); setPaywallOpen(true); }}
+                        className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+                        </svg>
+                        Upgrade to Pro
+                      </button>
+                    )}
                   </div>
 
                   {/* Sign out */}
@@ -932,6 +1069,97 @@ export default function EditorPage() {
       {/* Rewrite panel overlay */}
       {showRewritePanel && capturedText && (
         <ExternalRewritePanel text={capturedText} onClose={closeRewritePanel} />
+      )}
+
+      {/* ── Paywall modal ─────────────────────────────────────────────────── */}
+      {paywallOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
+            onClick={() => setPaywallOpen(false)}
+          />
+          {/* Modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none">
+            <div className="pointer-events-auto relative w-full max-w-sm overflow-hidden rounded-3xl border-2 border-black bg-white shadow-2xl">
+
+              {/* Header */}
+              <div className="bg-black px-6 py-6">
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-[#fff700]">
+                  huumanity Pro
+                </p>
+                <p className="mt-1 font-display text-3xl text-white leading-tight">
+                  Unlimited rewrites.
+                </p>
+                <p className="mt-2 text-sm text-white/50 leading-6">
+                  You&apos;ve hit the free limit of {subscription.limit} rewrites today.
+                  Upgrade to keep going without limits.
+                </p>
+              </div>
+
+              {/* Plan toggle */}
+              <div className="p-6 space-y-3">
+                <button
+                  onClick={() => setSelectedPrice("monthly")}
+                  className={`flex w-full items-center justify-between rounded-2xl border-2 px-4 py-4 transition ${
+                    selectedPrice === "monthly"
+                      ? "border-black bg-[#fff700]"
+                      : "border-black/10 hover:border-black/30"
+                  }`}
+                >
+                  <div className="text-left">
+                    <p className="text-sm font-black text-black">Monthly</p>
+                    <p className="text-xs text-black/50">Billed every month</p>
+                  </div>
+                  <p className="text-lg font-black text-black">$10<span className="text-xs font-bold text-black/50">/mo</span></p>
+                </button>
+
+                <button
+                  onClick={() => setSelectedPrice("annual")}
+                  className={`flex w-full items-center justify-between rounded-2xl border-2 px-4 py-4 transition ${
+                    selectedPrice === "annual"
+                      ? "border-black bg-[#fff700]"
+                      : "border-black/10 hover:border-black/30"
+                  }`}
+                >
+                  <div className="text-left">
+                    <p className="text-sm font-black text-black">
+                      Annual
+                      <span className="ml-2 rounded-full bg-black px-2 py-0.5 text-[10px] font-black text-[#fff700]">
+                        Save 20%
+                      </span>
+                    </p>
+                    <p className="text-xs text-black/50">Billed once a year</p>
+                  </div>
+                  <p className="text-lg font-black text-black">$96<span className="text-xs font-bold text-black/50">/yr</span></p>
+                </button>
+
+                <button
+                  onClick={() => void handleUpgradeClick(selectedPrice)}
+                  disabled={checkoutLoading}
+                  className="mt-2 w-full rounded-2xl border-2 border-black bg-black py-4 text-sm font-black text-[#fff700] transition hover:bg-neutral-900 disabled:opacity-60"
+                >
+                  {checkoutLoading ? "Opening checkout…" : "Get Pro →"}
+                </button>
+
+                <p className="text-center text-[11px] text-neutral-400">
+                  Secure payment via Stripe. Cancel anytime.
+                </p>
+              </div>
+
+              {/* Close */}
+              <button
+                onClick={() => setPaywallOpen(false)}
+                className="absolute right-4 top-4 rounded-full p-1.5 text-white/40 transition hover:text-white"
+                aria-label="Close"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </>
       )}
     </main>
   );
