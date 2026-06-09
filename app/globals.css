@@ -35,9 +35,16 @@ body {
   outline: none;
 }
 
-::selection {
+/* Yellow selection only inside the website demo section */
+#demo ::selection {
   background: #fff700;
   color: #000000;
+}
+
+/* huu button fade-in pop */
+@keyframes huu-btn-fadein {
+  from { opacity: 0; transform: scale(0.7); }
+  to   { opacity: 1; transform: scale(1);   }
 }
 
 /* Wave shimmer used in the popup loading state. */

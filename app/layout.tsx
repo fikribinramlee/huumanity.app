@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Young_Serif, Nunito, Caveat } from "next/font/google";
+import { Young_Serif, Jost, Caveat } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
@@ -10,7 +10,7 @@ const youngSerif = Young_Serif({
   display: "swap",
 });
 
-const nunito = Nunito({
+const jost = Jost({
   variable: "--font-nunito",
   subsets: ["latin"],
   display: "swap",
@@ -36,7 +36,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${youngSerif.variable} ${nunito.variable} ${caveat.variable} antialiased`}
+      className={`${youngSerif.variable} ${jost.variable} ${caveat.variable} antialiased`}
     >
       <body className="min-h-screen bg-white text-black">
         <ClerkProvider

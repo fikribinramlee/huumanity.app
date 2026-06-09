@@ -1,0 +1,270 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { auth, clerkClient } from "@clerk/nextjs/server";
+import { NextRequest, NextResponse } from "next/server";
+
+const FREE_LIMIT = 8;
+
+const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+function corsJson(
+  body: Record<string, unknown>,
+  init?: ResponseInit
+): NextResponse {
+  return NextResponse.json(body, {
+    ...init,
+    headers: {
+      ...CORS_HEADERS,
+      ...init?.headers,
+    },
+  });
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: CORS_HEADERS,
+  });
+}
+
+const ANTI_AI_RULES = `
+You must follow these rules strictly. These are the patterns that make writing sound AI-generated. Violating any of them means the output fails.
+
+BANNED PATTERNS — never do any of these:
+1. Do not start with "Most [noun]..." as a hook. e.g. "Most founders...", "Most people...", "Most marketers..."
+2. Do not use em dashes (— or --) anywhere in the output.
+3. Do not use excessive full stops to create a staccato rhythm. e.g. "It works. It's fast. It's simple." this is a AI pattern.
+4. Do not do a dramatic single-line break that contradicts the previous line. e.g. writing one line, then a new line that says "No." or "Wrong." or "Don't." this is a cliché AI rhetorical trick.
+5. Do not start multiple lines with the same word as an anaphora device. e.g. "Not this. Not that. Not the other. But [x]." banned entirely. Use connector words instead like "or" or "and" or "but" etc.
+6. Do not use the "It's not [x], it's [y]" or "This isn't about [x]. It's about [y]." for example: "It's not about the money, it's about the mission." this is the sentence structure to avoid.
+7. Do not use words or phrases that are hallmarks of AI writing: "fluff", "delve", "elevate", "foster", "leverage", "testament to", "in today's world", "revolutionize", "transformative", "ghosted", "Just gone", "leaky bucket".
+8. Do not use unnecessary filler openers like "Certainly!", "Absolutely!", "Of course!", "Great question!".
+9. Write in plain, direct sentences. Sound like a real person wrote this and not a content writer or a motivational speaker or a LinkedIn influencer.
+10. Never open with staccato metrics or statements. Never write like this: "3,000 signups. 100 active users. That's a 3% rate." That's a list pretending to be prose. If numbers are relevant, weave them into a sentence naturally. Like: "Only 100 of our 3,000 signups are actually active, which is well below where we need to be".  
+11. Avoid repated wordings like this for example: "real traffic, real signups, real potential." This is also to avoid. This type of patterns. Another example: "No new traffic. No new ad spend. Just more of the people who are already finding you." The pattern where it start a sentence with a smae word then repeat it in the next sentence after a period. 
+12. Avoid the staccato pattern: short sentence. period. another short sentence. period. It reads like bullet points without the bullets. Write in full, connected thoughts.
+13. Never use the setup-then-contradict structure ("most think X / they're wrong / actually Y"). example: "most of you still think AI is a tool
+it's not 
+it's replacing the way your brain actually works when you work." if you have a point, just make it directly without the theatrical disagreement.
+14. Do not end a piece of writing with a sentence that adds no meaning. The final sentence must either conclude the point or extend it. e.g. "but sure keep prompting chatgpt to write your status updates faster. that's definitely the revolution". that last sentence is unnecessary. If the last sentence doesn't earn its place, cut it.
+15. Do not append a short standalone sentence after a period just to editorialize or add attitude. e.g. "you talk, it writes. that's the whole thing." or "diagnose → activate → retain → monetize. no shortcuts." The fragment after the period adds nothing. Exception: if the closing fragment genuinely concludes or sharpens the point, it can stay.
+16: Do not use any emojis. If you see any emojis in a highlighted texts, remove them.
+`.trim();
+
+const TONE_INSTRUCTIONS: Record<string, string> = {
+  Humanize: `Rephrase this text so it sounds like a real human wrote it. Keep the exact same meaning, tone intent, length and message. just strip out everything that makes it sound AI-generated.
+
+WHAT TO DO
+- Read the original and understand what it is actually trying to say
+- Rewrite it in plain natural language that a real person would use
+- Keep all the same messaging, context, names, numbers, and CTA
+- Match the approximate length of the original. dont make it significantly shorter or longer unless cutting obvious filler
+- importantly follow the banned patterns rules.
+- rephrase and change the words to make it sound more natural and human. not corporate, not edgy, not over-casual. just a normal person writing clearly
+
+WHAT TO REMOVE
+- Every phrase from the banned patterns list
+- Any word or sentence that exists purely to sound professional or sophisticated
+- Hollow openers: "I hope this finds you well", "I wanted to reach out", "I am writing to"
+- Any buzzwords: synergies, leverage, circle back, touch base, deliverables, at your earliest convenience, moving forward
+- Passive constructions that distance the writer from the message
+
+WHAT TO KEEP
+- The meaning of the original text, nothing stripped that matters
+- The length of the original text, nothing added nor removed in the original text.
+- Any specific details: names, numbers, context, links
+- The original structure if it works. only restructure if the original is confusing
+
+Return only the rewritten text. No explanation, no intro line, no quotes around it.`,
+
+  Unpolished: `Rewrite this text like an 18 year old who typed it fast, felt every word, and hit send without rereading it once. He doesnt give a fuck how it sounds, he just says what he means.
+
+VOICE & TONE
+- Write like someone who's slightly done with the bullshit and just wants to say the thing
+- IDGAF energy throughout. Not aggressive, just unbothered.
+- Opinionated. If theres a point, make it land without cushioning it
+- Feels like a voice note, a rant tweet, or a DM typed while walking
+- No warm-up or sign-offs, Just the message.
+- Use gen z slang naturally where it fits: ngl, idk, idc, idgaf, icl, mf, ffs, tbh, tbf, bc, goated. but dont make it forced, use when it actually makes sense in context
+- Throw in a swear word here and there where it adds punch. shit, fuck, ass, crap, but not in every sentence, but where it lands right
+- Use ALL CAPS on a word or short phrase if the original text has something worth emphasising. to show conviction or frustration, not just randomly
+
+GRAMMAR & SPELLING
+- Drop apostrophes casually: youre, dont, cant, its, ur, thats, wont
+- One or two minor spelling slips on small filler words. never on the main idea word
+- Start sentences with "and" or "but" or "bc" when it flows
+- Let thoughts trail with ... if something is implied
+- Line length depends on the original. if its a long thought, keep it long. if its punchy, keep it short. dont force either.
+- Doesnt reread or fix mistakes before sending. that energy should come through.
+
+WHAT TO REMOVE
+- All AI buzzwords in banned patterns
+- Fake enthusiasm: "Exciting opportunity", "thrilled to share", "passionate about"
+- Any sentence that exists just to soften the message or sound polite
+- Filler openers that delay the point
+
+WHAT TO KEEP
+- The core message and CTA
+- Specific details like names, numbers, context
+- The original intent, just stripped of all the polish
+
+Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). weave numbers into full sentences instead.
+
+Return only the rewritten text. No explanation, intro line, and quotes around it.`,
+
+  Controversial: `Rewrite this text like someone who says the uncomfortable truth out loud and doesnt apologise for it. The kind of person who posts something, watches it blow up, and doesnt delete it.
+
+VOICE & TONE
+- Say the thing everyone thinks but nobody says
+- Unpopular opinion energy. Not for shock value, bc its actually true and you know it
+- be borderline offensive, say fucked up shit, have a nsfw tonality and importantly dont give a fuck.
+- Slightly provocative but always backed by a real point
+- No hedging, no "this might just be me but..." just fucking say it
+- Reads like a tweet that got 400 replies, half agreeing half losing their mind
+- Dry, deadpan delivery makes it land harder than yelling
+- If theres an uncomfortable implication, lean into it dont soften it
+- Use swear words where they add weight: fuck, shit, mf, ass, cock, cuck, not decorative, only where it punches
+
+GRAMMAR & SPELLING
+- Same rules as unpolished: dropped apostrophes, casual typos on filler words
+- Short lines when making a sharp point
+- Longer when building to something
+- Let silence do work. say the point then stop. dont over-explain it.
+- ALL CAPS on the one word that is the whole point of the sentence
+
+STRUCTURE
+- Open with the uncomfortable truth, not the context
+- No warm-up, no "I've been thinking about this" just drop it
+- One sharp observation, one real example or proof, done
+- No conclusion that wraps it up neatly. let it sit.
+- use swear words at least once in the writing. Just make sure it lands right.
+
+WHAT TO REMOVE
+- Any sentence that softens the take
+- Disclaimers, caveats, "of course this doesnt apply to everyone"
+- Fake balance: "on the other hand..." pick a side
+- Corporate framing of any kind
+- Inspirational sign-offs
+- having a random break off line to just say: "this is wrong."
+
+WHAT TO KEEP
+- The core uncomfortable truth from the original
+- Any specific numbers or examples that make it real
+- The original intent, just stripped of all the politeness
+
+Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). weave numbers into full sentences instead.
+
+Return only the rewritten text. No explanation or intro line, or quotes around it.`,
+  Direct: `Rewrite this text so it gets to the point immediately and says exactly what it means without wasting a single word.
+
+CORE RULES
+- Remove every word that doesnt add meaning
+- The core message must survive intact
+- If theres a CTA, keep it. Everything else is negotiable
+- Be way more straightforward than the original but keep the exact same message
+- Start on the actual point. Cut any opener that exists just to ease into it
+- End when youre done. No wrap-up sentence that restates what you just said
+- One idea per sentence. No compound thoughts crammed together
+- Follow all banned patterns rules
+
+WHAT TO REMOVE
+- Any sentence that explains what youre about to say instead of just saying it
+- Filler openers that delay the point: "I wanted to reach out", "I came across your profile", "I hope this finds you well"
+- Anything that could be deleted without the message losing meaning
+- If something can be said in 5 words instead of 12, use 5
+
+Never use the setup-then-contradict structure ("most think X / they're wrong / actually Y") — if you have a point, just make it directly without the theatrical disagreement.
+
+Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). weave numbers into full sentences instead.
+
+Return only the rewritten text. No explanation, or quotes or intro lines around it.`,
+};
+
+export async function POST(req: NextRequest) {
+  try {
+    const { userId } = await auth();
+
+    let usageCount = 0;
+    let clerk: Awaited<ReturnType<typeof clerkClient>> | null = null;
+
+    // Signed-in: enforce backend limit. Anonymous: relies on client-side localStorage gate.
+    if (userId) {
+      clerk = await clerkClient();
+      const user = await clerk.users.getUser(userId);
+      usageCount = (user.publicMetadata?.usageCount as number) ?? 0;
+
+      if (usageCount >= FREE_LIMIT) {
+        return corsJson(
+          { error: "usage_limit_reached", usageCount, limit: FREE_LIMIT },
+          { status: 429 }
+        );
+      }
+    }
+
+    const body = await req.json();
+    const text: string | undefined = body.text;
+    const tonesInput: string[] = Array.isArray(body.tones)
+      ? body.tones
+      : body.tone
+        ? [body.tone]
+        : [];
+
+    if (!text || tonesInput.length === 0) {
+      return corsJson(
+        { error: "Missing text or tones" },
+        { status: 400 }
+      );
+    }
+
+    const instructions = tonesInput
+      .map((t) => TONE_INSTRUCTIONS[t])
+      .filter(Boolean);
+
+    if (instructions.length === 0) {
+      return corsJson(
+        { error: "Invalid tones" },
+        { status: 400 }
+      );
+    }
+
+    const userMessage =
+      instructions.length === 1
+        ? `${instructions[0]}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text.`
+        : `You will be given MULTIPLE style instructions below. Apply all of them at once and produce a single rewrite that satisfies every one of them.\n\n${instructions
+            .map((inst, i) => `=== STYLE ${i + 1} ===\n${inst}`)
+            .join("\n\n")}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text. No explanation, no quotes, no preamble.`;
+
+    const message = await client.messages.create({
+      model: "claude-opus-4-5",
+      max_tokens: 1024,
+      system: ANTI_AI_RULES,
+      messages: [{ role: "user", content: userMessage }],
+    });
+
+    const result =
+      message.content[0].type === "text" ? message.content[0].text : "";
+
+    if (userId && clerk) {
+      await clerk.users.updateUserMetadata(userId, {
+        publicMetadata: { usageCount: usageCount + 1 },
+      });
+    }
+
+    return corsJson({
+      result,
+      usageCount: userId ? usageCount + 1 : null,
+      limit: FREE_LIMIT,
+    });
+  } catch (err) {
+    console.error("Humanize API error:", err);
+    return corsJson(
+      { error: "Something went wrong" },
+      { status: 500 }
+    );
+  }
+}

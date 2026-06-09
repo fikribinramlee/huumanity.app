@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import { isRephrashable } from "./lib/isRephrashable";
 
 // ---------- Constants ----------
 
@@ -208,7 +209,6 @@ function DownloadCtaContent({ platform }: { platform: DownloadPlatform }) {
 
 type SelectionAnchor = {
   tabTop: number;
-  tabLeft: number;
   popupTop: number;
   popupLeft: number;
   popupWidth: number;
@@ -294,12 +294,14 @@ export default function LandingPage() {
   const featSectionRef = useRef<HTMLElement>(null);
   const featVizRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
-  const popupStageRef = useRef<PopupStage>("select");
+  const popupStageRef    = useRef<PopupStage>("select");
+  const expandedRef      = useRef(false);
+  const pendingAnchorRef = useRef<SelectionAnchor>(null);
+  const showTimerRef     = useRef<number | null>(null);
 
   // Keep the ref in sync so the global selectionchange listener can read the latest value.
-  useEffect(() => {
-    popupStageRef.current = popupStage;
-  }, [popupStage]);
+  useEffect(() => { popupStageRef.current = popupStage; }, [popupStage]);
+  useEffect(() => { expandedRef.current   = expanded;   }, [expanded]);
 
   useEffect(() => {
     if (user?.publicMetadata?.usageCount !== undefined) {
@@ -496,21 +498,29 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
+    const clearShowTimer = () => {
+      if (showTimerRef.current !== null) {
+        window.clearTimeout(showTimerRef.current);
+        showTimerRef.current = null;
+      }
+    };
+
+    // selectionchange: validate + store pending position. Never shows button directly.
     const handleSelectionChange = () => {
-      // Don't dismiss popup while loading or showing result.
       if (popupStageRef.current !== "select") return;
 
       const selection = window.getSelection();
-      const editor = editorRef.current;
-      const section = demoSectionRef.current;
+      const editor    = editorRef.current;
+      const section   = demoSectionRef.current;
 
       if (!selection || !editor || !section || selection.rangeCount === 0) {
+        clearShowTimer();
+        pendingAnchorRef.current = null;
         setAnchor(null);
-        setExpanded(false);
         return;
       }
 
-      const range = selection.getRangeAt(0);
+      const range        = selection.getRangeAt(0);
       const selectedText = selection.toString();
 
       if (
@@ -518,46 +528,78 @@ export default function LandingPage() {
         selectedText.trim().length === 0 ||
         !editor.contains(range.commonAncestorContainer)
       ) {
+        clearShowTimer();
+        pendingAnchorRef.current = null;
         setAnchor(null);
-        setExpanded(false);
         return;
       }
 
-      const rangeRect = range.getBoundingClientRect();
-      const sectionRect = section.getBoundingClientRect();
+      // Smart gate — same ground rules as everywhere else
+      if (!isRephrashable(selectedText)) {
+        clearShowTimer();
+        pendingAnchorRef.current = null;
+        setAnchor(null);
+        return;
+      }
+
+      const sectionRect  = section.getBoundingClientRect();
       const sectionWidth = section.offsetWidth;
 
-      const relRight = rangeRect.right - sectionRect.left;
-      const relLeft = rangeRect.left - sectionRect.left;
-      const relTop = rangeRect.top - sectionRect.top;
-      const relHeight = rangeRect.height;
+      const rects = range.getClientRects();
+      if (rects.length === 0) { pendingAnchorRef.current = null; return; }
+      const firstRect    = rects[0];
+      const rangeRect    = range.getBoundingClientRect();
+      const relLeft      = rangeRect.left  - sectionRect.left;
+      const relRight     = rangeRect.right - sectionRect.left;
+      const relFirstTop  = firstRect.top   - sectionRect.top;
+      const tabTop       = relFirstTop + firstRect.height / 2 - 18;
 
-      const tabLeft = Math.min(relRight + 10, sectionWidth - 40);
-      const tabTop = relTop + relHeight / 2 - 14;
-
-      // Popup width adapts to section so it never causes horizontal page overflow.
-      const popupWidth = Math.max(
-        POPUP_MIN_WIDTH,
-        Math.min(POPUP_MAX_WIDTH, sectionWidth - 16)
-      );
-
-      // Always centered horizontally above the selection, translated upward
-      // via CSS transform so its bottom edge sits 12px above the selection top.
+      const popupWidth  = Math.max(POPUP_MIN_WIDTH, Math.min(POPUP_MAX_WIDTH, sectionWidth - 16));
       const rangeCenter = (relLeft + relRight) / 2;
       const desiredLeft = rangeCenter - popupWidth / 2;
-      const popupLeft = Math.min(
-        Math.max(8, desiredLeft),
-        Math.max(8, sectionWidth - popupWidth - 8)
-      );
-      const popupTop = relTop;
+      const popupLeft   = Math.min(Math.max(8, desiredLeft), Math.max(8, sectionWidth - popupWidth - 8));
 
-      setAnchor({ tabTop, tabLeft, popupTop, popupLeft, popupWidth });
-      savedRangeRef.current = range.cloneRange();
+      savedRangeRef.current    = range.cloneRange();
+      pendingAnchorRef.current = { tabTop, popupTop: relFirstTop, popupLeft, popupWidth };
+
+      // Bug-fix: if popup is open, dismiss it so the user starts fresh
+      if (expandedRef.current) {
+        setExpanded(false);
+        setAnchor(null);
+        setPopupStage("select");
+        setSelectedTones([]);
+        setResultText("");
+        clearShowTimer();
+      }
+    };
+
+    // mouseup: user finished selecting — now show the button after a short delay
+    const handleMouseUp = () => {
+      if (!pendingAnchorRef.current || expandedRef.current) return;
+      clearShowTimer();
+      const snapshot = pendingAnchorRef.current;
+      showTimerRef.current = window.setTimeout(() => {
+        setAnchor(snapshot);
+        showTimerRef.current = null;
+      }, 350) as unknown as number;
+    };
+
+    // Keyboard selection (Shift+arrows, Ctrl+A, etc.)
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.shiftKey || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a")) {
+        handleMouseUp();
+      }
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
-    return () =>
+    document.addEventListener("mouseup",         handleMouseUp);
+    document.addEventListener("keyup",           handleKeyUp);
+    return () => {
       document.removeEventListener("selectionchange", handleSelectionChange);
+      document.removeEventListener("mouseup",         handleMouseUp);
+      document.removeEventListener("keyup",           handleKeyUp);
+      clearShowTimer();
+    };
   }, []);
 
   useEffect(() => {
@@ -1235,8 +1277,12 @@ export default function LandingPage() {
                 e.preventDefault();
                 openPopup();
               }}
-              className="absolute z-20 w-9 h-9 rounded-full bg-[#fff700] hover:brightness-95 border-2 border-black shadow-md flex items-center justify-center text-black transition"
-              style={{ top: anchor.tabTop, left: anchor.tabLeft }}
+              className="absolute z-20 w-9 h-9 rounded-full bg-[#fff700] hover:brightness-95 border-2 border-black shadow-md flex items-center justify-center text-black"
+              style={{
+                top: anchor.tabTop,
+                left: 4,
+                animation: "huu-btn-fadein 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards",
+              }}
               aria-label="Open rephrase options"
             >
               <svg

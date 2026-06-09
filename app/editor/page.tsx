@@ -1,0 +1,940 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { useUser, useClerk } from "@clerk/nextjs";
+import { ExternalRewritePanel } from "../components/ExternalRewritePanel";
+import { ScratchpadEditor } from "../components/ScratchpadEditor";
+import { isRephrashable } from "../lib/isRephrashable";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type View = "home" | "scratchpad";
+type AuthState = "login" | "verified" | "app";
+
+type DesktopSelection = {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  canReplace: boolean;
+};
+
+type SelectorHealth = {
+  accessibilityAllowed: boolean;
+  watcherRunning: boolean;
+  status: string;
+  hasSelection: boolean;
+  canReplace: boolean;
+  selectionLen: number;
+};
+
+// ─── Icons ────────────────────────────────────────────────────────────────────
+
+function IcHome() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  );
+}
+
+function IcScratchpad() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+    </svg>
+  );
+}
+
+function IcSettings() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    </svg>
+  );
+}
+
+function IcHelp() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </svg>
+  );
+}
+
+function IcChevronLeft() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="15 18 9 12 15 6" />
+    </svg>
+  );
+}
+
+function IcChevronRight() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="9 18 15 12 9 6" />
+    </svg>
+  );
+}
+
+function IcArrowUpRight() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="7" y1="17" x2="17" y2="7" />
+      <polyline points="7 7 17 7 17 17" />
+    </svg>
+  );
+}
+
+// ─── Nav items ────────────────────────────────────────────────────────────────
+
+const NAV_ITEMS: { label: string; view: View; icon: React.ReactNode }[] = [
+  { label: "Home", view: "home", icon: <IcHome /> },
+  { label: "Scratchpad", view: "scratchpad", icon: <IcScratchpad /> },
+];
+
+const LOCAL_DESKTOP_API = "http://localhost:3000/api/humanize";
+
+// ─── Page component ───────────────────────────────────────────────────────────
+
+export default function EditorPage() {
+  // Auth
+  const [authState, setAuthState] = useState<AuthState>("login");
+  const [browserOpened, setBrowserOpened] = useState(false);
+  const [authChecking, setAuthChecking] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  // Clerk user (available once authState === "app")
+  const { user } = useUser();
+  const { signOut } = useClerk();
+
+  // UI
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [activeView, setActiveView] = useState<View>("home");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  // Setup
+  const [hasCompletedSetup, setHasCompletedSetup] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return localStorage.getItem("huu_desktop_setup_complete") === "true";
+  });
+  const [accessibilityAllowed, setAccessibilityAllowed] = useState(false);
+  const [detectorStatus, setDetectorStatus] = useState(
+    "Waiting for Accessibility permission."
+  );
+  const [selectorHealth, setSelectorHealth] = useState<SelectorHealth | null>(
+    null
+  );
+  const [apiConnected, setApiConnected] = useState<boolean | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+
+  // Capture
+  const [capturedText, setCapturedText] = useState("");
+  const [captureError, setCaptureError] = useState("");
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [showRewritePanel, setShowRewritePanel] = useState(false);
+  const lastSelectionKeyRef = useRef("");
+
+  // ── Callbacks ──────────────────────────────────────────────────────────────
+
+  const humanizeEndpoint = useCallback(() => {
+    if (process.env.NEXT_PUBLIC_HUMANIZE_API_URL)
+      return process.env.NEXT_PUBLIC_HUMANIZE_API_URL;
+    if (typeof window !== "undefined" && window.location.origin.includes("tauri"))
+      return LOCAL_DESKTOP_API;
+    return "/api/humanize";
+  }, []);
+
+  const refreshAccessibilityPermission = useCallback(async () => {
+    try {
+      const allowed = await invoke<boolean>("check_accessibility_permission");
+      setAccessibilityAllowed(allowed);
+      setDetectorStatus(
+        allowed
+          ? "Selector is running. Highlight text in any app to use huu."
+          : "Allow huu in macOS Accessibility to enable desktop selection."
+      );
+      return allowed;
+    } catch {
+      setAccessibilityAllowed(false);
+      setDetectorStatus("Could not check Accessibility permission.");
+      return false;
+    }
+  }, []);
+
+  const refreshApiConnection = useCallback(async () => {
+    try {
+      const response = await fetch(humanizeEndpoint(), {
+        method: "OPTIONS",
+        cache: "no-store",
+      });
+      setApiConnected(response.status < 500);
+    } catch {
+      setApiConnected(false);
+    }
+  }, [humanizeEndpoint]);
+
+  const refreshSelectorHealth = useCallback(async () => {
+    setIsCheckingHealth(true);
+    try {
+      const health = await invoke<SelectorHealth>("get_selector_health");
+      setSelectorHealth(health);
+      setAccessibilityAllowed(health.accessibilityAllowed);
+      setDetectorStatus(
+        health.accessibilityAllowed
+          ? health.status
+          : "Allow huu in macOS Accessibility to enable desktop selection."
+      );
+      await refreshApiConnection();
+      return health;
+    } catch {
+      setSelectorHealth(null);
+      setDetectorStatus("Could not read selector health.");
+      return null;
+    } finally {
+      setIsCheckingHealth(false);
+    }
+  }, [refreshApiConnection]);
+
+  // ── Effects ────────────────────────────────────────────────────────────────
+
+  // Restore auth state from localStorage after client mount (avoids hydration mismatch)
+  useEffect(() => {
+    if (localStorage.getItem("huu_logged_in") === "true") {
+      setAuthState("app");
+    }
+  }, []);
+
+  useEffect(() => {
+    if (authState !== "app") return;
+    const id = window.setTimeout(() => {
+      void refreshAccessibilityPermission();
+      void refreshSelectorHealth();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [authState, refreshAccessibilityPermission, refreshSelectorHealth]);
+
+  useEffect(() => {
+    if (authState !== "app") return;
+    const id = window.setInterval(() => void refreshSelectorHealth(), 3000);
+    return () => window.clearInterval(id);
+  }, [authState, refreshSelectorHealth]);
+
+  useEffect(() => {
+    if (!hasCompletedSetup || !accessibilityAllowed || authState !== "app")
+      return;
+    let isMounted = true;
+    const id = window.setInterval(async () => {
+      try {
+        const selection = await invoke<DesktopSelection | null>(
+          "get_current_selection"
+        );
+        if (!isMounted || !selection?.text.trim()) return;
+        // Ground rule: only show the huu button for rephrashable text
+        if (!isRephrashable(selection.text)) return;
+        const selectionKey = `${selection.text}:${Math.round(
+          selection.x
+        )}:${Math.round(selection.y)}`;
+        if (selectionKey === lastSelectionKeyRef.current) return;
+        lastSelectionKeyRef.current = selectionKey;
+        setDetectorStatus("Selection detected.");
+        await invoke("show_selector_window", { selection });
+      } catch {
+        setDetectorStatus(
+          "Selector is running. Use Try it out if detection fails."
+        );
+      }
+    }, 500);
+    return () => {
+      isMounted = false;
+      window.clearInterval(id);
+    };
+  }, [accessibilityAllowed, hasCompletedSetup, authState]);
+
+  // ── Handlers ───────────────────────────────────────────────────────────────
+
+  const openAccessibilitySettings = async () => {
+    try {
+      await invoke("request_accessibility_permission");
+      await invoke("open_accessibility_settings");
+    } catch {
+      setCaptureError(
+        "Open System Settings and allow huu under Accessibility."
+      );
+    }
+  };
+
+  const captureSelectedText = async () => {
+    setIsCapturing(true);
+    setCaptureError("");
+    setShowRewritePanel(false);
+    try {
+      const text = await invoke<string>("capture_selected_text");
+      setCapturedText(text);
+      setShowRewritePanel(true);
+    } catch (err) {
+      setCapturedText("");
+      setCaptureError(
+        typeof err === "string"
+          ? err
+          : "Could not read selected text. Enable Accessibility permission for huu."
+      );
+    } finally {
+      setIsCapturing(false);
+    }
+  };
+
+  const closeRewritePanel = () => {
+    setShowRewritePanel(false);
+    setCapturedText("");
+  };
+
+  const completeSetup = () => {
+    localStorage.setItem("huu_desktop_setup_complete", "true");
+    setHasCompletedSetup(true);
+  };
+
+  // Resolve the auth-status endpoint — works in both dev (localhost) and
+  // production Tauri (which talks to the same Next.js server).
+  const authStatusEndpoint = () => {
+    if (process.env.NEXT_PUBLIC_HUMANIZE_API_URL) {
+      // Derive base URL from the humanize endpoint
+      const base = process.env.NEXT_PUBLIC_HUMANIZE_API_URL.replace(
+        /\/api\/humanize.*$/,
+        ""
+      );
+      return `${base}/api/auth/status`;
+    }
+    if (
+      typeof window !== "undefined" &&
+      window.location.origin.includes("tauri")
+    ) {
+      return "http://localhost:3000/api/auth/status";
+    }
+    return "/api/auth/status";
+  };
+
+  const checkAuthStatus = useCallback(async (): Promise<boolean> => {
+    try {
+      const res = await fetch(authStatusEndpoint(), { cache: "no-store" });
+      const data = await res.json();
+      return data.authenticated === true;
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const handleSignIn = () => {
+    setAuthError("");
+    const base =
+      typeof window !== "undefined" && window.location.origin.includes("localhost")
+        ? "http://localhost:3000"
+        : "https://huumanity.com";
+    // After Clerk sign-in, redirect to the /app-verified confirmation page
+    window.open(`${base}/sign-in?redirect_url=/app-verified`, "_blank");
+    setBrowserOpened(true);
+  };
+
+  const handleConfirmSignIn = useCallback(async () => {
+    setAuthChecking(true);
+    setAuthError("");
+    try {
+      const ok = await checkAuthStatus();
+      if (ok) {
+        localStorage.setItem("huu_logged_in", "true");
+        setAuthState("app");
+      } else {
+        setAuthError(
+          "We couldn't verify your sign-in. Make sure you completed sign-in in the browser, then try again."
+        );
+      }
+    } finally {
+      setAuthChecking(false);
+    }
+  }, [checkAuthStatus]);
+
+  // Auto-poll for auth while the browser is open — advances automatically
+  // once the user finishes signing in without needing a manual button click.
+  useEffect(() => {
+    if (!browserOpened || authState !== "login") return;
+    const id = window.setInterval(async () => {
+      const ok = await checkAuthStatus();
+      if (ok) {
+        window.clearInterval(id);
+        localStorage.setItem("huu_logged_in", "true");
+        setAuthState("app");
+      }
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [browserOpened, authState, checkAuthStatus]);
+
+  // ── Auth: Login screen ─────────────────────────────────────────────────────
+
+  if (authState === "login") {
+    return (
+      <main className="flex h-screen w-screen overflow-hidden bg-white text-black">
+        {/* Left panel — sign-in */}
+        <div className="flex w-full flex-col justify-center px-10 sm:w-[46%]">
+          {/* Logo */}
+          <div className="mb-10 flex items-center gap-2.5">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-black text-lg text-[#fff700]">
+              ✦
+            </span>
+            <span className="font-display text-3xl leading-none">huu</span>
+          </div>
+
+          <h1 className="font-display text-4xl sm:text-5xl leading-[1.1] text-black">
+            Let&apos;s get you started
+          </h1>
+          <p className="mt-3 max-w-xs text-base text-neutral-500 leading-7">
+            Sign in to your huumanity account to unlock rewrites across every
+            app on your Mac.
+          </p>
+
+          <button
+            onClick={handleSignIn}
+            className="mt-8 flex w-full max-w-[340px] items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-black text-white transition hover:bg-neutral-900"
+          >
+            Sign in via browser
+            <IcArrowUpRight />
+          </button>
+
+          {browserOpened && (
+            <div className="mt-3 w-full max-w-[340px] space-y-2">
+              <div className="flex items-center gap-2 rounded-xl border border-black/10 px-4 py-3 text-xs text-neutral-500">
+                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#fff700]" />
+                Waiting for sign-in in browser…
+              </div>
+              <button
+                onClick={handleConfirmSignIn}
+                disabled={authChecking}
+                className="w-full rounded-xl border-2 border-black/10 px-6 py-3.5 text-sm font-bold text-neutral-600 transition hover:border-black hover:text-black disabled:opacity-50"
+              >
+                {authChecking ? "Verifying…" : "I've signed in →"}
+              </button>
+              {authError && (
+                <p className="text-xs font-semibold text-red-600">{authError}</p>
+              )}
+            </div>
+          )}
+
+          <p className="mt-6 text-xs text-neutral-400">
+            Don&apos;t have an account?{" "}
+            <button
+              onClick={() =>
+                window.open("https://huumanity.com/sign-up", "_blank")
+              }
+              className="font-bold text-black underline-offset-2 hover:underline"
+            >
+              Sign up at huumanity.com
+            </button>
+          </p>
+        </div>
+
+        {/* Right panel — dark brand */}
+        <div className="hidden sm:flex sm:w-[54%] flex-col items-center justify-center bg-black px-12">
+          <p className="font-display text-5xl text-[#fff700] leading-[1.08] text-center">
+            Stop writing<br />like a robot.
+          </p>
+          <p className="mt-5 text-center text-base text-white/50 max-w-xs leading-7">
+            Select any text. Pick a tone. Sound human. In every app on your Mac.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // ── Auth: Verified screen ──────────────────────────────────────────────────
+
+  if (authState === "verified") {
+    return (
+      <main className="flex h-screen w-screen items-center justify-center bg-white text-black">
+        <div className="flex flex-col items-center gap-6 max-w-xs text-center px-6">
+          <span className="flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-[#fff700] text-3xl ring-2 ring-black shadow-[0_4px_0_rgba(0,0,0,0.12)]">
+            ✦
+          </span>
+          <div>
+            <h1 className="font-display text-4xl leading-tight">
+              You&apos;re in.
+            </h1>
+            <p className="mt-2 text-sm text-neutral-500 leading-6">
+              Your huumanity account is connected. huu is ready to rewrite text
+              anywhere on your Mac.
+            </p>
+          </div>
+          <div className="flex w-full flex-col gap-2">
+            <button
+              onClick={() => setAuthState("app")}
+              className="w-full rounded-xl bg-black py-4 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
+            >
+              Open huu &rarr;
+            </button>
+            <button
+              onClick={() => window.close()}
+              className="w-full rounded-xl border-2 border-black/10 py-3 text-sm font-bold text-neutral-500 transition hover:border-black hover:text-black"
+            >
+              Close window
+            </button>
+          </div>
+          <p className="text-[11px] text-neutral-400">
+            You can always reopen huu from your Applications folder.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
+  // ── Derived: selector health rows ──────────────────────────────────────────
+
+  const selectorHealthRows = [
+    {
+      label: "Accessibility",
+      value: selectorHealth?.accessibilityAllowed ? "Allowed" : "Blocked",
+      ok: Boolean(selectorHealth?.accessibilityAllowed),
+    },
+    {
+      label: "Watcher",
+      value: selectorHealth?.watcherRunning ? "Running" : "Not running",
+      ok: Boolean(selectorHealth?.watcherRunning),
+    },
+    {
+      label: "Selection",
+      value: selectorHealth?.hasSelection
+        ? `${selectorHealth.selectionLen} chars`
+        : "Nothing yet",
+      ok: Boolean(selectorHealth?.hasSelection),
+    },
+    {
+      label: "Mode",
+      value: selectorHealth?.hasSelection
+        ? selectorHealth.canReplace
+          ? "Text box"
+          : "Read-only"
+        : "—",
+      ok: Boolean(selectorHealth?.hasSelection),
+    },
+    {
+      label: "API",
+      value:
+        apiConnected === null
+          ? "—"
+          : apiConnected
+            ? "Connected"
+            : "Disconnected",
+      ok: Boolean(apiConnected),
+    },
+  ];
+
+  // ── Main app ───────────────────────────────────────────────────────────────
+
+  return (
+    <main className="flex h-screen overflow-hidden bg-white text-black">
+
+      {/* ── Sidebar ─────────────────────────────────────────────────────── */}
+      <aside
+        className={`relative flex flex-col border-r border-black/[0.07] bg-[#fafaf8] transition-[width] duration-300 ease-in-out overflow-hidden shrink-0 ${
+          sidebarOpen ? "w-[216px]" : "w-[56px]"
+        }`}
+      >
+        {/* Logo + toggle */}
+        <div className="flex h-14 shrink-0 items-center border-b border-black/[0.06] px-3">
+          {sidebarOpen && (
+            <span className="font-display text-2xl leading-none pl-1 text-black">
+              huu
+            </span>
+          )}
+          <button
+            onClick={() => setSidebarOpen((o) => !o)}
+            className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-neutral-400 transition hover:bg-black/5 hover:text-black ${
+              sidebarOpen ? "ml-auto" : "mx-auto"
+            }`}
+            aria-label={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+          >
+            {sidebarOpen ? <IcChevronLeft /> : <IcChevronRight />}
+          </button>
+        </div>
+
+        {/* Nav items */}
+        <nav className="flex-1 space-y-0.5 overflow-hidden p-2 pt-3">
+          {NAV_ITEMS.map((item) => {
+            const isActive = activeView === item.view;
+            return (
+              <button
+                key={item.view}
+                onClick={() => setActiveView(item.view)}
+                title={!sidebarOpen ? item.label : undefined}
+                className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-bold transition ${
+                  isActive
+                    ? "bg-black text-white"
+                    : "text-neutral-600 hover:bg-black/5 hover:text-black"
+                }`}
+              >
+                <span
+                  className={`shrink-0 ${isActive ? "text-[#fff700]" : ""}`}
+                >
+                  {item.icon}
+                </span>
+                {sidebarOpen && (
+                  <span className="truncate">{item.label}</span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Bottom — upgrade widget + settings */}
+        <div className="border-t border-black/[0.06] p-2 space-y-0.5">
+          {sidebarOpen && (
+            <div className="mb-2 rounded-2xl bg-[#fff700] p-3.5">
+              <p className="text-xs font-black text-black">5 rewrites left</p>
+              <p className="mt-0.5 text-[11px] text-black/60 leading-4">
+                Free plan resets every 24h.
+              </p>
+              <button className="mt-2.5 w-full rounded-full bg-black py-1.5 text-[11px] font-black text-[#fff700] transition hover:bg-neutral-900">
+                Upgrade to Pro
+              </button>
+            </div>
+          )}
+          {[
+            { label: "Settings", icon: <IcSettings /> },
+            { label: "Help", icon: <IcHelp /> },
+          ].map((item) => (
+            <button
+              key={item.label}
+              title={!sidebarOpen ? item.label : undefined}
+              className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-bold text-neutral-600 transition hover:bg-black/5 hover:text-black"
+            >
+              <span className="shrink-0">{item.icon}</span>
+              {sidebarOpen && <span>{item.label}</span>}
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      {/* ── Main content ────────────────────────────────────────────────── */}
+      <section className="flex flex-1 flex-col overflow-hidden bg-white">
+
+        {/* Top bar — account menu lives here */}
+        <header className="flex h-12 shrink-0 items-center justify-end border-b border-black/[0.06] px-5">
+          <div className="relative">
+            <button
+              onClick={() => setUserMenuOpen((o) => !o)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-[#fff700] text-xs font-black transition hover:opacity-80"
+              aria-label="Account menu"
+            >
+              {user?.firstName?.[0]?.toUpperCase() ??
+               user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
+               "U"}
+            </button>
+
+            {userMenuOpen && (
+              <>
+                {/* Backdrop */}
+                <div
+                  className="fixed inset-0 z-30"
+                  onClick={() => setUserMenuOpen(false)}
+                />
+                {/* Dropdown */}
+                <div className="absolute right-0 top-10 z-40 w-72 overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-xl">
+                  {/* User info */}
+                  <div className="flex items-center gap-3 border-b border-black/[0.07] px-4 py-4">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-black text-[#fff700] text-sm font-black">
+                      {user?.firstName?.[0]?.toUpperCase() ??
+                       user?.emailAddresses?.[0]?.emailAddress?.[0]?.toUpperCase() ??
+                       "U"}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-black text-black">
+                        {user?.fullName ?? user?.firstName ?? "Account"}
+                      </p>
+                      <p className="truncate text-xs text-neutral-400">
+                        {user?.emailAddresses?.[0]?.emailAddress ?? ""}
+                      </p>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-[#fff700] px-2.5 py-0.5 text-[10px] font-black text-black">
+                      Free
+                    </span>
+                  </div>
+
+                  {/* Menu items */}
+                  <div className="p-1.5 space-y-0.5">
+                    <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                      </svg>
+                      Manage account
+                    </button>
+                    <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/>
+                      </svg>
+                      Upgrade to Pro
+                    </button>
+                  </div>
+
+                  {/* Sign out */}
+                  <div className="border-t border-black/[0.07] p-1.5">
+                    <button
+                      onClick={() => {
+                        void signOut();
+                        localStorage.removeItem("huu_logged_in");
+                        setAuthState("login");
+                        setUserMenuOpen(false);
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-600 transition hover:bg-red-50"
+                    >
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+                      </svg>
+                      Sign out
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-auto">
+        {activeView === "scratchpad" ? (
+
+          /* ── SCRATCHPAD VIEW ── */
+          <div className="p-8">
+            <ScratchpadEditor />
+          </div>
+
+        ) : !hasCompletedSetup ? (
+
+          /* ── SETUP VIEW ── */
+          <div className="flex-1 p-8">
+            <div className="max-w-2xl">
+              <p className="mb-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-400">
+                First run setup
+              </p>
+              <h1 className="font-display text-4xl leading-tight mb-8">
+                Set up desktop selector
+              </h1>
+
+              <div className="space-y-4">
+
+                {/* Step 1 — Accessibility */}
+                <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
+                  <p className="font-black text-base mb-1">
+                    1. Allow desktop control
+                  </p>
+                  <p className="text-sm text-neutral-500 leading-6 mb-4">
+                    huu needs macOS Accessibility permission so it can read the
+                    text you highlighted, place the yellow button near it, and
+                    paste the rewrite back.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={openAccessibilitySettings}
+                      className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
+                    >
+                      Open Accessibility settings
+                    </button>
+                    <button
+                      onClick={refreshAccessibilityPermission}
+                      className="rounded-full border-2 border-black/10 px-5 py-2.5 text-sm font-bold transition hover:border-black"
+                    >
+                      I allowed it
+                    </button>
+                  </div>
+                  <p className="mt-3 text-xs font-bold text-neutral-400">
+                    Status: {detectorStatus}
+                  </p>
+                </div>
+
+                {/* Step 2 — Test selection */}
+                <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
+                  <p className="font-black text-base mb-1">2. Test selection</p>
+                  <p className="text-sm text-neutral-500 leading-6 mb-4">
+                    Select text in another app, then click Test selection. This
+                    is the fallback path while the automatic yellow selector runs
+                    in the background.
+                  </p>
+                  <button
+                    onClick={captureSelectedText}
+                    className="rounded-full bg-[#fff700] px-5 py-2.5 text-sm font-black text-black ring-2 ring-black transition hover:brightness-95"
+                  >
+                    {isCapturing ? "Reading selection..." : "Test selection"}
+                  </button>
+                  {captureError && (
+                    <p className="mt-3 text-sm font-semibold text-red-600">
+                      {captureError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Step 3 — Finish */}
+                <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
+                  <p className="font-black text-base mb-1">3. Start using huu</p>
+                  <p className="text-sm text-neutral-500 leading-6 mb-4">
+                    Once Accessibility is allowed, huu will watch for
+                    highlighted text and show the yellow button when the focused
+                    app exposes the selection to macOS.
+                  </p>
+                  <button
+                    onClick={completeSetup}
+                    disabled={!accessibilityAllowed}
+                    className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900 disabled:opacity-40"
+                  >
+                    Finish setup
+                  </button>
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+        ) : (
+
+          /* ── DASHBOARD VIEW ── */
+          <div className="flex-1 p-8">
+
+            {/* Page header */}
+            <div className="mb-8 flex items-start justify-between gap-4">
+              <div>
+                <p className="mb-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-400">
+                  Home
+                </p>
+                <h1 className="font-display text-4xl leading-tight">
+                  Welcome back, Fikri
+                </h1>
+              </div>
+              <button
+                onClick={captureSelectedText}
+                className="shrink-0 rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
+              >
+                {isCapturing ? "Checking..." : "Try it out"}
+              </button>
+            </div>
+
+            {/* Selector status banner */}
+            <div className="mb-6 overflow-hidden rounded-2xl bg-black">
+              <div className="px-6 py-5 bg-[radial-gradient(circle_at_20%_50%,rgba(255,247,0,0.3),transparent_50%)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-black uppercase tracking-[0.2em] text-[#fff700] mb-1">
+                      Desktop selector
+                    </p>
+                    <p className="text-sm font-bold text-white leading-6">
+                      {accessibilityAllowed
+                        ? "Running. Highlight text in any app to see the yellow huu button."
+                        : "Accessibility permission needed to use huu on your desktop."}
+                    </p>
+                    <p className="mt-0.5 text-xs text-white/40">
+                      {detectorStatus}
+                    </p>
+                  </div>
+                  {!accessibilityAllowed && (
+                    <button
+                      onClick={openAccessibilitySettings}
+                      className="shrink-0 rounded-full bg-[#fff700] px-4 py-2 text-sm font-black text-black transition hover:brightness-95"
+                    >
+                      Fix Accessibility
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Health card */}
+            {selectorHealth !== null && (
+              <div className="mb-6 rounded-2xl border border-black/[0.08] bg-white p-5">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-neutral-400">
+                    Selector health
+                  </p>
+                  <button
+                    onClick={refreshSelectorHealth}
+                    className="rounded-full border border-black/10 px-3 py-1 text-[11px] font-bold text-neutral-500 transition hover:border-black hover:text-black"
+                  >
+                    {isCheckingHealth ? "Checking…" : "Refresh"}
+                  </button>
+                </div>
+                <div className="grid grid-cols-5 gap-3">
+                  {selectorHealthRows.map((row) => (
+                    <div key={row.label} className="rounded-xl border border-black/[0.07] bg-[#fafaf8] px-3 py-3">
+                      <p className="text-[10px] font-black uppercase tracking-[0.14em] text-neutral-400">
+                        {row.label}
+                      </p>
+                      <p
+                        className={`mt-1 text-xs font-black ${
+                          row.ok ? "text-emerald-600" : "text-red-500"
+                        }`}
+                      >
+                        {row.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+                {selectorHealth.status && (
+                  <p className="mt-3 text-[11px] text-neutral-400 truncate">
+                    {selectorHealth.status}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Empty state */}
+            <div className="flex min-h-[300px] items-center justify-center rounded-2xl border border-black/[0.08] bg-white">
+              <div className="max-w-sm px-6 py-10 text-center">
+                <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-[1.2rem] bg-[#fff700] text-2xl shadow-[0_4px_0_rgba(0,0,0,0.12)] ring-2 ring-black">
+                  ✦
+                </div>
+                <h2 className="font-display text-3xl">Nothing rewritten yet.</h2>
+                <p className="mt-3 text-sm text-neutral-500 leading-6">
+                  Select text in any app on your Mac. The yellow huu button will
+                  appear next to your selection automatically.
+                </p>
+                <div className="mt-6 flex justify-center gap-3">
+                  <button
+                    onClick={captureSelectedText}
+                    className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
+                  >
+                    {isCapturing ? "Reading..." : "Test selection"}
+                  </button>
+                  <button
+                    onClick={() => setActiveView("scratchpad")}
+                    className="rounded-full border-2 border-black/10 px-5 py-2.5 text-sm font-bold text-neutral-700 transition hover:border-black hover:text-black"
+                  >
+                    Try in scratchpad
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Capture error */}
+            {captureError && (
+              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5">
+                <p className="text-sm font-bold text-red-900">{captureError}</p>
+                <p className="mt-1 text-sm leading-6 text-red-700">
+                  Go to System Settings &rarr; Privacy &amp; Security &rarr;
+                  Accessibility and allow huu. Then select text in another app
+                  and click Try it out again.
+                </p>
+              </div>
+            )}
+
+          </div>
+        )}
+        </div>{/* end flex-1 overflow-auto */}
+      </section>
+
+      {/* Rewrite panel overlay */}
+      {showRewritePanel && capturedText && (
+        <ExternalRewritePanel text={capturedText} onClose={closeRewritePanel} />
+      )}
+    </main>
+  );
+}
