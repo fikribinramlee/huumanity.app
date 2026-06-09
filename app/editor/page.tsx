@@ -133,6 +133,7 @@ export default function EditorPage() {
   });
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
+  const [checkoutError, setCheckoutError] = useState("");
   const [selectedPrice, setSelectedPrice] = useState<"monthly" | "annual">("monthly");
 
   // Settings
@@ -199,6 +200,9 @@ export default function EditorPage() {
 
   const handleUpgradeClick = useCallback(async (priceType: "monthly" | "annual" = "monthly") => {
     setCheckoutLoading(true);
+    setCheckoutError("");
+    // Open a blank tab immediately (before async work) so browsers don't block it as a popup
+    const tab = window.open("", "_blank");
     try {
       const priceId =
         priceType === "annual"
@@ -211,23 +215,29 @@ export default function EditorPage() {
         body: JSON.stringify({ priceId }),
       });
       const data = await res.json();
-      if (data.url) {
-        window.open(data.url, "_blank");
-        // Poll for upgrade after payment
-        const poll = window.setInterval(async () => {
+      if (!res.ok || !data.url) {
+        tab?.close();
+        setCheckoutError(data.error ?? "Could not start checkout. Please try again.");
+        return;
+      }
+      // Navigate the already-open tab to the Stripe checkout URL
+      tab!.location.href = data.url;
+      // Poll for upgrade after payment
+      const poll = window.setInterval(async () => {
+        try {
           const statusRes = await fetch(`${apiBase()}/api/subscription/status`, { cache: "no-store" });
           const status: SubscriptionStatus = await statusRes.json();
           if (status.plan === "pro") {
             setSubscription(status);
-            setPaywallOpen(false);
+            setSettingsOpen(false);
             window.clearInterval(poll);
           }
-        }, 3000);
-        // Stop polling after 10 minutes
-        window.setTimeout(() => window.clearInterval(poll), 600_000);
-      }
-    } catch {
-      // ignore — user will retry
+        } catch { /* ignore poll errors */ }
+      }, 3000);
+      window.setTimeout(() => window.clearInterval(poll), 600_000);
+    } catch (err) {
+      tab?.close();
+      setCheckoutError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
       setCheckoutLoading(false);
     }
@@ -1383,13 +1393,18 @@ useEffect(() => {
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => void handleUpgradeClick(billingPeriod)}
-                            disabled={checkoutLoading}
-                            className="mt-6 w-full rounded-xl bg-black py-3.5 text-sm font-black text-white transition hover:bg-neutral-800 disabled:opacity-60"
-                          >
-                            {checkoutLoading ? "Opening…" : "Get Pro"}
-                          </button>
+                          <>
+                            {checkoutError && (
+                              <p className="mt-4 text-xs font-semibold text-red-600">{checkoutError}</p>
+                            )}
+                            <button
+                              onClick={() => void handleUpgradeClick(billingPeriod)}
+                              disabled={checkoutLoading}
+                              className="mt-4 w-full rounded-xl bg-black py-3.5 text-sm font-black text-white transition hover:bg-neutral-800 disabled:opacity-60"
+                            >
+                              {checkoutLoading ? "Opening checkout…" : "Get Pro"}
+                            </button>
+                          </>
                         )}
                       </div>
                     </div>
