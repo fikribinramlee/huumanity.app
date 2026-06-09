@@ -124,7 +124,7 @@ export default function EditorPage() {
   const [authError, setAuthError] = useState("");
 
   // Clerk user (available once authState === "app")
-  const { user } = useUser();
+  const { user, isLoaded: clerkLoaded } = useUser();
   const { signOut } = useClerk();
 
   // UI
@@ -322,12 +322,24 @@ export default function EditorPage() {
 
   // ── Effects ────────────────────────────────────────────────────────────────
 
-  // Restore auth state from localStorage after client mount (avoids hydration mismatch)
+  // Restore auth state — Clerk session takes priority over localStorage.
+  // This means if the user already has an active Clerk session in the browser
+  // (e.g. signed in at huumanity.app), they skip the login screen entirely.
+  // For the Tauri app where Clerk cookies may not carry over, localStorage is
+  // the fallback that the sign-in flow writes to.
   useEffect(() => {
+    if (!clerkLoaded) return; // wait for Clerk to finish resolving the session
+    if (user) {
+      // Active Clerk session detected — mark as logged in and go straight to app
+      localStorage.setItem("huu_logged_in", "true");
+      setAuthState("app");
+      return;
+    }
+    // No Clerk session — check the localStorage flag set by the Tauri sign-in flow
     if (localStorage.getItem("huu_logged_in") === "true") {
       setAuthState("app");
     }
-  }, []);
+  }, [clerkLoaded, user]);
 
   useEffect(() => {
     if (authState !== "app") return;
