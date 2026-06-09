@@ -70,15 +70,6 @@ function IcSettings() {
   );
 }
 
-function IcHelp() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-      <line x1="12" y1="17" x2="12.01" y2="17" />
-    </svg>
-  );
-}
 
 function IcChevronLeft() {
   return (
@@ -704,7 +695,7 @@ useEffect(() => {
           </button>
         </div>
 
-        {/* Nav items */}
+        {/* Nav items — Home, Scratchpad, Settings */}
         <nav className="flex-1 space-y-0.5 overflow-hidden p-2 pt-3">
           {NAV_ITEMS.map((item) => {
             const isActive = activeView === item.view;
@@ -719,73 +710,71 @@ useEffect(() => {
                     : "text-neutral-600 hover:bg-black/5 hover:text-black"
                 }`}
               >
-                <span
-                  className={`shrink-0 ${isActive ? "text-[#fff700]" : ""}`}
-                >
+                <span className={`shrink-0 ${isActive ? "text-[#fff700]" : ""}`}>
                   {item.icon}
                 </span>
-                {sidebarOpen && (
-                  <span className="truncate">{item.label}</span>
-                )}
+                {sidebarOpen && <span className="truncate">{item.label}</span>}
               </button>
             );
           })}
+
+          {/* Settings — opens modal, sits below Scratchpad */}
+          <button
+            title={!sidebarOpen ? "Settings" : undefined}
+            onClick={() => { setSettingsTab("account"); setSettingsOpen(true); }}
+            className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-bold text-neutral-600 transition hover:bg-black/5 hover:text-black"
+          >
+            <span className="shrink-0"><IcSettings /></span>
+            {sidebarOpen && <span className="truncate">Settings</span>}
+          </button>
         </nav>
 
-        {/* Bottom — upgrade widget + settings */}
-        <div className="border-t border-black/[0.06] p-2 space-y-0.5">
-          {sidebarOpen && (
+        {/* Bottom — upgrade widget only, fills the available space */}
+        <div className="border-t border-black/[0.06] p-3">
+          {sidebarOpen ? (
             subscription.plan === "pro" ? (
-              <div className="mb-2 rounded-2xl border-2 border-black bg-black p-4">
+              <div className="rounded-2xl border-2 border-black bg-black p-5">
                 <p className="text-sm font-black text-[#fff700]">Pro plan</p>
-                <p className="mt-1 text-xs text-white/50 leading-5">
+                <p className="mt-1.5 text-xs text-white/50 leading-5">
                   Unlimited rewrites.
                 </p>
                 <button
                   onClick={handleManageBilling}
-                  className="mt-3 w-full rounded-xl border border-white/20 py-2 text-xs font-bold text-white/60 transition hover:border-white/40 hover:text-white"
+                  className="mt-4 w-full rounded-xl border border-white/20 py-2.5 text-xs font-bold text-white/60 transition hover:border-white/40 hover:text-white"
                 >
                   Manage billing
                 </button>
               </div>
             ) : (
-              <div className="mb-2 rounded-2xl bg-[#fff700] p-4">
-                <p className="text-sm font-black text-black leading-5">
+              <div className="rounded-2xl bg-[#fff700] p-5">
+                <p className="text-base font-black text-black leading-6">
                   {subscription.remaining ?? 0} rewrite{subscription.remaining !== 1 ? "s" : ""} left today
                 </p>
-                <p className="mt-1 text-xs text-black/60 leading-5">
-                  Free plan · Resets daily.
+                <p className="mt-2 text-xs text-black/60 leading-5">
+                  Upgrade to huumanity Pro to have unlimited rewrites.
                 </p>
                 <button
                   onClick={() => { setSettingsTab("billing"); setSettingsOpen(true); }}
-                  className="mt-3 w-full rounded-xl bg-black py-2.5 text-xs font-black text-[#fff700] transition hover:bg-neutral-900"
+                  className="mt-4 w-full rounded-xl bg-black py-3 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
                 >
                   Upgrade to Pro
                 </button>
               </div>
             )
-          )}
-          {[
-            { label: "Settings", icon: <IcSettings />, action: "settings" as const },
-            { label: "Help", icon: <IcHelp />, action: null },
-          ].map((item) => {
-            return (
+          ) : (
+            /* Collapsed sidebar — just show the upgrade icon */
+            subscription.plan !== "pro" && (
               <button
-                key={item.label}
-                title={!sidebarOpen ? item.label : undefined}
-                onClick={() => {
-                  if (item.action === "settings") {
-                    setSettingsTab("account");
-                    setSettingsOpen(true);
-                  }
-                }}
-                className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-bold text-neutral-600 transition hover:bg-black/5 hover:text-black"
+                title="Upgrade to Pro"
+                onClick={() => { setSettingsTab("billing"); setSettingsOpen(true); }}
+                className="flex w-full items-center justify-center rounded-xl bg-[#fff700] py-2.5 transition hover:brightness-95"
               >
-                <span className="shrink-0">{item.icon}</span>
-                {sidebarOpen && <span>{item.label}</span>}
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="12" y1="19" x2="12" y2="5" /><polyline points="5 12 12 5 19 12" />
+                </svg>
               </button>
-            );
-          })}
+            )
+          )}
         </div>
       </aside>
 
