@@ -10,7 +10,7 @@ import { HuuLogo } from "../components/HuuLogo";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type View = "home" | "scratchpad" | "settings";
+type View = "home" | "scratchpad";
 type SettingsTab = "account" | "billing";
 type AuthState = "login" | "verified" | "app";
 type Plan = "free" | "pro";
@@ -145,11 +145,8 @@ export default function EditorPage() {
   const [selectedPrice, setSelectedPrice] = useState<"monthly" | "annual">("monthly");
 
   // Settings
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("account");
-  const [editFirstName, setEditFirstName] = useState("");
-  const [editLastName, setEditLastName] = useState("");
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const [profileSaved, setProfileSaved] = useState(false);
 
   // Setup
   const [hasCompletedSetup, setHasCompletedSetup] = useState(() => {
@@ -252,24 +249,7 @@ export default function EditorPage() {
     }
   }, [apiBase]);
 
-  const handleSaveProfile = useCallback(async () => {
-    if (!user) return;
-    setIsSavingProfile(true);
-    try {
-      await user.update({
-        firstName: editFirstName.trim() || undefined,
-        lastName: editLastName.trim() || undefined,
-      });
-      setProfileSaved(true);
-      window.setTimeout(() => setProfileSaved(false), 2500);
-    } catch {
-      // ignore — Clerk error
-    } finally {
-      setIsSavingProfile(false);
-    }
-  }, [user, editFirstName, editLastName]);
-
-  const refreshAccessibilityPermission = useCallback(async () => {
+const refreshAccessibilityPermission = useCallback(async () => {
     try {
       const allowed = await invoke<boolean>("check_accessibility_permission");
       setAccessibilityAllowed(allowed);
@@ -358,14 +338,7 @@ export default function EditorPage() {
     return () => window.clearInterval(id);
   }, [authState, fetchSubscription]);
 
-  // Seed name fields when Clerk user loads
-  useEffect(() => {
-    if (!user) return;
-    setEditFirstName(user.firstName ?? "");
-    setEditLastName(user.lastName ?? "");
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
+useEffect(() => {
     if (authState !== "app") return;
     const id = window.setInterval(() => void refreshSelectorHealth(), 3000);
     return () => window.clearInterval(id);
@@ -764,22 +737,22 @@ export default function EditorPage() {
             )
           )}
           {[
-            { label: "Settings", icon: <IcSettings />, view: "settings" as View },
-            { label: "Help", icon: <IcHelp />, view: null },
+            { label: "Settings", icon: <IcSettings />, action: "settings" as const },
+            { label: "Help", icon: <IcHelp />, action: null },
           ].map((item) => {
-            const isActive = item.view && activeView === item.view;
             return (
               <button
                 key={item.label}
                 title={!sidebarOpen ? item.label : undefined}
-                onClick={() => item.view && setActiveView(item.view)}
-                className={`flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-bold transition ${
-                  isActive
-                    ? "bg-black text-white"
-                    : "text-neutral-600 hover:bg-black/5 hover:text-black"
-                }`}
+                onClick={() => {
+                  if (item.action === "settings") {
+                    setSettingsTab("account");
+                    setSettingsOpen(true);
+                  }
+                }}
+                className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-sm font-bold text-neutral-600 transition hover:bg-black/5 hover:text-black"
               >
-                <span className={`shrink-0 ${isActive ? "text-[#fff700]" : ""}`}>{item.icon}</span>
+                <span className="shrink-0">{item.icon}</span>
                 {sidebarOpen && <span>{item.label}</span>}
               </button>
             );
@@ -841,8 +814,8 @@ export default function EditorPage() {
                     <button
                       onClick={() => {
                         setUserMenuOpen(false);
-                        setActiveView("settings");
                         setSettingsTab("account");
+                        setSettingsOpen(true);
                       }}
                       className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black"
                     >
@@ -898,223 +871,7 @@ export default function EditorPage() {
         </header>
 
         <div className="flex-1 overflow-auto">
-        {activeView === "settings" ? (
-
-          /* ── SETTINGS VIEW ── */
-          <div className="flex h-full">
-
-            {/* Settings sub-nav */}
-            <div className="w-52 shrink-0 border-r border-black/[0.06] p-4">
-              <p className="mb-3 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">
-                Settings
-              </p>
-              {(["account", "billing"] as SettingsTab[]).map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setSettingsTab(tab)}
-                  className={`mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
-                    settingsTab === tab
-                      ? "bg-black text-white"
-                      : "text-neutral-600 hover:bg-black/5 hover:text-black"
-                  }`}
-                >
-                  {tab === "account" ? (
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-                    </svg>
-                  ) : (
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
-                    </svg>
-                  )}
-                  {tab === "account" ? "Account" : "Plans & Billing"}
-                </button>
-              ))}
-            </div>
-
-            {/* Settings content */}
-            <div className="flex-1 overflow-auto p-10">
-
-              {settingsTab === "account" ? (
-
-                /* ── ACCOUNT TAB ── */
-                <div className="max-w-md">
-                  <h1 className="font-display text-3xl text-black mb-8">Account</h1>
-
-                  <div className="space-y-5">
-                    {/* First name */}
-                    <div>
-                      <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
-                        First name
-                      </label>
-                      <input
-                        type="text"
-                        value={editFirstName}
-                        onChange={(e) => setEditFirstName(e.target.value)}
-                        className="w-full rounded-xl border border-black/10 bg-[#fafaf8] px-4 py-3 text-sm font-bold text-black transition focus:border-black focus:outline-none"
-                        placeholder="First name"
-                      />
-                    </div>
-
-                    {/* Last name */}
-                    <div>
-                      <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
-                        Last name
-                      </label>
-                      <input
-                        type="text"
-                        value={editLastName}
-                        onChange={(e) => setEditLastName(e.target.value)}
-                        className="w-full rounded-xl border border-black/10 bg-[#fafaf8] px-4 py-3 text-sm font-bold text-black transition focus:border-black focus:outline-none"
-                        placeholder="Last name"
-                      />
-                    </div>
-
-                    {/* Email — read only */}
-                    <div>
-                      <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
-                        Email
-                      </label>
-                      <div className="w-full rounded-xl border border-black/[0.06] bg-black/[0.02] px-4 py-3 text-sm text-neutral-400 select-all">
-                        {user?.emailAddresses?.[0]?.emailAddress ?? "—"}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="mt-8 flex items-center gap-3">
-                    <button
-                      onClick={() => {
-                        void signOut();
-                        localStorage.removeItem("huu_logged_in");
-                        setAuthState("login");
-                      }}
-                      className="rounded-xl border-2 border-black/10 px-5 py-2.5 text-sm font-bold text-neutral-600 transition hover:border-black hover:text-black"
-                    >
-                      Sign out
-                    </button>
-                    <button
-                      onClick={() => void handleSaveProfile()}
-                      disabled={isSavingProfile}
-                      className="rounded-xl bg-black px-6 py-2.5 text-sm font-black text-white transition hover:bg-neutral-900 disabled:opacity-50"
-                    >
-                      {isSavingProfile ? "Saving…" : profileSaved ? "Saved ✓" : "Save changes"}
-                    </button>
-                  </div>
-                </div>
-
-              ) : (
-
-                /* ── PLANS & BILLING TAB ── */
-                <div className="max-w-md">
-                  <h1 className="font-display text-3xl text-black mb-8">Plans &amp; Billing</h1>
-
-                  {/* Usage meter — free only */}
-                  {subscription.plan === "free" && (
-                    <div className="mb-7 rounded-2xl border border-black/[0.08] bg-white p-5 shadow-sm">
-                      <div className="mb-2.5 flex items-center justify-between">
-                        <p className="text-sm font-black text-black">Daily rewrites</p>
-                        <p className="text-sm font-bold text-neutral-400">
-                          {subscription.usageCount} <span className="text-neutral-300">/</span> {subscription.limit}
-                        </p>
-                      </div>
-                      <div className="h-2 w-full overflow-hidden rounded-full bg-black/[0.06]">
-                        <div
-                          className="h-full rounded-full bg-[#fff700] transition-all duration-300"
-                          style={{
-                            width: `${Math.min(100, (subscription.usageCount / subscription.limit) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                      <p className="mt-2.5 text-[11px] text-neutral-400">
-                        {subscription.remaining === 0
-                          ? "You've used all your rewrites for today. Resets at midnight UTC."
-                          : `${subscription.remaining} rewrite${subscription.remaining !== 1 ? "s" : ""} remaining today. Resets at midnight UTC.`}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Plan cards */}
-                  <div className="grid grid-cols-2 gap-3">
-
-                    {/* Free card */}
-                    <div className={`rounded-2xl border-2 p-5 ${subscription.plan === "free" ? "border-black" : "border-black/10"}`}>
-                      <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Free</p>
-                      <p className="font-display text-3xl text-black">$0</p>
-                      <p className="mb-4 mt-0.5 text-[11px] text-neutral-400">Forever</p>
-                      <ul className="space-y-2 text-xs text-neutral-600">
-                        <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>5 rewrites / day</li>
-                        <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>All 4 tones</li>
-                        <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>Desktop &amp; scratchpad</li>
-                      </ul>
-                      {subscription.plan === "free" && (
-                        <div className="mt-4 rounded-full border border-black/10 py-1.5 text-center text-[11px] font-black text-neutral-400">
-                          Current plan
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Pro card */}
-                    <div className={`rounded-2xl border-2 p-5 ${
-                      subscription.plan === "pro"
-                        ? "border-[#fff700] bg-[#fffde0]"
-                        : "border-black bg-black"
-                    }`}>
-                      <p className={`mb-1 text-[10px] font-black uppercase tracking-[0.18em] ${subscription.plan === "pro" ? "text-black/40" : "text-[#fff700]"}`}>
-                        Pro
-                      </p>
-                      <p className={`font-display text-3xl ${subscription.plan === "pro" ? "text-black" : "text-white"}`}>
-                        $10
-                      </p>
-                      <p className={`mb-4 mt-0.5 text-[11px] ${subscription.plan === "pro" ? "text-neutral-400" : "text-white/40"}`}>
-                        /month · or $96/yr
-                      </p>
-                      <ul className={`space-y-2 text-xs ${subscription.plan === "pro" ? "text-neutral-600" : "text-white/60"}`}>
-                        <li className="flex items-start gap-2">
-                          <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
-                          Unlimited rewrites
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
-                          All 4 tones
-                        </li>
-                        <li className="flex items-start gap-2">
-                          <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
-                          Priority support
-                        </li>
-                      </ul>
-
-                      {subscription.plan === "pro" ? (
-                        <div className="mt-4 space-y-2">
-                          <div className="rounded-full border-2 border-black/10 py-1.5 text-center text-[11px] font-black text-black/40">
-                            Active plan ✓
-                          </div>
-                          <button
-                            onClick={() => void handleManageBilling()}
-                            className="w-full rounded-full border-2 border-black/10 py-1.5 text-[11px] font-bold text-neutral-500 transition hover:border-black hover:text-black"
-                          >
-                            Manage billing
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => void handleUpgradeClick("monthly")}
-                          disabled={checkoutLoading}
-                          className="mt-4 w-full rounded-full bg-[#fff700] py-2 text-[11px] font-black text-black transition hover:brightness-95 disabled:opacity-60"
-                        >
-                          {checkoutLoading ? "Opening…" : "Upgrade to Pro"}
-                        </button>
-                      )}
-                    </div>
-
-                  </div>
-                </div>
-
-              )}
-            </div>
-          </div>
-
-        ) : activeView === "scratchpad" ? (
+        {activeView === "scratchpad" ? (
 
           /* ── SCRATCHPAD VIEW ── */
           <div className="p-8">
@@ -1344,6 +1101,208 @@ export default function EditorPage() {
       {/* Rewrite panel overlay */}
       {showRewritePanel && capturedText && (
         <ExternalRewritePanel text={capturedText} onClose={closeRewritePanel} />
+      )}
+
+      {/* ── Settings modal ────────────────────────────────────────────────── */}
+      {settingsOpen && (
+        <>
+          {/* Backdrop — click outside to close */}
+          <div
+            className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px]"
+            onClick={() => setSettingsOpen(false)}
+          />
+
+          {/* Modal */}
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none">
+            <div
+              className="pointer-events-auto flex h-[560px] w-[820px] max-w-full overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/[0.06]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Left sub-nav */}
+              <aside className="flex w-56 shrink-0 flex-col border-r border-black/[0.06] bg-[#fafaf8] p-4">
+                <p className="mb-3 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">
+                  Settings
+                </p>
+                {(["account", "billing"] as SettingsTab[]).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setSettingsTab(tab)}
+                    className={`mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
+                      settingsTab === tab
+                        ? "bg-black text-white"
+                        : "text-neutral-600 hover:bg-black/5 hover:text-black"
+                    }`}
+                  >
+                    {tab === "account" ? (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                      </svg>
+                    ) : (
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
+                      </svg>
+                    )}
+                    {tab === "account" ? "Account" : "Plans & Billing"}
+                  </button>
+                ))}
+              </aside>
+
+              {/* Right content */}
+              <div className="relative flex-1 overflow-auto p-10">
+                {/* Close button */}
+                <button
+                  onClick={() => setSettingsOpen(false)}
+                  className="absolute right-5 top-5 rounded-full p-1.5 text-neutral-400 transition hover:bg-black/5 hover:text-black"
+                  aria-label="Close settings"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+
+                {settingsTab === "account" ? (
+                  /* ── ACCOUNT TAB — email only ── */
+                  <div className="max-w-md">
+                    <h1 className="font-display text-3xl text-black mb-2">Account</h1>
+                    <p className="mb-8 text-sm text-neutral-500">
+                      The email you used to sign in to huumanity.
+                    </p>
+
+                    <div>
+                      <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
+                        Email
+                      </label>
+                      <div className="w-full rounded-xl border border-black/[0.06] bg-[#fafaf8] px-4 py-3 text-sm font-bold text-black select-all">
+                        {user?.emailAddresses?.[0]?.emailAddress ?? "—"}
+                      </div>
+                    </div>
+
+                    <div className="mt-8 border-t border-black/[0.06] pt-6">
+                      <button
+                        onClick={() => {
+                          void signOut();
+                          localStorage.removeItem("huu_logged_in");
+                          setAuthState("login");
+                          setSettingsOpen(false);
+                        }}
+                        className="rounded-xl border-2 border-black/10 px-5 py-2.5 text-sm font-bold text-neutral-600 transition hover:border-black hover:text-black"
+                      >
+                        Sign out
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* ── PLANS & BILLING TAB ── */
+                  <div className="max-w-lg">
+                    <h1 className="font-display text-3xl text-black mb-2">Plans &amp; Billing</h1>
+                    <p className="mb-8 text-sm text-neutral-500">
+                      Manage your subscription and see your usage.
+                    </p>
+
+                    {/* Usage meter — free only */}
+                    {subscription.plan === "free" && (
+                      <div className="mb-7 rounded-2xl border border-black/[0.08] bg-white p-5">
+                        <div className="mb-2.5 flex items-center justify-between">
+                          <p className="text-sm font-black text-black">Daily rewrites</p>
+                          <p className="text-sm font-bold text-neutral-400">
+                            {subscription.usageCount} <span className="text-neutral-300">/</span> {subscription.limit}
+                          </p>
+                        </div>
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-black/[0.06]">
+                          <div
+                            className="h-full rounded-full bg-[#fff700] transition-all duration-300"
+                            style={{
+                              width: `${Math.min(100, (subscription.usageCount / subscription.limit) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <p className="mt-2.5 text-[11px] text-neutral-400">
+                          {subscription.remaining === 0
+                            ? "You've used all your rewrites for today. Resets at midnight UTC."
+                            : `${subscription.remaining} rewrite${subscription.remaining !== 1 ? "s" : ""} remaining today. Resets at midnight UTC.`}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Plan cards */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Free */}
+                      <div className={`rounded-2xl border-2 p-5 ${subscription.plan === "free" ? "border-black" : "border-black/10"}`}>
+                        <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Free</p>
+                        <p className="font-display text-3xl text-black">$0</p>
+                        <p className="mb-4 mt-0.5 text-[11px] text-neutral-400">Forever</p>
+                        <ul className="space-y-2 text-xs text-neutral-600">
+                          <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>5 rewrites / day</li>
+                          <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>All 4 tones</li>
+                          <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>Desktop &amp; scratchpad</li>
+                        </ul>
+                        {subscription.plan === "free" && (
+                          <div className="mt-4 rounded-full border border-black/10 py-1.5 text-center text-[11px] font-black text-neutral-400">
+                            Current plan
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Pro */}
+                      <div className={`rounded-2xl border-2 p-5 ${
+                        subscription.plan === "pro"
+                          ? "border-[#fff700] bg-[#fffde0]"
+                          : "border-black bg-black"
+                      }`}>
+                        <p className={`mb-1 text-[10px] font-black uppercase tracking-[0.18em] ${subscription.plan === "pro" ? "text-black/40" : "text-[#fff700]"}`}>
+                          Pro
+                        </p>
+                        <p className={`font-display text-3xl ${subscription.plan === "pro" ? "text-black" : "text-white"}`}>
+                          $10
+                        </p>
+                        <p className={`mb-4 mt-0.5 text-[11px] ${subscription.plan === "pro" ? "text-neutral-400" : "text-white/40"}`}>
+                          /month · or $96/yr
+                        </p>
+                        <ul className={`space-y-2 text-xs ${subscription.plan === "pro" ? "text-neutral-600" : "text-white/60"}`}>
+                          <li className="flex items-start gap-2">
+                            <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
+                            Unlimited rewrites
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
+                            All 4 tones
+                          </li>
+                          <li className="flex items-start gap-2">
+                            <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
+                            Priority support
+                          </li>
+                        </ul>
+
+                        {subscription.plan === "pro" ? (
+                          <div className="mt-4 space-y-2">
+                            <div className="rounded-full border-2 border-black/10 py-1.5 text-center text-[11px] font-black text-black/40">
+                              Active plan ✓
+                            </div>
+                            <button
+                              onClick={() => void handleManageBilling()}
+                              className="w-full rounded-full border-2 border-black/10 py-1.5 text-[11px] font-bold text-neutral-500 transition hover:border-black hover:text-black"
+                            >
+                              Manage billing
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => void handleUpgradeClick("monthly")}
+                            disabled={checkoutLoading}
+                            className="mt-4 w-full rounded-full bg-[#fff700] py-2 text-[11px] font-black text-black transition hover:brightness-95 disabled:opacity-60"
+                          >
+                            {checkoutLoading ? "Opening…" : "Upgrade to Pro"}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </>
       )}
 
       {/* ── Paywall modal ─────────────────────────────────────────────────── */}
