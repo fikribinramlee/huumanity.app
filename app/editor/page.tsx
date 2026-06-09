@@ -147,6 +147,11 @@ export default function EditorPage() {
   // Settings
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("account");
+  const [editFirstName, setEditFirstName] = useState("");
+  const [editLastName, setEditLastName] = useState("");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
 
   // Setup
   const [hasCompletedSetup, setHasCompletedSetup] = useState(() => {
@@ -249,7 +254,24 @@ export default function EditorPage() {
     }
   }, [apiBase]);
 
-const refreshAccessibilityPermission = useCallback(async () => {
+  const handleSaveProfile = useCallback(async () => {
+    if (!user) return;
+    setIsSavingProfile(true);
+    try {
+      await user.update({
+        firstName: editFirstName.trim() || undefined,
+        lastName: editLastName.trim() || undefined,
+      });
+      setProfileSaved(true);
+      window.setTimeout(() => setProfileSaved(false), 2500);
+    } catch {
+      // ignore Clerk error
+    } finally {
+      setIsSavingProfile(false);
+    }
+  }, [user, editFirstName, editLastName]);
+
+  const refreshAccessibilityPermission = useCallback(async () => {
     try {
       const allowed = await invoke<boolean>("check_accessibility_permission");
       setAccessibilityAllowed(allowed);
@@ -320,6 +342,13 @@ const refreshAccessibilityPermission = useCallback(async () => {
       setAuthState("app");
     }
   }, [clerkLoaded, user]);
+
+  // Seed name fields when Clerk user loads
+  useEffect(() => {
+    if (!user) return;
+    setEditFirstName(user.firstName ?? "");
+    setEditLastName(user.lastName ?? "");
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (authState !== "app") return;
@@ -654,7 +683,7 @@ useEffect(() => {
       {/* ── Sidebar ─────────────────────────────────────────────────────── */}
       <aside
         className={`relative flex flex-col border-r border-black/[0.07] bg-[#fafaf8] transition-[width] duration-300 ease-in-out overflow-hidden shrink-0 ${
-          sidebarOpen ? "w-[216px]" : "w-[56px]"
+          sidebarOpen ? "w-[272px]" : "w-[56px]"
         }`}
       >
         {/* Logo + toggle */}
@@ -707,29 +736,29 @@ useEffect(() => {
         <div className="border-t border-black/[0.06] p-2 space-y-0.5">
           {sidebarOpen && (
             subscription.plan === "pro" ? (
-              <div className="mb-2 rounded-2xl border-2 border-black bg-black p-3.5">
-                <p className="text-xs font-black text-[#fff700]">Pro plan</p>
-                <p className="mt-0.5 text-[11px] text-white/50 leading-4">
+              <div className="mb-2 rounded-2xl border-2 border-black bg-black p-4">
+                <p className="text-sm font-black text-[#fff700]">Pro plan</p>
+                <p className="mt-1 text-xs text-white/50 leading-5">
                   Unlimited rewrites.
                 </p>
                 <button
                   onClick={handleManageBilling}
-                  className="mt-2.5 w-full rounded-full border border-white/20 py-1.5 text-[11px] font-bold text-white/60 transition hover:border-white/40 hover:text-white"
+                  className="mt-3 w-full rounded-xl border border-white/20 py-2 text-xs font-bold text-white/60 transition hover:border-white/40 hover:text-white"
                 >
                   Manage billing
                 </button>
               </div>
             ) : (
-              <div className="mb-2 rounded-2xl bg-[#fff700] p-3.5">
-                <p className="text-xs font-black text-black">
+              <div className="mb-2 rounded-2xl bg-[#fff700] p-4">
+                <p className="text-sm font-black text-black leading-5">
                   {subscription.remaining ?? 0} rewrite{subscription.remaining !== 1 ? "s" : ""} left today
                 </p>
-                <p className="mt-0.5 text-[11px] text-black/60 leading-4">
-                  Free plan · resets at midnight UTC.
+                <p className="mt-1 text-xs text-black/60 leading-5">
+                  Free plan · Resets daily.
                 </p>
                 <button
-                  onClick={() => setPaywallOpen(true)}
-                  className="mt-2.5 w-full rounded-full bg-black py-1.5 text-[11px] font-black text-[#fff700] transition hover:bg-neutral-900"
+                  onClick={() => { setSettingsTab("billing"); setSettingsOpen(true); }}
+                  className="mt-3 w-full rounded-xl bg-black py-2.5 text-xs font-black text-[#fff700] transition hover:bg-neutral-900"
                 >
                   Upgrade to Pro
                 </button>
@@ -836,7 +865,7 @@ useEffect(() => {
                       </button>
                     ) : (
                       <button
-                        onClick={() => { setUserMenuOpen(false); setPaywallOpen(true); }}
+                        onClick={() => { setUserMenuOpen(false); setSettingsTab("billing"); setSettingsOpen(true); }}
                         className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black"
                       >
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1115,30 +1144,30 @@ useEffect(() => {
           {/* Modal */}
           <div className="fixed inset-0 z-50 flex items-center justify-center p-6 pointer-events-none">
             <div
-              className="pointer-events-auto flex h-[560px] w-[820px] max-w-full overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/[0.06]"
+              className="pointer-events-auto flex h-[700px] w-[1060px] max-w-full overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/[0.06]"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Left sub-nav */}
-              <aside className="flex w-56 shrink-0 flex-col border-r border-black/[0.06] bg-[#fafaf8] p-4">
-                <p className="mb-3 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">
+              <aside className="flex w-64 shrink-0 flex-col border-r border-black/[0.06] bg-[#fafaf8] p-5">
+                <p className="mb-4 px-2 text-[10px] font-black uppercase tracking-[0.2em] text-neutral-400">
                   Settings
                 </p>
                 {(["account", "billing"] as SettingsTab[]).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setSettingsTab(tab)}
-                    className={`mb-0.5 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm font-bold transition ${
+                    className={`mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition ${
                       settingsTab === tab
                         ? "bg-black text-white"
                         : "text-neutral-600 hover:bg-black/5 hover:text-black"
                     }`}
                   >
                     {tab === "account" ? (
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                       </svg>
                     ) : (
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/>
                       </svg>
                     )}
@@ -1148,151 +1177,229 @@ useEffect(() => {
               </aside>
 
               {/* Right content */}
-              <div className="relative flex-1 overflow-auto p-10">
+              <div className="relative flex-1 overflow-auto p-12">
                 {/* Close button */}
                 <button
                   onClick={() => setSettingsOpen(false)}
-                  className="absolute right-5 top-5 rounded-full p-1.5 text-neutral-400 transition hover:bg-black/5 hover:text-black"
+                  className="absolute right-6 top-6 rounded-full p-1.5 text-neutral-400 transition hover:bg-black/5 hover:text-black"
                   aria-label="Close settings"
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
 
                 {settingsTab === "account" ? (
-                  /* ── ACCOUNT TAB — email only ── */
-                  <div className="max-w-md">
-                    <h1 className="font-display text-3xl text-black mb-2">Account</h1>
-                    <p className="mb-8 text-sm text-neutral-500">
-                      The email you used to sign in to huumanity.
-                    </p>
+                  /* ── ACCOUNT TAB ── */
+                  <div className="max-w-xl">
+                    <h1 className="font-display text-4xl text-black mb-8">Account</h1>
 
-                    <div>
-                      <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
-                        Email
-                      </label>
-                      <div className="w-full rounded-xl border border-black/[0.06] bg-[#fafaf8] px-4 py-3 text-sm font-bold text-black select-all">
-                        {user?.emailAddresses?.[0]?.emailAddress ?? "—"}
+                    {/* Fields card */}
+                    <div className="rounded-2xl border border-black/[0.08] bg-[#fafaf8] overflow-hidden">
+                      {/* First name */}
+                      <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06]">
+                        <span className="text-sm font-semibold text-neutral-500 w-32 shrink-0">First name</span>
+                        <input
+                          type="text"
+                          value={editFirstName}
+                          onChange={(e) => setEditFirstName(e.target.value)}
+                          className="flex-1 bg-transparent text-sm font-semibold text-black text-right focus:outline-none placeholder:text-neutral-300"
+                          placeholder="First name"
+                        />
+                      </div>
+                      {/* Last name */}
+                      <div className="flex items-center justify-between px-6 py-4 border-b border-black/[0.06]">
+                        <span className="text-sm font-semibold text-neutral-500 w-32 shrink-0">Last name</span>
+                        <input
+                          type="text"
+                          value={editLastName}
+                          onChange={(e) => setEditLastName(e.target.value)}
+                          className="flex-1 bg-transparent text-sm font-semibold text-black text-right focus:outline-none placeholder:text-neutral-300"
+                          placeholder="Last name"
+                        />
+                      </div>
+                      {/* Email */}
+                      <div className="flex items-center justify-between px-6 py-4">
+                        <span className="text-sm font-semibold text-neutral-500 w-32 shrink-0">Email</span>
+                        <span className="flex-1 text-sm font-semibold text-neutral-400 text-right select-all">
+                          {user?.emailAddresses?.[0]?.emailAddress ?? "—"}
+                        </span>
                       </div>
                     </div>
 
-                    <div className="mt-8 border-t border-black/[0.06] pt-6">
+                    {/* Actions */}
+                    <div className="mt-8 flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            void signOut();
+                            localStorage.removeItem("huu_logged_in");
+                            setAuthState("login");
+                            setSettingsOpen(false);
+                          }}
+                          className="rounded-xl border border-black/15 bg-[#f5f5f3] px-5 py-2.5 text-sm font-semibold text-neutral-700 transition hover:border-black/30 hover:bg-neutral-100"
+                        >
+                          Sign out
+                        </button>
+                        <button
+                          className="rounded-xl px-5 py-2.5 text-sm font-semibold text-neutral-400 transition hover:text-red-500"
+                        >
+                          Delete account
+                        </button>
+                      </div>
                       <button
-                        onClick={() => {
-                          void signOut();
-                          localStorage.removeItem("huu_logged_in");
-                          setAuthState("login");
-                          setSettingsOpen(false);
-                        }}
-                        className="rounded-xl border-2 border-black/10 px-5 py-2.5 text-sm font-bold text-neutral-600 transition hover:border-black hover:text-black"
+                        onClick={() => void handleSaveProfile()}
+                        disabled={isSavingProfile}
+                        className="rounded-xl bg-neutral-800 px-6 py-2.5 text-sm font-bold text-white transition hover:bg-black disabled:opacity-50"
                       >
-                        Sign out
+                        {isSavingProfile ? "Saving…" : profileSaved ? "Saved ✓" : "Save"}
                       </button>
                     </div>
                   </div>
                 ) : (
                   /* ── PLANS & BILLING TAB ── */
-                  <div className="max-w-lg">
-                    <h1 className="font-display text-3xl text-black mb-2">Plans &amp; Billing</h1>
+                  <div className="max-w-2xl">
+                    <h1 className="font-display text-4xl text-black mb-2">Plans &amp; Billing</h1>
                     <p className="mb-8 text-sm text-neutral-500">
-                      Manage your subscription and see your usage.
+                      Manage your subscription and usage.
                     </p>
 
                     {/* Usage meter — free only */}
                     {subscription.plan === "free" && (
-                      <div className="mb-7 rounded-2xl border border-black/[0.08] bg-white p-5">
-                        <div className="mb-2.5 flex items-center justify-between">
-                          <p className="text-sm font-black text-black">Daily rewrites</p>
-                          <p className="text-sm font-bold text-neutral-400">
-                            {subscription.usageCount} <span className="text-neutral-300">/</span> {subscription.limit}
+                      <div className="mb-8 rounded-2xl border border-black/[0.08] bg-[#fafaf8] p-5">
+                        <div className="mb-3 flex items-center justify-between">
+                          <p className="text-sm font-black text-black">Daily rewrites used</p>
+                          <p className="text-sm font-bold tabular-nums text-neutral-400">
+                            {subscription.usageCount} / {subscription.limit}
                           </p>
                         </div>
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-black/[0.06]">
+                        <div className="h-2.5 w-full overflow-hidden rounded-full bg-black/[0.06]">
                           <div
                             className="h-full rounded-full bg-[#fff700] transition-all duration-300"
-                            style={{
-                              width: `${Math.min(100, (subscription.usageCount / subscription.limit) * 100)}%`,
-                            }}
+                            style={{ width: `${Math.min(100, (subscription.usageCount / subscription.limit) * 100)}%` }}
                           />
                         </div>
-                        <p className="mt-2.5 text-[11px] text-neutral-400">
+                        <p className="mt-2.5 text-xs text-neutral-400">
                           {subscription.remaining === 0
-                            ? "You've used all your rewrites for today. Resets at midnight UTC."
-                            : `${subscription.remaining} rewrite${subscription.remaining !== 1 ? "s" : ""} remaining today. Resets at midnight UTC.`}
+                            ? "You've used all your rewrites for today. Resets daily."
+                            : `${subscription.remaining} rewrite${subscription.remaining !== 1 ? "s" : ""} remaining today. Resets daily.`}
                         </p>
                       </div>
                     )}
 
+                    {/* Monthly / Annual toggle */}
+                    {subscription.plan !== "pro" && (
+                      <div className="mb-6 flex justify-center">
+                        <div className="inline-flex items-center rounded-full bg-neutral-100 p-1">
+                          <button
+                            onClick={() => setBillingPeriod("monthly")}
+                            className={`rounded-full px-5 py-2 text-sm font-bold transition ${
+                              billingPeriod === "monthly"
+                                ? "bg-white shadow text-black"
+                                : "text-neutral-500 hover:text-black"
+                            }`}
+                          >
+                            Monthly
+                          </button>
+                          <button
+                            onClick={() => setBillingPeriod("annual")}
+                            className={`flex items-center gap-2 rounded-full px-5 py-2 text-sm font-bold transition ${
+                              billingPeriod === "annual"
+                                ? "bg-[#fff700] shadow text-black"
+                                : "text-neutral-500 hover:text-black"
+                            }`}
+                          >
+                            Annual
+                            <span className={`text-xs font-black ${billingPeriod === "annual" ? "text-black/60" : "text-neutral-400"}`}>
+                              20% off
+                            </span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Plan cards */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Free */}
-                      <div className={`rounded-2xl border-2 p-5 ${subscription.plan === "free" ? "border-black" : "border-black/10"}`}>
-                        <p className="mb-1 text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">Free</p>
-                        <p className="font-display text-3xl text-black">$0</p>
-                        <p className="mb-4 mt-0.5 text-[11px] text-neutral-400">Forever</p>
-                        <ul className="space-y-2 text-xs text-neutral-600">
-                          <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>5 rewrites / day</li>
-                          <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>All 4 tones</li>
-                          <li className="flex items-start gap-2"><span className="mt-0.5 font-black text-black">✓</span>Desktop &amp; scratchpad</li>
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Free card — dark */}
+                      <div className="rounded-2xl bg-neutral-900 p-7 flex flex-col">
+                        <p className="mb-1 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">Free</p>
+                        <div className="flex items-baseline gap-1 mb-1">
+                          <span className="font-display text-5xl text-white">$0</span>
+                        </div>
+                        <p className="mb-6 text-sm text-neutral-500">/forever</p>
+                        <ul className="space-y-3 text-sm text-neutral-400 flex-1">
+                          <li className="flex items-start gap-2.5">
+                            <span className="mt-0.5 text-[#fff700]">✓</span>5 rewrites per day
+                          </li>
+                          <li className="flex items-start gap-2.5">
+                            <span className="mt-0.5 text-[#fff700]">✓</span>All 4 tones
+                          </li>
+                          <li className="flex items-start gap-2.5">
+                            <span className="mt-0.5 text-[#fff700]">✓</span>Works on any app, any text field
+                          </li>
+                          <li className="flex items-start gap-2.5">
+                            <span className="mt-0.5 text-[#fff700]">✓</span>No credit card needed
+                          </li>
                         </ul>
-                        {subscription.plan === "free" && (
-                          <div className="mt-4 rounded-full border border-black/10 py-1.5 text-center text-[11px] font-black text-neutral-400">
+                        {subscription.plan === "free" ? (
+                          <div className="mt-6 w-full rounded-xl border border-white/10 py-3 text-center text-sm font-black text-neutral-500">
                             Current plan
                           </div>
-                        )}
+                        ) : null}
                       </div>
 
-                      {/* Pro */}
-                      <div className={`rounded-2xl border-2 p-5 ${
-                        subscription.plan === "pro"
-                          ? "border-[#fff700] bg-[#fffde0]"
-                          : "border-black bg-black"
-                      }`}>
-                        <p className={`mb-1 text-[10px] font-black uppercase tracking-[0.18em] ${subscription.plan === "pro" ? "text-black/40" : "text-[#fff700]"}`}>
-                          Pro
-                        </p>
-                        <p className={`font-display text-3xl ${subscription.plan === "pro" ? "text-black" : "text-white"}`}>
-                          $10
-                        </p>
-                        <p className={`mb-4 mt-0.5 text-[11px] ${subscription.plan === "pro" ? "text-neutral-400" : "text-white/40"}`}>
-                          /month · or $96/yr
-                        </p>
-                        <ul className={`space-y-2 text-xs ${subscription.plan === "pro" ? "text-neutral-600" : "text-white/60"}`}>
-                          <li className="flex items-start gap-2">
-                            <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
-                            Unlimited rewrites
+                      {/* Pro card — yellow */}
+                      <div className="rounded-2xl bg-[#fff700] p-7 flex flex-col relative">
+                        <div className="flex items-start justify-between mb-1">
+                          <p className="text-[11px] font-black uppercase tracking-[0.18em] text-black/50">Pro</p>
+                          <span className="rounded-full bg-black px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-[#fff700]">
+                            POPULAR
+                          </span>
+                        </div>
+                        <div className="flex items-baseline gap-1 mb-1">
+                          <span className="font-display text-5xl text-black">
+                            {billingPeriod === "annual" ? "$8" : "$10"}
+                          </span>
+                          <span className="text-sm font-semibold text-black/50">
+                            {billingPeriod === "annual" ? "/mo · billed annually" : "/month"}
+                          </span>
+                        </div>
+                        {billingPeriod === "annual" && (
+                          <p className="mb-6 text-xs text-black/50">$96 billed once per year</p>
+                        )}
+                        {billingPeriod === "monthly" && <p className="mb-6 text-xs text-black/50">&nbsp;</p>}
+                        <ul className="space-y-3 text-sm text-black/70 flex-1">
+                          <li className="flex items-start gap-2.5">
+                            <span className="mt-0.5 text-black font-black">✓</span>Everything in the free plan
                           </li>
-                          <li className="flex items-start gap-2">
-                            <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
-                            All 4 tones
+                          <li className="flex items-start gap-2.5">
+                            <span className="mt-0.5 text-black font-black">✓</span>Unlimited rewrites
                           </li>
-                          <li className="flex items-start gap-2">
-                            <span className={`mt-0.5 font-black ${subscription.plan === "pro" ? "text-black" : "text-[#fff700]"}`}>✓</span>
-                            Priority support
+                          <li className="flex items-start gap-2.5">
+                            <span className="mt-0.5 text-black font-black">✓</span>Priority support
                           </li>
                         </ul>
 
                         {subscription.plan === "pro" ? (
-                          <div className="mt-4 space-y-2">
-                            <div className="rounded-full border-2 border-black/10 py-1.5 text-center text-[11px] font-black text-black/40">
+                          <div className="mt-6 space-y-2">
+                            <div className="w-full rounded-xl border-2 border-black/15 py-3 text-center text-sm font-black text-black/50">
                               Active plan ✓
                             </div>
                             <button
                               onClick={() => void handleManageBilling()}
-                              className="w-full rounded-full border-2 border-black/10 py-1.5 text-[11px] font-bold text-neutral-500 transition hover:border-black hover:text-black"
+                              className="w-full rounded-xl border-2 border-black/20 py-3 text-sm font-bold text-black/60 transition hover:border-black hover:text-black"
                             >
                               Manage billing
                             </button>
                           </div>
                         ) : (
                           <button
-                            onClick={() => void handleUpgradeClick("monthly")}
+                            onClick={() => void handleUpgradeClick(billingPeriod)}
                             disabled={checkoutLoading}
-                            className="mt-4 w-full rounded-full bg-[#fff700] py-2 text-[11px] font-black text-black transition hover:brightness-95 disabled:opacity-60"
+                            className="mt-6 w-full rounded-xl bg-black py-3.5 text-sm font-black text-white transition hover:bg-neutral-800 disabled:opacity-60"
                           >
-                            {checkoutLoading ? "Opening…" : "Upgrade to Pro"}
+                            {checkoutLoading ? "Opening…" : "Get Pro"}
                           </button>
                         )}
                       </div>
