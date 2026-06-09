@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/app/lib/stripe";
+import { getStripe } from "@/app/lib/stripe";
 import { upgradeUserToPro, downgradeUserToFree } from "@/app/lib/subscription";
 import Stripe from "stripe";
 
+export const dynamic = "force-dynamic";
+
 // Stripe requires the raw body for signature verification — do NOT use req.json()
 export async function POST(req: NextRequest) {
+  const stripe = getStripe();
   const body = await req.text();
   const sig = req.headers.get("stripe-signature");
 

@@ -1,6 +1,8 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
-import { stripe } from "@/app/lib/stripe";
+import { getStripe } from "@/app/lib/stripe";
+
+export const dynamic = "force-dynamic";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -13,6 +15,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
+  const stripe = getStripe();
   try {
     const { userId } = await auth();
     if (!userId) {
