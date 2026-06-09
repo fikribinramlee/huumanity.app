@@ -838,7 +838,14 @@ export default function EditorPage() {
 
                   {/* Menu items */}
                   <div className="p-1.5 space-y-0.5">
-                    <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black">
+                    <button
+                      onClick={() => {
+                        setUserMenuOpen(false);
+                        setActiveView("settings");
+                        setSettingsTab("account");
+                      }}
+                      className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-neutral-700 transition hover:bg-black/5 hover:text-black"
+                    >
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                       </svg>
