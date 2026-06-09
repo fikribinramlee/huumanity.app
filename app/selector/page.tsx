@@ -222,10 +222,22 @@ export default function SelectorPage() {
         <button
           type="button"
           onClick={openOptions}
-          className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-[#fff700] text-xl font-black text-black shadow-[0_4px_12px_rgba(0,0,0,0.18)] transition hover:brightness-95 active:scale-95"
+          className="flex h-11 w-11 items-center justify-center rounded-full border-2 border-black bg-[#fff700] text-black shadow-[0_4px_12px_rgba(0,0,0,0.18)] transition hover:brightness-95 active:scale-95"
           aria-label="Open huu rewrite options"
         >
-          ✦
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" />
+          </svg>
         </button>
       </main>
     );

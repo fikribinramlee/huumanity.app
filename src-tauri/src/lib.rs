@@ -267,8 +267,10 @@ fn show_selector_for_selection(
 }
 
 fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection) -> (i32, i32) {
-    let mut x = selection.x + selection.width + 8.0;
-    let mut y = selection.y + (selection.height / 2.0) - 22.0;
+    // Place button above the selection, left-aligned with it.
+    // 48px button + 10px gap above the top edge of the selection rect.
+    let mut x = selection.x;
+    let mut y = selection.y - 48.0 - 10.0;
 
     if let Ok(Some(monitor)) = app.primary_monitor() {
         let scale = monitor.scale_factor();
@@ -290,12 +292,51 @@ fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection
     (x.round() as i32, y.round() as i32)
 }
 
+/// Mirror of the TypeScript `isRephrashable` ground rule.
+/// Single uppercase-initial word → proper noun → false.
+/// Single ALL-CAPS word → acronym → false.
+/// Single word < 3 letters → false.
+/// Multi-word → pass if ≥50 % of non-space chars are letters.
+fn is_rephrashable(text: &str) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+
+    let words: Vec<&str> = trimmed.split_whitespace().collect();
+
+    if words.len() == 1 {
+        let word = words[0];
+        let letters: String = word.chars().filter(|c| c.is_alphabetic()).collect();
+        if letters.len() < 3 {
+            return false;
+        }
+        // ALL-CAPS / acronym
+        if letters == letters.to_uppercase() {
+            return false;
+        }
+        // Proper noun / name / place
+        if word.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+            return false;
+        }
+        return true;
+    }
+
+    // Multi-word: letter ratio check
+    let non_space: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
+    if non_space.is_empty() {
+        return false;
+    }
+    let letter_count = non_space.chars().filter(|c| c.is_alphabetic()).count();
+    letter_count as f64 / non_space.len() as f64 >= 0.50
+}
+
 fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
     let window = if let Some(window) = app.get_webview_window("main") {
         window
     } else {
         WebviewWindowBuilder::new(app, "main", WebviewUrl::App("/editor".into()))
-            .title("huu")
+            .title("huumanity")
             .inner_size(1200.0, 800.0)
             .min_inner_size(900.0, 600.0)
             .resizable(true)
@@ -372,6 +413,13 @@ fn start_selection_watcher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut last_selection_key = String::new();
         let mut last_probe_status = String::new();
+        // How many consecutive polls must see the same selection before we show
+        // the button. At 350 ms per poll this is ~700 ms of stability — the
+        // cursor must have stopped moving before the button appears.
+        const STABLE_POLLS_REQUIRED: u32 = 2;
+        let mut stable_count: u32 = 0;
+        let mut pending_selection: Option<DesktopSelection> = None;
+
         let state = app.state::<SelectorState>();
         if let Ok(mut watcher_running) = state.watcher_running.lock() {
             *watcher_running = true;
@@ -392,12 +440,33 @@ fn start_selection_watcher(app: tauri::AppHandle) {
             }
 
             let Some(selection) = probe.selection else {
-                last_selection_key.clear();
+                // No selection — reset and hide any visible button
+                if !last_selection_key.is_empty() {
+                    last_selection_key.clear();
+                    stable_count = 0;
+                    pending_selection = None;
+                    if let Some(window) = app.get_webview_window("selector") {
+                        let _ = window.hide();
+                    }
+                }
                 continue;
             };
 
-            let trimmed = selection.text.trim();
+            let trimmed = selection.text.trim().to_string();
             if trimmed.is_empty() {
+                continue;
+            }
+
+            // Ground rule: skip proper nouns, acronyms, short words
+            if !is_rephrashable(&trimmed) {
+                if !last_selection_key.is_empty() {
+                    last_selection_key.clear();
+                    stable_count = 0;
+                    pending_selection = None;
+                    if let Some(window) = app.get_webview_window("selector") {
+                        let _ = window.hide();
+                    }
+                }
                 continue;
             }
 
@@ -410,13 +479,24 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 selection.height.round()
             );
 
-            if selection_key == last_selection_key {
-                continue;
-            }
+            if selection_key != last_selection_key {
+                // Selection changed — restart stability counter, store candidate
+                last_selection_key = selection_key;
+                stable_count = 1;
+                pending_selection = Some(selection);
+            } else {
+                // Same selection as last poll — increment stability
+                stable_count += 1;
 
-            last_selection_key = selection_key;
-            if let Err(err) = show_selector_for_selection(&app, &state, selection) {
-                debug_log(&format!("show selector failed: {err}"));
+                if stable_count == STABLE_POLLS_REQUIRED {
+                    // Selection has been stable for ~700 ms — show the button
+                    if let Some(sel) = pending_selection.take() {
+                        if let Err(err) = show_selector_for_selection(&app, &state, sel) {
+                            debug_log(&format!("show selector failed: {err}"));
+                        }
+                    }
+                }
+                // Beyond STABLE_POLLS_REQUIRED: already showing, do nothing
             }
         }
     });
