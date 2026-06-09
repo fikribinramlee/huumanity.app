@@ -17,25 +17,24 @@ export function HuuLogo({ className = "" }: { className?: string }) {
       className={`font-display inline-flex items-baseline leading-none select-none ${className}`}
       aria-label="huu"
     >
-      {/* Yellow square — large enough that "h" breathes inside it */}
+      {/* Yellow box contains "hu" — both letters sit inside */}
       <span
         style={{
           display: "inline-flex",
           alignItems: "flex-end",
-          justifyContent: "flex-start",
           background: "#fff700",
-          width: "1.1em",
-          height: "1.1em",
-          paddingLeft: "0.1em",
-          paddingBottom: "0.06em",
-          flexShrink: 0,
+          paddingTop: "0.2em",
+          paddingLeft: "0.08em",
+          paddingRight: "0.05em",
+          paddingBottom: "0.05em",
           lineHeight: 1,
+          flexShrink: 0,
         }}
       >
-        h
+        hu
       </span>
-      {/* "uu" — transparent, same baseline */}
-      <span style={{ lineHeight: 1 }}>uu</span>
+      {/* Last "u" — no background, flush against the box */}
+      <span style={{ lineHeight: 1 }}>u</span>
     </span>
   );
 }
