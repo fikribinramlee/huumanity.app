@@ -214,10 +214,12 @@ export default function EditorPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ priceId }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: { url?: string; error?: string } = {};
+      try { data = JSON.parse(text); } catch { /* non-JSON response */ }
       if (!res.ok || !data.url) {
         tab?.close();
-        setCheckoutError(data.error ?? "Could not start checkout. Please try again.");
+        setCheckoutError(data.error ?? `Server error ${res.status}. Check that STRIPE_SECRET_KEY is set in Vercel.`);
         return;
       }
       // Navigate the already-open tab to the Stripe checkout URL

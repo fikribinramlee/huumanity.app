@@ -15,8 +15,10 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  const stripe = getStripe();
   try {
+    // Init stripe inside try so any config error is caught and returned as JSON
+    const stripe = getStripe();
+
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json(
@@ -26,7 +28,6 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    // Default to monthly if no priceId sent
     const priceId: string =
       body.priceId ??
       process.env.STRIPE_PRICE_MONTHLY ??
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
       mode: "subscription",
       allow_promotion_codes: true,
       success_url: `https://huumanity.app/payment-success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `https://huumanity.app`,
+      cancel_url: `https://huumanity.app/editor`,
       metadata: { clerkUserId: userId },
       subscription_data: {
         metadata: { clerkUserId: userId },
@@ -72,8 +73,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ url: session.url }, { headers: CORS });
   } catch (err) {
     console.error("[stripe/checkout]", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
-      { error: "Could not create checkout session." },
+      { error: `Could not create checkout session: ${message}` },
       { status: 500, headers: CORS }
     );
   }
