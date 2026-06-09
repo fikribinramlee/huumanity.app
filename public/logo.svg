@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" fill="none">
+  <!-- Yellow square — covers the "h" character area -->
+  <rect x="40" y="110" width="210" height="210" fill="#fff700"/>
+  <!-- "huu" in a serif font at display scale -->
+  <text
+    x="44"
+    y="296"
+    font-family="Georgia, 'Times New Roman', serif"
+    font-size="200"
+    font-weight="400"
+    fill="#000000"
+    letter-spacing="-4"
+  >huu</text>
+</svg>

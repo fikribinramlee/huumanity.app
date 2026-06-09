@@ -70,7 +70,7 @@ export default function AppVerifiedPage() {
           </p>
 
           <a
-            href="http://localhost:3000/editor"
+            href="huu://open"
             className="mt-8 inline-flex items-center gap-2 rounded-2xl border-2 border-black bg-[#fff700] px-12 py-5 text-xl font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
           >
             Open huumanity

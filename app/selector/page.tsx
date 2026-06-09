@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { isRephrashable } from "../lib/isRephrashable";
 
 const TONES = ["Humanize", "Unpolished", "Controversial", "Direct"] as const;
-const LOCAL_DESKTOP_API = "http://localhost:3000/api/humanize";
+const PRODUCTION_API = "https://huumanity.app/api/humanize";
 
 type PopupStage = "select" | "loading" | "result";
 
@@ -117,10 +117,9 @@ export default function SelectorPage() {
       return process.env.NEXT_PUBLIC_HUMANIZE_API_URL;
     }
 
-    // Packaged Tauri pages are served from an app-local origin, not the Next
-    // server. Local desktop testing can still use the dev API when it is open.
+    // Packaged Tauri app — always call the production API
     if (window.location.origin.includes("tauri")) {
-      return LOCAL_DESKTOP_API;
+      return PRODUCTION_API;
     }
 
     return "/api/humanize";

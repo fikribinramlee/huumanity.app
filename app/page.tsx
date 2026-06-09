@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { isRephrashable } from "./lib/isRephrashable";
+import { HuuLogo } from "./components/HuuLogo";
 
 // ---------- Constants ----------
 
@@ -857,11 +858,8 @@ export default function LandingPage() {
           }`}
         >
           {/* Logo — left */}
-          <a
-            href="#top"
-            className="font-display text-3xl text-black leading-none shrink-0 mr-8"
-          >
-            huu
+          <a href="#top" className="shrink-0 mr-8">
+            <HuuLogo className="text-3xl" />
           </a>
 
           {/* Nav links — center, flex-1 */}

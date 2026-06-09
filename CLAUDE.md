@@ -60,7 +60,7 @@ The product goal is a Wispr Flow–style universal desktop rewriter with Clerk a
 | `NEXT_PUBLIC_CLERK_SIGN_IN_URL` / `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | `/sign-in`, `/sign-up` |
 | `NEXT_PUBLIC_CLERK_*_FALLBACK_REDIRECT_URL` | redirect to `/download` after auth |
 | `NEXT_PUBLIC_DOWNLOAD_URL` | DMG URL for download page (e.g. `/downloads/huu-v0.1.0.dmg`) |
-| `NEXT_PUBLIC_HUMANIZE_API_URL` | desktop rewrite endpoint; `http://localhost:3000/api/humanize` for local testing, production URL when deployed |
+| `NEXT_PUBLIC_HUMANIZE_API_URL` | desktop rewrite endpoint; `https://huumanity.app/api/humanize` (production) or `http://localhost:3000/api/humanize` for local testing |
 
 ---
 

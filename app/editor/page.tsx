@@ -6,6 +6,7 @@ import { useUser, useClerk } from "@clerk/nextjs";
 import { ExternalRewritePanel } from "../components/ExternalRewritePanel";
 import { ScratchpadEditor } from "../components/ScratchpadEditor";
 import { isRephrashable } from "../lib/isRephrashable";
+import { HuuLogo } from "../components/HuuLogo";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,7 +102,7 @@ const NAV_ITEMS: { label: string; view: View; icon: React.ReactNode }[] = [
   { label: "Scratchpad", view: "scratchpad", icon: <IcScratchpad /> },
 ];
 
-const LOCAL_DESKTOP_API = "http://localhost:3000/api/humanize";
+const PRODUCTION_API = "https://huumanity.app/api/humanize";
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
@@ -149,7 +150,7 @@ export default function EditorPage() {
     if (process.env.NEXT_PUBLIC_HUMANIZE_API_URL)
       return process.env.NEXT_PUBLIC_HUMANIZE_API_URL;
     if (typeof window !== "undefined" && window.location.origin.includes("tauri"))
-      return LOCAL_DESKTOP_API;
+      return PRODUCTION_API;
     return "/api/humanize";
   }, []);
 
@@ -317,7 +318,7 @@ export default function EditorPage() {
       typeof window !== "undefined" &&
       window.location.origin.includes("tauri")
     ) {
-      return "http://localhost:3000/api/auth/status";
+      return "https://huumanity.app/api/auth/status";
     }
     return "/api/auth/status";
   };
@@ -337,7 +338,7 @@ export default function EditorPage() {
     const base =
       typeof window !== "undefined" && window.location.origin.includes("localhost")
         ? "http://localhost:3000"
-        : "https://huumanity.com";
+        : "https://huumanity.app";
     // After Clerk sign-in, redirect to the /app-verified confirmation page
     window.open(`${base}/sign-in?redirect_url=/app-verified`, "_blank");
     setBrowserOpened(true);
@@ -384,11 +385,8 @@ export default function EditorPage() {
         {/* Left panel — sign-in */}
         <div className="flex w-full flex-col justify-center px-10 sm:w-[46%]">
           {/* Logo */}
-          <div className="mb-10 flex items-center gap-2.5">
-            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-black text-lg text-[#fff700]">
-              ✦
-            </span>
-            <span className="font-display text-3xl leading-none">huu</span>
+          <div className="mb-10">
+            <HuuLogo className="text-4xl" />
           </div>
 
           <h1 className="font-display text-4xl sm:text-5xl leading-[1.1] text-black">
@@ -430,11 +428,11 @@ export default function EditorPage() {
             Don&apos;t have an account?{" "}
             <button
               onClick={() =>
-                window.open("https://huumanity.com/sign-up", "_blank")
+                window.open("https://huumanity.app/sign-up", "_blank")
               }
               className="font-bold text-black underline-offset-2 hover:underline"
             >
-              Sign up at huumanity.com
+              Sign up at huumanity.app
             </button>
           </p>
         </div>
@@ -547,8 +545,8 @@ export default function EditorPage() {
         {/* Logo + toggle */}
         <div className="flex h-14 shrink-0 items-center border-b border-black/[0.06] px-3">
           {sidebarOpen && (
-            <span className="font-display text-2xl leading-none pl-1 text-black">
-              huu
+            <span className="pl-1">
+              <HuuLogo className="text-2xl" />
             </span>
           )}
           <button
