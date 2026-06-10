@@ -125,11 +125,11 @@ export default function EditorPage() {
 
   // Subscription / usage
   const [subscription, setSubscription] = useState<SubscriptionStatus>({
-    plan: "free",
+    plan: process.env.NEXT_PUBLIC_TEST_PRO === "true" ? "pro" : "free",
     usageCount: 0,
     limit: 5,
-    unlimited: false,
-    remaining: 5,
+    unlimited: process.env.NEXT_PUBLIC_TEST_PRO === "true",
+    remaining: process.env.NEXT_PUBLIC_TEST_PRO === "true" ? null : 5,
   });
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -1391,7 +1391,13 @@ useEffect(() => {
                               onClick={() => void handleManageBilling()}
                               className="w-full rounded-xl border-2 border-black/20 py-3 text-sm font-bold text-black/60 transition hover:border-black hover:text-black"
                             >
-                              Manage billing
+                              Manage billing & invoices
+                            </button>
+                            <button
+                              onClick={() => void handleManageBilling()}
+                              className="w-full rounded-xl py-2.5 text-xs font-semibold text-black/40 transition hover:text-red-500"
+                            >
+                              Cancel subscription
                             </button>
                           </div>
                         ) : (
