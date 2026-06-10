@@ -905,7 +905,10 @@ useEffect(() => {
 
           /* ── SCRATCHPAD VIEW ── */
           <div className="p-8">
-            <ScratchpadEditor />
+            <ScratchpadEditor
+              limitReached={subscription.remaining === 0 && !subscription.unlimited}
+              onUpgradeRequired={() => { setSettingsTab("billing"); setSettingsOpen(true); }}
+            />
           </div>
 
         ) : !hasCompletedSetup ? (

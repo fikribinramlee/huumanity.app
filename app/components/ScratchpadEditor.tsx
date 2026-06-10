@@ -28,7 +28,14 @@ Would love to chat with you. I'm free this afternoon at 4pm if you're available,
 Best regards,
 Alex`;
 
-export function ScratchpadEditor() {
+interface ScratchpadEditorProps {
+  /** Called when the user hits the usage limit — parent opens upgrade modal */
+  onUpgradeRequired?: () => void;
+  /** Whether the user is out of rewrites */
+  limitReached?: boolean;
+}
+
+export function ScratchpadEditor({ onUpgradeRequired, limitReached = false }: ScratchpadEditorProps) {
   const [anchor, setAnchor] = useState<SelectionAnchor>(null);
   const [expanded, setExpanded] = useState(false);
   const [popupStage, setPopupStage] = useState<PopupStage>("select");
@@ -217,6 +224,10 @@ export function ScratchpadEditor() {
   };
 
   const toggleTone = (tone: string) => {
+    if (limitReached) {
+      onUpgradeRequired?.();
+      return;
+    }
     setSelectedTones((prev) =>
       prev.includes(tone) ? prev.filter((t) => t !== tone) : [...prev, tone]
     );
@@ -240,6 +251,13 @@ export function ScratchpadEditor() {
         body: JSON.stringify({ text, tones: selectedTones }),
       });
       const data = await res.json();
+      // Usage limit hit — open upgrade modal instead of showing raw error
+      if (data.error === "usage_limit_reached" || res.status === 429) {
+        setPopupStage("select");
+        closePopup();
+        onUpgradeRequired?.();
+        return;
+      }
       if (!res.ok || !data.result) throw new Error(data.error ?? "Could not rewrite this text.");
       setResultText(data.result);
       setGeneratedSignature(signature);
