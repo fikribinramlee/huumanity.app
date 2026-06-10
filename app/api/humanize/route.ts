@@ -256,7 +256,7 @@ export async function POST(req: NextRequest) {
             .join("\n\n")}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text. No explanation, no quotes, no preamble.`;
 
     const message = await client.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-sonnet-4-6",
       max_tokens: 1024,
       system: ANTI_AI_RULES,
       messages: [{ role: "user", content: userMessage }],
