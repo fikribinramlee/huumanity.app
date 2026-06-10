@@ -186,6 +186,8 @@ export default function EditorPage() {
   }, []);
 
   const fetchSubscription = useCallback(async () => {
+    // Skip real fetch when test mode is active — initial state already set to Pro
+    if (process.env.NEXT_PUBLIC_TEST_PRO === "true") return;
     try {
       const res = await fetch(`${apiBase()}/api/subscription/status`, {
         cache: "no-store",
@@ -1380,9 +1382,6 @@ useEffect(() => {
                           <li className="flex items-start gap-2.5">
                             <span className="mt-0.5 text-black font-black">✓</span>Unlimited rewrites
                           </li>
-                          <li className="flex items-start gap-2.5">
-                            <span className="mt-0.5 text-black font-black">✓</span>Priority support
-                          </li>
                         </ul>
 
                         {subscription.plan === "pro" ? (
@@ -1392,15 +1391,9 @@ useEffect(() => {
                             </div>
                             <button
                               onClick={() => void handleManageBilling()}
-                              className="w-full rounded-xl border-2 border-black/20 py-3 text-sm font-bold text-black/60 transition hover:border-black hover:text-black"
+                              className="w-full rounded-xl bg-black py-3 text-sm font-bold text-white transition hover:bg-neutral-800"
                             >
-                              Manage billing & invoices
-                            </button>
-                            <button
-                              onClick={() => void handleManageBilling()}
-                              className="w-full rounded-xl py-2.5 text-xs font-semibold text-black/40 transition hover:text-red-500"
-                            >
-                              Cancel subscription
+                              Manage billing &amp; invoices
                             </button>
                           </div>
                         ) : (
