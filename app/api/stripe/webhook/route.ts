@@ -43,13 +43,15 @@ export async function POST(req: NextRequest) {
           stripeCustomerId: session.customer as string,
           subscriptionId: sub.id,
           subscriptionStatus: sub.status,
+          cancelAtPeriodEnd: sub.cancel_at_period_end,
+          currentPeriodEnd: new Date((sub as any).current_period_end * 1000).toISOString().slice(0, 10),
         });
 
         console.log(`[webhook] Upgraded ${clerkUserId} to Pro`);
         break;
       }
 
-      // ── Subscription changed (renewal, payment failure, etc.) ─────────────
+      // ── Subscription changed (renewal, payment failure, cancellation) ─────
       case "customer.subscription.updated": {
         const sub = event.data.object as Stripe.Subscription;
         const clerkUserId = sub.metadata?.clerkUserId;
@@ -60,13 +62,15 @@ export async function POST(req: NextRequest) {
             stripeCustomerId: sub.customer as string,
             subscriptionId: sub.id,
             subscriptionStatus: sub.status,
+            cancelAtPeriodEnd: sub.cancel_at_period_end,
+            currentPeriodEnd: new Date((sub as any).current_period_end * 1000).toISOString().slice(0, 10),
           });
         } else {
           // past_due, paused, etc. — demote to free
           await downgradeUserToFree(clerkUserId, sub.id, sub.status);
         }
 
-        console.log(`[webhook] Subscription updated for ${clerkUserId}: ${sub.status}`);
+        console.log(`[webhook] Subscription updated for ${clerkUserId}: ${sub.status}, cancel_at_period_end: ${sub.cancel_at_period_end}`);
         break;
       }
 

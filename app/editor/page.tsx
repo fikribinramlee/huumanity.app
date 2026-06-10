@@ -21,6 +21,8 @@ type SubscriptionStatus = {
   limit: number;
   unlimited: boolean;
   remaining: number | null;
+  cancelAtPeriodEnd?: boolean;
+  currentPeriodEnd?: string | null;
 };
 
 type DesktopSelection = {
@@ -1354,6 +1356,24 @@ useEffect(() => {
                       </div>
                     )}
 
+                    {/* Cancellation notice */}
+                    {subscription.plan === "pro" && subscription.cancelAtPeriodEnd && subscription.currentPeriodEnd && (
+                      <div className="mb-6 flex items-start gap-3 rounded-2xl border border-orange-200 bg-orange-50 px-5 py-4">
+                        <span className="mt-0.5 text-orange-400">⚠</span>
+                        <p className="text-sm text-orange-800">
+                          Your Pro plan has been cancelled. You still have full access until{" "}
+                          <span className="font-bold">
+                            {new Date(subscription.currentPeriodEnd).toLocaleDateString("en-US", {
+                              month: "long",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
+                          , after which your account will revert to the free plan.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Plan cards */}
                     <div className="grid grid-cols-2 gap-4">
                       {/* Free card — dark */}
@@ -1416,7 +1436,7 @@ useEffect(() => {
                         {subscription.plan === "pro" ? (
                           <div className="mt-6 space-y-2">
                             <div className="w-full rounded-xl border-2 border-black/15 py-3 text-center text-sm font-black text-black/50">
-                              Active plan ✓
+                              {subscription.cancelAtPeriodEnd ? "Cancels soon" : "Active plan ✓"}
                             </div>
                             <button
                               onClick={() => void handleManageBilling()}

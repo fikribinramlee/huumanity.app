@@ -42,6 +42,8 @@ export async function GET() {
         limit: FREE_DAILY_LIMIT,
         unlimited: isPro,
         remaining: isPro ? null : Math.max(0, FREE_DAILY_LIMIT - usageCount),
+        cancelAtPeriodEnd: privateMeta.cancelAtPeriodEnd ?? false,
+        currentPeriodEnd: privateMeta.currentPeriodEnd ?? null,
       },
       { headers: CORS }
     );

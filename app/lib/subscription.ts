@@ -17,6 +17,8 @@ export type PrivateMeta = {
   subscriptionId?: string;
   subscriptionStatus?: string; // "active" | "canceled" | "past_due" | ...
   plan?: Plan;
+  cancelAtPeriodEnd?: boolean;   // true when user cancelled but period hasn't ended
+  currentPeriodEnd?: string;     // ISO date string, e.g. "2026-07-10"
 };
 
 export type PublicMeta = {
@@ -88,6 +90,8 @@ export async function upgradeUserToPro(
     stripeCustomerId: string;
     subscriptionId: string;
     subscriptionStatus: string;
+    cancelAtPeriodEnd?: boolean;
+    currentPeriodEnd?: string;
   }
 ): Promise<void> {
   const { clerk, privateMeta } = await getUserMeta(userId);
@@ -98,6 +102,8 @@ export async function upgradeUserToPro(
       subscriptionId: opts.subscriptionId,
       subscriptionStatus: opts.subscriptionStatus,
       plan: opts.subscriptionStatus === "active" ? "pro" : "free",
+      cancelAtPeriodEnd: opts.cancelAtPeriodEnd ?? false,
+      currentPeriodEnd: opts.currentPeriodEnd ?? null,
     },
     publicMetadata: {
       plan: opts.subscriptionStatus === "active" ? "pro" : "free",
