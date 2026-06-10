@@ -51,10 +51,16 @@ export default function JoinWaitlistPage() {
 
   return (
     <main className="huu-hero-card min-h-screen w-full flex flex-col items-center justify-center px-6 py-16 text-black">
-      <div className="w-full max-w-4xl flex flex-col items-center text-center">
-        {/* Headline — text-balance lets the browser split into two even lines */}
-        <h1 className="font-display text-5xl sm:text-6xl md:text-7xl leading-[1.05] tracking-tight text-balance">
-          The amount of AI slop out there rn is actually unbearable
+      <div className="w-full max-w-5xl flex flex-col items-center text-center">
+        {/* Headline — two explicit spans keep exactly two even lines at all sizes.
+            Each half is ~32 chars so they render symmetrically. Font scales
+            with viewport (clamp) so neither line ever wraps to a third. */}
+        <h1
+          className="font-display leading-[1.08] tracking-tight"
+          style={{ fontSize: "clamp(2rem, 4.2vw, 4.5rem)" }}
+        >
+          <span className="block">The amount of AI slop out there</span>
+          <span className="block">right now is actually unbearable</span>
         </h1>
 
         {/* Subheadline */}
