@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
       allow_promotion_codes: true,
-      success_url: `https://huumanity.app/payment-success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `https://huumanity.app/editor?upgraded=true`,
       cancel_url: `https://huumanity.app/editor`,
       metadata: { clerkUserId: userId },
       subscription_data: {

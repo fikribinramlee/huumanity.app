@@ -372,6 +372,35 @@ export default function EditorPage() {
     return () => window.clearInterval(id);
   }, [authState, fetchSubscription]);
 
+  // After a successful Stripe checkout, Stripe redirects to /editor?upgraded=true.
+  // Immediately show the Pro UI optimistically, then do a real fetch to confirm.
+  // Clean the query param from the URL so refreshing doesn't re-trigger.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("upgraded") !== "true") return;
+    // Optimistically flip to Pro
+    setSubscription({ plan: "pro", usageCount: 0, limit: 0, unlimited: true, remaining: null });
+    // Remove the query param cleanly
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, "", cleanUrl);
+    // Confirm with server once auth is ready (retry a few times)
+    let tries = 0;
+    const confirm = window.setInterval(async () => {
+      tries++;
+      try {
+        const res = await fetch(`${apiBase()}/api/subscription/status`, { cache: "no-store" });
+        if (!res.ok) return;
+        const data: SubscriptionStatus = await res.json();
+        if (data.plan === "pro") {
+          setSubscription(data);
+          window.clearInterval(confirm);
+        }
+      } catch { /* ignore */ }
+      if (tries >= 10) window.clearInterval(confirm); // give up after ~30s
+    }, 3000);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
 useEffect(() => {
     if (authState !== "app") return;
     const id = window.setInterval(() => void refreshSelectorHealth(), 3000);
