@@ -14,25 +14,11 @@ type Tab = (typeof TABS)[number];
 
 const TONES = ["Humanize", "Unpolished", "Controversial", "Direct"] as const;
 
+// Demo box starts empty for every tab — users paste their own text in to try it.
 const SAMPLES: Record<Tab, string> = {
-  Email: `Hey Dimitri,
-
-I am reaching out to introduce myself and explore potential synergies between our organizations. Based on my research, I believe there is significant value in connecting, and I would love to schedule a brief call at your earliest convenience to discuss how we might collaborate moving forward.
-
-Would love to chat with you. I'm free this afternoon at 4pm if you're available, or let me know what time works best for your schedule.
-
-Best regards,
-Alex`,
-
-  DMs: `Yo Shawn, I came across your profile and was thoroughly impressed by your professional accomplishments and the value you continue to deliver in your industry. I would love to connect and explore opportunities for mutual collaboration.
-
-Looking forward to engaging with your insightful content and hearing back from you at your earliest convenience.`,
-
-  Posts: `After conducting extensive research and analysis over the past several months, I am thrilled to share that AI is fundamentally transforming the way we approach productivity and workflow optimization.
-
-The implications of this technological revolution truly cannot be overstated.
-
-I will be sharing more in-depth insights in the coming days. Stay tuned for what promises to be an exciting thread.`,
+  Email: "",
+  DMs: "",
+  Posts: "",
 };
 
 const NAV_LINKS = [
@@ -220,6 +206,7 @@ function DownloadCtaContent({
 
 type SelectionAnchor = {
   tabTop: number;
+  tabLeft: number;
   popupTop: number;
   popupLeft: number;
   popupWidth: number;
@@ -230,7 +217,7 @@ type PopupStage = "select" | "loading" | "result" | "limit";
 const POPUP_MAX_WIDTH = 480;
 const POPUP_MIN_WIDTH = 280;
 const FREE_LIMIT = 8;
-const ANON_LIMIT = 5;
+const ANON_LIMIT = 7;
 const ANON_RESET_MS = 24 * 60 * 60 * 1000;
 const ANON_USAGE_KEY = "huu_anon_usage";
 
@@ -573,7 +560,13 @@ export default function LandingPage() {
       const relLeft      = rangeRect.left  - sectionRect.left;
       const relRight     = rangeRect.right - sectionRect.left;
       const relFirstTop  = firstRect.top   - sectionRect.top;
+      const relFirstLeft = firstRect.left  - sectionRect.left;
       const tabTop       = relFirstTop + firstRect.height / 2 - 18;
+      // Anchor the floating yellow button just LEFT of the first selected
+      // character (same UX as the Mac app), instead of pinning it to the
+      // section edge. Button is 36px wide; offset by 44px + clamp to 4px.
+      const BUTTON_OFFSET = 44;
+      const tabLeft      = Math.max(4, relFirstLeft - BUTTON_OFFSET);
 
       const popupWidth  = Math.max(POPUP_MIN_WIDTH, Math.min(POPUP_MAX_WIDTH, sectionWidth - 16));
       const rangeCenter = (relLeft + relRight) / 2;
@@ -581,7 +574,7 @@ export default function LandingPage() {
       const popupLeft   = Math.min(Math.max(8, desiredLeft), Math.max(8, sectionWidth - popupWidth - 8));
 
       savedRangeRef.current    = range.cloneRange();
-      pendingAnchorRef.current = { tabTop, popupTop: relFirstTop, popupLeft, popupWidth };
+      pendingAnchorRef.current = { tabTop, tabLeft, popupTop: relFirstTop, popupLeft, popupWidth };
 
       // Bug-fix: if popup is open, dismiss it so the user starts fresh
       if (expandedRef.current) {
@@ -1244,8 +1237,13 @@ export default function LandingPage() {
 
         <div className="max-w-3xl mx-auto">
 
-          {/* "Try it here" label above tab bar */}
-          <p className="text-center font-display text-2xl sm:text-3xl text-black mb-6">
+          {/* "Try it here" sub-headline — slightly smaller than the "People know
+              it's written by AI" H2 above (clamp 2rem→3.75rem), but still
+              large enough to read as a section headline of its own. */}
+          <p
+            className="text-center font-display text-black mb-6 leading-tight"
+            style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}
+          >
             Try it here
           </p>
 
@@ -1301,6 +1299,7 @@ export default function LandingPage() {
               contentEditable
               suppressContentEditableWarning
               spellCheck={false}
+              data-placeholder="Paste your text here to humanize it…"
               className="min-h-[380px] p-8 pt-12 sm:p-10 sm:pt-12 text-[15px] sm:text-base leading-7 text-neutral-700 whitespace-pre-wrap focus:outline-none font-sans"
               style={{ caretColor: BRAND }}
             >
@@ -1318,7 +1317,7 @@ export default function LandingPage() {
               className="absolute z-20 w-9 h-9 rounded-full bg-[#fff700] hover:brightness-95 border-2 border-black shadow-md flex items-center justify-center text-black"
               style={{
                 top: anchor.tabTop,
-                left: 4,
+                left: anchor.tabLeft,
                 animation: "huu-btn-fadein 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards",
               }}
               aria-label="Open rephrase options"

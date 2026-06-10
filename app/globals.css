@@ -35,10 +35,17 @@ body {
   outline: none;
 }
 
-/* Yellow selection only inside the website demo section */
-#demo ::selection {
-  background: #fff700;
-  color: #000000;
+/* Demo-section selection uses the OS default highlight color so it feels
+   native to whichever browser/OS the visitor is on. */
+
+/* Placeholder shown when the demo editor is empty. Uses the
+   [data-placeholder] attribute on the contentEditable div. Disappears the
+   instant the user types anything because :empty stops matching. */
+[contenteditable][data-placeholder]:empty::before {
+  content: attr(data-placeholder);
+  color: #9ca3af;
+  pointer-events: none;
+  display: block;
 }
 
 /* huu button fade-in pop */
