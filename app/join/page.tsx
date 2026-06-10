@@ -51,16 +51,14 @@ export default function JoinWaitlistPage() {
 
   return (
     <main className="huu-hero-card min-h-screen w-full flex flex-col items-center justify-center px-6 py-16 text-black">
-      <div className="w-full max-w-2xl flex flex-col items-center text-center">
-        {/* Headline — broken into two lines as requested */}
-        <h1 className="font-display text-4xl sm:text-5xl md:text-6xl leading-[1.05] tracking-tight">
-          The amount of AI slop out there
-          <br />
-          rn is actually unbearable
+      <div className="w-full max-w-4xl flex flex-col items-center text-center">
+        {/* Headline — text-balance lets the browser split into two even lines */}
+        <h1 className="font-display text-5xl sm:text-6xl md:text-7xl leading-[1.05] tracking-tight text-balance">
+          The amount of AI slop out there rn is actually unbearable
         </h1>
 
         {/* Subheadline */}
-        <p className="mt-6 max-w-xl text-base sm:text-lg leading-7 text-black/70">
+        <p className="mt-6 max-w-2xl text-base sm:text-lg leading-7 text-black/70">
           drop your email below to get early access to huumanity and be the
           first to sound human.
         </p>
@@ -68,7 +66,7 @@ export default function JoinWaitlistPage() {
         {/* Inline form — email input + yellow button.
             On success, the form is swapped for a confirmation message. */}
         {status === "success" ? (
-          <div className="mt-10 w-full max-w-xl px-6 py-5 rounded-2xl border-2 border-black bg-white/70 backdrop-blur shadow-[0_3px_0_rgba(0,0,0,0.18)]">
+          <div className="mt-10 w-full max-w-2xl px-6 py-5 rounded-2xl border-2 border-black bg-white/70 backdrop-blur shadow-[0_3px_0_rgba(0,0,0,0.18)]">
             <p className="font-display text-2xl sm:text-3xl text-black">
               You&rsquo;re on the list.
             </p>
@@ -79,7 +77,7 @@ export default function JoinWaitlistPage() {
         ) : (
           <form
             onSubmit={handleSubmit}
-            className="mt-10 w-full max-w-xl flex flex-col sm:flex-row items-stretch gap-3"
+            className="mt-10 w-full max-w-2xl flex flex-col sm:flex-row items-stretch gap-3"
             noValidate
           >
             <input
