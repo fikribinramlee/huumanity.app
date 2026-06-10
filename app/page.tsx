@@ -152,12 +152,6 @@ const PRICING = [
   },
 ];
 
-const FOOTER_LINKS: { title: string; links: string[] }[] = [
-  { title: "Product", links: ["Demo", "Pricing", "Changelog"] },
-  { title: "Use Cases", links: ["Outreach", "Posts", "Scripts"] },
-  { title: "Company", links: ["About", "Blog", "Contact"] },
-  { title: "Legal", links: ["Terms", "Privacy"] },
-];
 
 type DownloadPlatform = "macos" | "windows" | "linux";
 
@@ -1030,13 +1024,11 @@ export default function LandingPage() {
               </div>
 
               <h2 className="font-display text-4xl sm:text-5xl text-white leading-[1.05]">
-                Rephrase anything to sound human.{" "}
-                In under 2 seconds.
+                Select any text and pick any of the four tones
               </h2>
 
               <p className="font-sans text-white/55 text-base leading-7">
-                Select any text in your draft, a cold email, a LinkedIn DM, a post.
-                Pick a tone. huumanity rewrites it so it sounds like a real person wrote it.
+                Rephrase any AI text into four distinct human voices without leaving your tab
               </p>
 
               <div>
@@ -1227,8 +1219,7 @@ export default function LandingPage() {
             People know it&apos;s written by AI
           </h2>
           <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7 max-w-xl mx-auto mb-10">
-            huumanity turns your AI copy into writing that sounds like you.
-            Select any text, pick a tone, and accept.
+            The way AI writes is instantly recognizable. And it&apos;s quietly killing your replies, your engagement, and your credibility.
           </p>
           <div className="flex justify-center">
             <Link
@@ -1258,7 +1249,7 @@ export default function LandingPage() {
             className="text-center font-display text-black mb-6 leading-tight"
             style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}
           >
-            Try it here
+            Try huumanity Here
           </p>
 
           {/* Yellow tab bar + Paste yours button */}
@@ -1964,33 +1955,64 @@ export default function LandingPage() {
 
       {/* 9. FOOTER (black) */}
       <footer className="bg-black text-white">
-        <div className="w-full max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 sm:grid-cols-5 gap-8">
+        <div className="w-full max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 sm:grid-cols-4 gap-10">
+          {/* Brand */}
           <div className="col-span-2 sm:col-span-1">
-            <span className="font-display text-3xl text-[#fff700]">huu</span>
+            <HuuLogo className="text-3xl" />
             <p className="text-sm text-neutral-400 mt-3 max-w-[14rem]">
               Make your AI copy sound like you wrote it.
             </p>
           </div>
 
-          {FOOTER_LINKS.map((col) => (
-            <div key={col.title}>
-              <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
-                {col.title}
-              </h4>
-              <ul className="space-y-2">
-                {col.links.map((link) => (
-                  <li key={link}>
-                    <a
-                      href="#"
-                      className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors"
-                    >
-                      {link}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {/* Use Cases */}
+          <div>
+            <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
+              Use Cases
+            </h4>
+            <ul className="space-y-2">
+              {[
+                { label: "Anywhere", href: "#use-cases" },
+                { label: "Outreach", href: "#use-cases" },
+                { label: "Posts", href: "#use-cases" },
+                { label: "Scripts", href: "#use-cases" },
+              ].map(({ label, href }) => (
+                <li key={label}>
+                  <a href={href} className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors">
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Pricing */}
+          <div>
+            <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
+              Pricing
+            </h4>
+            <ul className="space-y-2">
+              <li>
+                <a href="#pricing" className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors">
+                  Free plan
+                </a>
+              </li>
+              <li>
+                <a href="#pricing" className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors">
+                  Pro — $10/mo
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          {/* How it works */}
+          <div>
+            <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
+              How it works
+            </h4>
+            <p className="text-sm text-neutral-400 leading-[1.7]">
+              Select any text anywhere on your screen. Pick from four tones: Humanize, Unpolished, Controversial, or Direct. huumanity rewrites it instantly. Accept, copy, or try again.
+            </p>
+          </div>
         </div>
 
         <div className="border-t border-white/10">
