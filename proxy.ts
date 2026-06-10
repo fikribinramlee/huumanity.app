@@ -9,6 +9,9 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/humanize(.*)",
+  "/api/stripe/webhook", // Stripe calls this — no user session
+  "/api/admin/(.*)",     // protected by x-admin-secret header, not Clerk
+  "/payment-success(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {
