@@ -76,11 +76,13 @@ export async function POST(req: NextRequest) {
         stripeCustomerId: customerId,
         subscriptionId: sub.id,
         subscriptionStatus: sub.status,
+        cancelAtPeriodEnd: sub.cancel_at_period_end,
+        currentPeriodEnd: new Date((sub as any).current_period_end * 1000).toISOString().slice(0, 10),
       });
       return NextResponse.json({
         success: true,
         result: "pro",
-        message: `Synced to Pro. Subscription ${sub.id} is active.`,
+        message: `Synced to Pro. Subscription ${sub.id} is active. Cancels at period end: ${sub.cancel_at_period_end}. Period ends: ${new Date((sub as any).current_period_end * 1000).toISOString().slice(0, 10)}.`,
       }, { headers: CORS });
     }
 
