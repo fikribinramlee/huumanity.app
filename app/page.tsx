@@ -303,6 +303,7 @@ export default function LandingPage() {
   const [isCustomMode, setIsCustomMode] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
   const savedRangeRef = useRef<Range | null>(null);
+  const activeSelTextRef = useRef<string>("");
   const editorRef = useRef<HTMLDivElement>(null);
   const demoSectionRef = useRef<HTMLDivElement>(null);
   const benefitSectionRef = useRef<HTMLElement>(null);
@@ -310,13 +311,12 @@ export default function LandingPage() {
   const featSectionRef = useRef<HTMLElement>(null);
   const featVizRef = useRef<HTMLDivElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
-  const popupStageRef    = useRef<PopupStage>("select");
   const expandedRef      = useRef(false);
   const showTimerRef     = useRef<number | null>(null);
 
-  // Keep the ref in sync so the global selectionchange listener can read the latest value.
-  useEffect(() => { popupStageRef.current = popupStage; }, [popupStage]);
-  useEffect(() => { expandedRef.current   = expanded;   }, [expanded]);
+  // Keep the ref in sync so the global selectionchange listener can read the
+  // latest "is the popup open?" value without re-subscribing the listener.
+  useEffect(() => { expandedRef.current = expanded; }, [expanded]);
 
   useEffect(() => {
     if (user?.publicMetadata?.usageCount !== undefined) {
@@ -581,83 +581,65 @@ export default function LandingPage() {
       };
     };
 
-    // Called when the user finishes a selection (mouse release or keyboard).
-    // Computes the anchor from the live selection and shows the button after a
-    // short delay so it doesn't flicker mid-drag.
-    const showButtonForSelection = () => {
-      if (expandedRef.current) return;
+    // Show / hide the floating button purely off `selectionchange`.
+    //
+    // Why selectionchange (and NOT mouseup): `mouseup` only fires for MOUSE
+    // selections on the desktop. It does NOT fire when a visitor selects text
+    // on a touch device (phone/tablet) using the native selection handles, so
+    // the button — and therefore the entire tone bar — never appeared for
+    // mobile users even though it worked on the developer's desktop. That was
+    // the "works for me, not for other people" bug.
+    //
+    // `selectionchange` fires for mouse, touch, AND keyboard selection on
+    // every modern browser, and is independent of event ordering (Windows
+    // fires it after mouseup, macOS before), so this single path behaves
+    // identically on every device.
+    const handleSelectionChange = () => {
       const result = computeAnchorFromSelection();
-      if (!result) return;
 
+      // Popup already open → a brand-new selection resets it back to the tone
+      // picker; an unchanged or cleared selection is left alone (the popup is
+      // closed by the outside-tap handler instead).
+      if (expandedRef.current) {
+        if (result && result.range.toString() !== activeSelTextRef.current) {
+          // Update the ref synchronously so logic below can proceed to show
+          // the button for the new selection without waiting for a re-render.
+          expandedRef.current = false;
+          setExpanded(false);
+          setPopupStage("select");
+          setSelectedTones([]);
+          setResultText("");
+          setGeneratedSignature("");
+        } else {
+          return;
+        }
+      }
+
+      // Selection cleared / not rephrasable → retract the pending button.
+      if (!result) {
+        clearShowTimer();
+        setAnchor(null);
+        activeSelTextRef.current = "";
+        return;
+      }
+
+      // Valid selection — remember it, save the range, and (re)schedule the
+      // button. The short debounce means the rapid selectionchange events
+      // fired during a drag keep resetting the timer, so the button only
+      // appears ~250ms after the selection settles (no mid-drag flicker).
+      activeSelTextRef.current = result.range.toString();
       savedRangeRef.current = result.range;
       clearShowTimer();
       const snapshot = result.anchor;
       showTimerRef.current = window.setTimeout(() => {
         setAnchor(snapshot);
         showTimerRef.current = null;
-      }, 300) as unknown as number;
-    };
-
-    // selectionchange: keep the UI in sync while a selection is in progress.
-    //  – Popup OPEN  + a new real selection inside the editor → dismiss popup.
-    //  – Popup CLOSED + selection collapsed/left the editor   → hide button.
-    // It never SHOWS the button itself (that's mouseup/keyup's job) so the
-    // behaviour is identical regardless of when this event fires.
-    const handleSelectionChange = () => {
-      const selection = window.getSelection();
-      const editor    = editorRef.current;
-
-      const hasRealSelection =
-        !!selection &&
-        !!editor &&
-        selection.rangeCount > 0 &&
-        !selection.getRangeAt(0).collapsed &&
-        selection.toString().trim().length > 0 &&
-        editor.contains(selection.getRangeAt(0).commonAncestorContainer);
-
-      if (expandedRef.current) {
-        // Starting a fresh selection while the popup is open resets it.
-        if (hasRealSelection) {
-          // Update the ref synchronously so the mouseup that follows this
-          // selection can immediately re-show the button (the ref-sync effect
-          // only runs on the next render, which is too late for mouseup).
-          expandedRef.current = false;
-          setExpanded(false);
-          setAnchor(null);
-          setPopupStage("select");
-          setSelectedTones([]);
-          setResultText("");
-          clearShowTimer();
-        }
-        return;
-      }
-
-      // Popup closed: if the selection went away, retract the pending button.
-      if (!hasRealSelection) {
-        clearShowTimer();
-        setAnchor(null);
-      }
-    };
-
-    // mouseup: user finished selecting with the mouse.
-    const handleMouseUp = () => {
-      showButtonForSelection();
-    };
-
-    // Keyboard selection (Shift+arrows, Ctrl/Cmd+A, etc.)
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.shiftKey || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a")) {
-        showButtonForSelection();
-      }
+      }, 250) as unknown as number;
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
-    document.addEventListener("mouseup",         handleMouseUp);
-    document.addEventListener("keyup",           handleKeyUp);
     return () => {
       document.removeEventListener("selectionchange", handleSelectionChange);
-      document.removeEventListener("mouseup",         handleMouseUp);
-      document.removeEventListener("keyup",           handleKeyUp);
       clearShowTimer();
     };
   }, []);
@@ -680,20 +662,20 @@ export default function LandingPage() {
   useEffect(() => {
     if (!expanded) return;
 
-    const handleMouseDown = (e: MouseEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
       if (popupRef.current?.contains(target)) return;
       if (editorRef.current?.contains(target)) return;
       closePopup();
     };
 
-    // Defer one tick so the click that opened the popup doesn't immediately close it.
+    // Defer one tick so the press that opened the popup doesn't immediately close it.
     const id = window.setTimeout(() => {
-      document.addEventListener("mousedown", handleMouseDown);
+      document.addEventListener("pointerdown", handlePointerDown);
     }, 0);
     return () => {
       window.clearTimeout(id);
-      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [expanded]);
 
@@ -1356,7 +1338,10 @@ export default function LandingPage() {
           {anchor && !expanded && (
             <button
               type="button"
-              onMouseDown={(e) => {
+              // pointerDown (not mouseDown) so a finger tap on touch devices
+              // opens the popup too — and preventDefault keeps the text
+              // selection intact when the button steals the press.
+              onPointerDown={(e) => {
                 e.preventDefault();
                 openPopup();
               }}
@@ -1394,7 +1379,9 @@ export default function LandingPage() {
                 width: anchor.popupWidth,
                 transform: "translateY(calc(-100% - 12px))",
               }}
-              onMouseDown={(e) => e.preventDefault()}
+              // Keep the underlying selection alive when interacting with the
+              // popup on both mouse and touch.
+              onPointerDown={(e) => e.preventDefault()}
             >
               <div className="relative bg-white rounded-2xl border-2 border-[#fff700] shadow-xl overflow-hidden transition-all">
                 {/* STAGE: LIMIT — Grammarly-style "out of rewrites" header bar */}
@@ -1735,7 +1722,7 @@ export default function LandingPage() {
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">they fail bc they have no clue how to find products that actually sell</p>
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">im in china rn and ive been talking to suppliers, manufacturers, ppl who are actually moving volume. and got all the info on whats working</p>
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">this weekend im doing a free mastermind on how to find winning products before everyone else catches on</p>
-                  <p className="text-white text-[15px] font-semibold leading-[1.35]">comment &ldquo;FREE&rdquo; and i'll send u the invite</p>
+                  <p className="text-white text-[15px] font-semibold leading-[1.35]">comment &ldquo;FREE&rdquo; and i&apos;ll send u the invite</p>
                 </div>
               )}
             </div>
