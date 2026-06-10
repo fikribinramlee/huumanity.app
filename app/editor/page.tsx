@@ -753,7 +753,7 @@ useEffect(() => {
                   Unlimited rewrites.
                 </p>
                 <button
-                  onClick={handleManageBilling}
+                  onClick={() => { setSettingsTab("billing"); setSettingsOpen(true); }}
                   className="mt-4 w-full rounded-xl border border-white/20 py-2.5 text-xs font-bold text-white/60 transition hover:border-white/40 hover:text-white"
                 >
                   Manage billing
