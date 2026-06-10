@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { isRephrashable } from "./lib/isRephrashable";
 import { HuuLogo } from "./components/HuuLogo";
 
@@ -199,7 +200,16 @@ function PlatformIcon({ platform }: { platform: DownloadPlatform }) {
   );
 }
 
-function DownloadCtaContent({ platform }: { platform: DownloadPlatform }) {
+function DownloadCtaContent({
+  platform,
+  waitlist,
+}: {
+  platform: DownloadPlatform;
+  waitlist?: boolean;
+}) {
+  if (waitlist) {
+    return <span>Join the Waitlist</span>;
+  }
   return (
     <>
       <PlatformIcon platform={platform} />
@@ -257,6 +267,14 @@ const BRAND = "#fff700";
 export default function LandingPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const downloadPlatform = detectDownloadPlatform();
+  // Waitlist mode — when this page is rendered at /waitlist, every
+  // download/sign-up CTA becomes "Join the Waitlist" and links to /sign-up
+  // (which renders Clerk's waitlist form when waitlist mode is enabled in
+  // the Clerk Dashboard). Same code, two routes, zero duplication.
+  const pathname = usePathname();
+  const isWaitlist = pathname?.startsWith("/waitlist") ?? false;
+  const primaryCtaHref = isWaitlist ? "/sign-up" : "/download";
+  const waitlistLabel = "Join the Waitlist";
   const [usageCount, setUsageCount] = useState<number>(0);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("Email");
@@ -831,11 +849,11 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col gap-3">
               <a
-                href="/download"
+                href={primaryCtaHref}
                 onClick={handleDismissLimitModal}
                 className="w-full px-6 py-3.5 text-base font-bold text-black bg-[#fff700] rounded-full hover:brightness-95 transition"
               >
-                Download the app
+                {isWaitlist ? waitlistLabel : "Download the app"}
               </a>
               <button
                 onClick={handleDismissLimitModal}
@@ -894,12 +912,19 @@ export default function LandingPage() {
 
           {/* Auth controls — right */}
           <div className="shrink-0 flex items-center gap-3">
-            {isLoaded && isSignedIn ? (
+            {isLoaded && isSignedIn && !isWaitlist ? (
               <a
                 href="/download"
                 className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
               >
                 <DownloadCtaContent platform={downloadPlatform} />
+              </a>
+            ) : isWaitlist ? (
+              <a
+                href={primaryCtaHref}
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+              >
+                <DownloadCtaContent platform={downloadPlatform} waitlist />
               </a>
             ) : (
               <>
@@ -931,12 +956,19 @@ export default function LandingPage() {
           </p>
 
           {/* Download CTA */}
-          {isLoaded && isSignedIn ? (
+          {isLoaded && isSignedIn && !isWaitlist ? (
             <a
               href="/download"
               className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
             >
               <DownloadCtaContent platform={downloadPlatform} />
+            </a>
+          ) : isWaitlist ? (
+            <a
+              href={primaryCtaHref}
+              className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+            >
+              <DownloadCtaContent platform={downloadPlatform} waitlist />
             </a>
           ) : (
             <SignUpButton mode="redirect" forceRedirectUrl="/download">
@@ -1000,10 +1032,10 @@ export default function LandingPage() {
 
               <div>
                 <Link
-                  href="/sign-up"
+                  href={isWaitlist ? primaryCtaHref : "/sign-up"}
                   className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
                 >
-                  Try it free
+                  {isWaitlist ? waitlistLabel : "Try it free"}
                 </Link>
               </div>
             </div>
@@ -1191,13 +1223,19 @@ export default function LandingPage() {
           </p>
           <div className="flex justify-center">
             <Link
-              href="/download"
+              href={primaryCtaHref}
               className="inline-flex items-center gap-2.5 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
             >
-              <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-              </svg>
-              Download for macOS
+              {isWaitlist ? (
+                <>{waitlistLabel}</>
+              ) : (
+                <>
+                  <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                    <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                  </svg>
+                  Download for macOS
+                </>
+              )}
             </Link>
           </div>
         </div>
@@ -1322,10 +1360,10 @@ export default function LandingPage() {
                       </span>
                     </span>
                     <a
-                      href="/download"
+                      href={primaryCtaHref}
                       className="shrink-0 px-3.5 py-1.5 text-[11px] font-bold text-black bg-[#fff700] rounded-full hover:brightness-95 transition whitespace-nowrap"
                     >
-                      Download the app
+                      {isWaitlist ? waitlistLabel : "Download the app"}
                     </a>
                   </div>
                 )}
@@ -1562,13 +1600,19 @@ export default function LandingPage() {
               </p>
               <div className="flex gap-3 mt-8 flex-wrap">
                 <Link
-                  href="/download"
+                  href={primaryCtaHref}
                   className="inline-flex items-center gap-2.5 rounded-xl border-2 border-white bg-white px-6 py-3 text-sm font-black text-black transition hover:brightness-95"
                 >
-                  <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                    <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-                  </svg>
-                  Download for macOS
+                  {isWaitlist ? (
+                    <>{waitlistLabel}</>
+                  ) : (
+                    <>
+                      <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                        <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                      </svg>
+                      Download for macOS
+                    </>
+                  )}
                 </Link>
                 <a
                   href="#pricing"
@@ -1736,13 +1780,19 @@ export default function LandingPage() {
                 Try free
               </Link>
               <Link
-                href="/download"
+                href={primaryCtaHref}
                 className="inline-flex items-center gap-2.5 rounded-xl border-2 border-black bg-[#fff700] px-6 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
               >
-                <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                  <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-                </svg>
-                Download for macOS
+                {isWaitlist ? (
+                  <>{waitlistLabel}</>
+                ) : (
+                  <>
+                    <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                      <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                    </svg>
+                    Download for macOS
+                  </>
+                )}
               </Link>
             </div>
           </div>
@@ -1843,14 +1893,14 @@ export default function LandingPage() {
                   </ul>
 
                   <Link
-                    href="/download"
+                    href={primaryCtaHref}
                     className={`block text-center px-4 py-3 text-sm font-bold rounded-full transition-colors ${
                       tier.accent
                         ? "bg-black text-[#fff700] hover:brightness-110"
                         : "bg-[#fff700] text-black hover:brightness-95"
                     }`}
                   >
-                    {tier.cta}
+                    {isWaitlist ? waitlistLabel : tier.cta}
                   </Link>
                 </div>
               );
@@ -1876,13 +1926,19 @@ export default function LandingPage() {
               Try it for free
             </Link>
             <Link
-              href="/download"
+              href={primaryCtaHref}
               className="inline-flex items-center gap-2.5 px-8 py-3.5 text-sm font-black text-black bg-transparent border-2 border-black rounded-xl shadow-[0_3px_0_rgba(0,0,0,0.18)] hover:bg-black/5 transition-colors"
             >
-              <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-              </svg>
-              Download
+              {isWaitlist ? (
+                <>{waitlistLabel}</>
+              ) : (
+                <>
+                  <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                    <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                  </svg>
+                  Download
+                </>
+              )}
             </Link>
           </div>
         </div>
