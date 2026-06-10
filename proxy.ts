@@ -3,6 +3,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 const isPublicRoute = createRouteMatcher([
   "/",
   "/waitlist",
+  "/join",            // custom waitlist signup page
   "/download",
   "/downloads(.*)",
   "/editor",
@@ -10,6 +11,7 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/humanize(.*)",
+  "/api/waitlist",    // public endpoint — uses CLERK_SECRET_KEY server-side
   "/api/stripe/webhook", // Stripe calls this — no user session
   "/api/admin/(.*)",     // protected by x-admin-secret header, not Clerk
   "/payment-success(.*)",

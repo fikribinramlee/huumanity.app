@@ -273,7 +273,9 @@ export default function LandingPage() {
   // the Clerk Dashboard). Same code, two routes, zero duplication.
   const pathname = usePathname();
   const isWaitlist = pathname?.startsWith("/waitlist") ?? false;
-  const primaryCtaHref = isWaitlist ? "/sign-up" : "/download";
+  // Waitlist CTAs go to our custom /join page (inline email capture) rather
+  // than Clerk's multi-step /sign-up form, so visitors can submit in one step.
+  const primaryCtaHref = isWaitlist ? "/join" : "/download";
   const waitlistLabel = "Join the Waitlist";
   const [usageCount, setUsageCount] = useState<number>(0);
   const [showLimitModal, setShowLimitModal] = useState(false);
