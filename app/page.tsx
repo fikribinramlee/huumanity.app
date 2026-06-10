@@ -312,7 +312,6 @@ export default function LandingPage() {
   const popupRef = useRef<HTMLDivElement>(null);
   const popupStageRef    = useRef<PopupStage>("select");
   const expandedRef      = useRef(false);
-  const pendingAnchorRef = useRef<SelectionAnchor>(null);
   const showTimerRef     = useRef<number | null>(null);
 
   // Keep the ref in sync so the global selectionchange listener can read the latest value.
@@ -521,20 +520,23 @@ export default function LandingPage() {
       }
     };
 
-    // selectionchange: validate + store pending position. Never shows button directly.
-    const handleSelectionChange = () => {
-      if (popupStageRef.current !== "select") return;
-
+    // Read the CURRENT selection, validate it against the rephrase rules, and
+    // return the floating-button geometry + a cloned range — or null when
+    // nothing rephrasable is selected.
+    //
+    // This is fully self-contained (does NOT rely on a value pre-populated by
+    // `selectionchange`). That matters cross-platform: Chrome/Edge/Firefox on
+    // Windows fire `selectionchange` AFTER `mouseup`, whereas WebKit/Chrome on
+    // macOS fire it before. Computing from the live selection at mouseup time
+    // works identically on every OS/browser.
+    const computeAnchorFromSelection = ():
+      | { anchor: NonNullable<SelectionAnchor>; range: Range }
+      | null => {
       const selection = window.getSelection();
       const editor    = editorRef.current;
       const section   = demoSectionRef.current;
 
-      if (!selection || !editor || !section || selection.rangeCount === 0) {
-        clearShowTimer();
-        pendingAnchorRef.current = null;
-        setAnchor(null);
-        return;
-      }
+      if (!selection || !editor || !section || selection.rangeCount === 0) return null;
 
       const range        = selection.getRangeAt(0);
       const selectedText = selection.toString();
@@ -544,25 +546,17 @@ export default function LandingPage() {
         selectedText.trim().length === 0 ||
         !editor.contains(range.commonAncestorContainer)
       ) {
-        clearShowTimer();
-        pendingAnchorRef.current = null;
-        setAnchor(null);
-        return;
+        return null;
       }
 
       // Smart gate — same ground rules as everywhere else
-      if (!isRephrashable(selectedText)) {
-        clearShowTimer();
-        pendingAnchorRef.current = null;
-        setAnchor(null);
-        return;
-      }
+      if (!isRephrashable(selectedText)) return null;
 
       const sectionRect  = section.getBoundingClientRect();
-      const sectionWidth = section.offsetWidth;
+      const sectionWidth  = section.offsetWidth;
 
       const rects = range.getClientRects();
-      if (rects.length === 0) { pendingAnchorRef.current = null; return; }
+      if (rects.length === 0) return null;
       const firstRect    = rects[0];
       const rangeRect    = range.getBoundingClientRect();
       const relLeft      = rangeRect.left  - sectionRect.left;
@@ -581,35 +575,79 @@ export default function LandingPage() {
       const desiredLeft = rangeCenter - popupWidth / 2;
       const popupLeft   = Math.min(Math.max(8, desiredLeft), Math.max(8, sectionWidth - popupWidth - 8));
 
-      savedRangeRef.current    = range.cloneRange();
-      pendingAnchorRef.current = { tabTop, tabLeft, popupTop: relFirstTop, popupLeft, popupWidth };
-
-      // Bug-fix: if popup is open, dismiss it so the user starts fresh
-      if (expandedRef.current) {
-        setExpanded(false);
-        setAnchor(null);
-        setPopupStage("select");
-        setSelectedTones([]);
-        setResultText("");
-        clearShowTimer();
-      }
+      return {
+        anchor: { tabTop, tabLeft, popupTop: relFirstTop, popupLeft, popupWidth },
+        range: range.cloneRange(),
+      };
     };
 
-    // mouseup: user finished selecting — now show the button after a short delay
-    const handleMouseUp = () => {
-      if (!pendingAnchorRef.current || expandedRef.current) return;
+    // Called when the user finishes a selection (mouse release or keyboard).
+    // Computes the anchor from the live selection and shows the button after a
+    // short delay so it doesn't flicker mid-drag.
+    const showButtonForSelection = () => {
+      if (expandedRef.current) return;
+      const result = computeAnchorFromSelection();
+      if (!result) return;
+
+      savedRangeRef.current = result.range;
       clearShowTimer();
-      const snapshot = pendingAnchorRef.current;
+      const snapshot = result.anchor;
       showTimerRef.current = window.setTimeout(() => {
         setAnchor(snapshot);
         showTimerRef.current = null;
-      }, 350) as unknown as number;
+      }, 300) as unknown as number;
     };
 
-    // Keyboard selection (Shift+arrows, Ctrl+A, etc.)
+    // selectionchange: keep the UI in sync while a selection is in progress.
+    //  – Popup OPEN  + a new real selection inside the editor → dismiss popup.
+    //  – Popup CLOSED + selection collapsed/left the editor   → hide button.
+    // It never SHOWS the button itself (that's mouseup/keyup's job) so the
+    // behaviour is identical regardless of when this event fires.
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      const editor    = editorRef.current;
+
+      const hasRealSelection =
+        !!selection &&
+        !!editor &&
+        selection.rangeCount > 0 &&
+        !selection.getRangeAt(0).collapsed &&
+        selection.toString().trim().length > 0 &&
+        editor.contains(selection.getRangeAt(0).commonAncestorContainer);
+
+      if (expandedRef.current) {
+        // Starting a fresh selection while the popup is open resets it.
+        if (hasRealSelection) {
+          // Update the ref synchronously so the mouseup that follows this
+          // selection can immediately re-show the button (the ref-sync effect
+          // only runs on the next render, which is too late for mouseup).
+          expandedRef.current = false;
+          setExpanded(false);
+          setAnchor(null);
+          setPopupStage("select");
+          setSelectedTones([]);
+          setResultText("");
+          clearShowTimer();
+        }
+        return;
+      }
+
+      // Popup closed: if the selection went away, retract the pending button.
+      if (!hasRealSelection) {
+        clearShowTimer();
+        setAnchor(null);
+      }
+    };
+
+    // mouseup: user finished selecting with the mouse.
+    const handleMouseUp = () => {
+      showButtonForSelection();
+    };
+
+    // Keyboard selection (Shift+arrows, Ctrl/Cmd+A, etc.)
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.shiftKey || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a")) {
-        handleMouseUp();
+        showButtonForSelection();
       }
     };
 
