@@ -105,16 +105,19 @@ const NAV_ITEMS: { label: string; view: View; icon: React.ReactNode }[] = [
   { label: "Scratchpad", view: "scratchpad", icon: <IcScratchpad /> },
 ];
 
-const PRODUCTION_API = "https://huumanity.app/api/humanize";
+// Detect the Tauri desktop shell. The desktop app now loads the live site
+// (huumanity.app/editor) directly, so it shares the website's origin and we can
+// no longer sniff `location.origin`. Tauri injects `__TAURI_INTERNALS__` into the
+// windows it controls, which is present in the desktop app but not a browser.
+function isTauriRuntime(): boolean {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
 export default function EditorPage() {
   // Auth
   const [authState, setAuthState] = useState<AuthState>("login");
-  const [browserOpened, setBrowserOpened] = useState(false);
-  const [authChecking, setAuthChecking] = useState(false);
-  const [authError, setAuthError] = useState("");
 
   // Clerk user (available once authState === "app")
   const { user, isLoaded: clerkLoaded } = useUser();
@@ -171,21 +174,15 @@ export default function EditorPage() {
 
   // ── Callbacks ──────────────────────────────────────────────────────────────
 
+  // The desktop app and the website now share an origin (huumanity.app in
+  // release, localhost in dev), so all API calls are same-origin and the Clerk
+  // session cookie is sent automatically. Relative paths are correct everywhere;
+  // NEXT_PUBLIC_HUMANIZE_API_URL stays as an explicit override if ever needed.
   const humanizeEndpoint = useCallback(() => {
-    if (process.env.NEXT_PUBLIC_HUMANIZE_API_URL)
-      return process.env.NEXT_PUBLIC_HUMANIZE_API_URL;
-    if (typeof window !== "undefined" && window.location.origin.includes("tauri"))
-      return PRODUCTION_API;
-    return "/api/humanize";
+    return process.env.NEXT_PUBLIC_HUMANIZE_API_URL ?? "/api/humanize";
   }, []);
 
-  const apiBase = useCallback(() => {
-    if (typeof window !== "undefined" && window.location.origin.includes("tauri"))
-      return "https://huumanity.app";
-    if (typeof window !== "undefined" && window.location.origin.includes("localhost"))
-      return "http://localhost:3000";
-    return "";
-  }, []);
+  const apiBase = useCallback(() => "", []);
 
   const fetchSubscription = useCallback(async () => {
     // Skip real fetch when test mode is active — initial state already set to Pro
@@ -205,8 +202,10 @@ export default function EditorPage() {
   const handleUpgradeClick = useCallback(async (priceType: "monthly" | "annual" = "monthly") => {
     setCheckoutLoading(true);
     setCheckoutError("");
-    // Open a blank tab immediately (before async work) so browsers don't block it as a popup
-    const tab = window.open("", "_blank");
+    const tauri = isTauriRuntime();
+    // On the website, open a blank tab synchronously so it isn't popup-blocked.
+    // In the desktop shell we navigate the app window itself instead.
+    const tab = tauri ? null : window.open("", "_blank");
     try {
       const priceId =
         priceType === "annual"
@@ -226,7 +225,16 @@ export default function EditorPage() {
         setCheckoutError(data.error ?? `Server error ${res.status}. Check that STRIPE_SECRET_KEY is set in Vercel.`);
         return;
       }
-      // Navigate the already-open tab to the Stripe checkout URL
+
+      if (tauri) {
+        // Navigate the app window to Stripe. After payment Stripe redirects to
+        // success_url (/editor?upgraded=true), landing back in the app where the
+        // `upgraded=true` effect flips to Pro and confirms with the server.
+        window.location.assign(data.url);
+        return;
+      }
+
+      // Website: navigate the already-open tab to the Stripe checkout URL
       tab!.location.href = data.url;
       // Poll for upgrade after payment
       const poll = window.setInterval(async () => {
@@ -483,79 +491,13 @@ useEffect(() => {
     setHasCompletedSetup(true);
   };
 
-  // Resolve the auth-status endpoint — works in both dev (localhost) and
-  // production Tauri (which talks to the same Next.js server).
-  const authStatusEndpoint = () => {
-    if (process.env.NEXT_PUBLIC_HUMANIZE_API_URL) {
-      // Derive base URL from the humanize endpoint
-      const base = process.env.NEXT_PUBLIC_HUMANIZE_API_URL.replace(
-        /\/api\/humanize.*$/,
-        ""
-      );
-      return `${base}/api/auth/status`;
-    }
-    if (
-      typeof window !== "undefined" &&
-      window.location.origin.includes("tauri")
-    ) {
-      return "https://huumanity.app/api/auth/status";
-    }
-    return "/api/auth/status";
-  };
-
-  const checkAuthStatus = useCallback(async (): Promise<boolean> => {
-    try {
-      const res = await fetch(authStatusEndpoint(), { cache: "no-store" });
-      const data = await res.json();
-      return data.authenticated === true;
-    } catch {
-      return false;
-    }
-  }, []);
-
   const handleSignIn = () => {
-    setAuthError("");
-    const base =
-      typeof window !== "undefined" && window.location.origin.includes("localhost")
-        ? "http://localhost:3000"
-        : "https://huumanity.app";
-    // After Clerk sign-in, redirect to the /app-verified confirmation page
-    window.open(`${base}/sign-in?redirect_url=/app-verified`, "_blank");
-    setBrowserOpened(true);
+    // Navigate the current window to Clerk sign-in. This is same-origin in both
+    // the website and the desktop shell, so the session cookie lands in the right
+    // cookie jar. After sign-in Clerk redirects back to /editor, where the
+    // `useUser()` effect resolves the session and flips to the app view.
+    window.location.assign("/sign-in?redirect_url=/editor");
   };
-
-  const handleConfirmSignIn = useCallback(async () => {
-    setAuthChecking(true);
-    setAuthError("");
-    try {
-      const ok = await checkAuthStatus();
-      if (ok) {
-        localStorage.setItem("huu_logged_in", "true");
-        setAuthState("app");
-      } else {
-        setAuthError(
-          "We couldn't verify your sign-in. Make sure you completed sign-in in the browser, then try again."
-        );
-      }
-    } finally {
-      setAuthChecking(false);
-    }
-  }, [checkAuthStatus]);
-
-  // Auto-poll for auth while the browser is open — advances automatically
-  // once the user finishes signing in without needing a manual button click.
-  useEffect(() => {
-    if (!browserOpened || authState !== "login") return;
-    const id = window.setInterval(async () => {
-      const ok = await checkAuthStatus();
-      if (ok) {
-        window.clearInterval(id);
-        localStorage.setItem("huu_logged_in", "true");
-        setAuthState("app");
-      }
-    }, 2000);
-    return () => window.clearInterval(id);
-  }, [browserOpened, authState, checkAuthStatus]);
 
   // ── Auth: Login screen ─────────────────────────────────────────────────────
 
@@ -581,38 +523,19 @@ useEffect(() => {
             onClick={handleSignIn}
             className="mt-8 flex w-full max-w-[340px] items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-black text-white transition hover:bg-neutral-900"
           >
-            Sign in via browser
+            Sign in
             <IcArrowUpRight />
           </button>
-
-          {browserOpened && (
-            <div className="mt-3 w-full max-w-[340px] space-y-2">
-              <div className="flex items-center gap-2 rounded-xl border border-black/10 px-4 py-3 text-xs text-neutral-500">
-                <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-[#fff700]" />
-                Waiting for sign-in in browser…
-              </div>
-              <button
-                onClick={handleConfirmSignIn}
-                disabled={authChecking}
-                className="w-full rounded-xl border-2 border-black/10 px-6 py-3.5 text-sm font-bold text-neutral-600 transition hover:border-black hover:text-black disabled:opacity-50"
-              >
-                {authChecking ? "Verifying…" : "I've signed in →"}
-              </button>
-              {authError && (
-                <p className="text-xs font-semibold text-red-600">{authError}</p>
-              )}
-            </div>
-          )}
 
           <p className="mt-6 text-xs text-neutral-400">
             Don&apos;t have an account?{" "}
             <button
               onClick={() =>
-                window.open("https://huumanity.app/sign-up", "_blank")
+                window.location.assign("/sign-up?redirect_url=/editor")
               }
               className="font-bold text-black underline-offset-2 hover:underline"
             >
-              Sign up at huumanity.app
+              Sign up
             </button>
           </p>
         </div>

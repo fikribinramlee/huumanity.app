@@ -73,6 +73,9 @@ pub fn run() {
             }
         })
         .setup(|app| {
+            // Rust owns window creation (the main window is no longer defined in
+            // tauri.conf.json) so we can pick the correct URL per build profile.
+            show_main_window(app.handle())?;
             ensure_selector_window(app.handle())?;
             start_selection_watcher(app.handle().clone());
 
@@ -331,11 +334,27 @@ fn is_rephrashable(text: &str) -> bool {
     letter_count as f64 / non_space.len() as f64 >= 0.50
 }
 
+/// Resolve the URL a Tauri window should load.
+///
+/// In a debug build we load from the local dev server / bundled export so the
+/// `npm run tauri:dev` workflow keeps working. In a release build we load the
+/// **live site** directly, so the desktop app is a thin native shell around
+/// `https://huumanity.app` — Clerk login, Pro status, billing and every future
+/// UI change work identically to the website with no rebuild required.
+fn webview_url(path: &str) -> WebviewUrl {
+    if cfg!(debug_assertions) {
+        WebviewUrl::App(path.into())
+    } else {
+        let full = format!("https://huumanity.app{path}");
+        WebviewUrl::External(full.parse().expect("valid huumanity.app url"))
+    }
+}
+
 fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
     let window = if let Some(window) = app.get_webview_window("main") {
         window
     } else {
-        WebviewWindowBuilder::new(app, "main", WebviewUrl::App("/editor".into()))
+        WebviewWindowBuilder::new(app, "main", webview_url("/editor"))
             .title("huumanity")
             .inner_size(1200.0, 800.0)
             .min_inner_size(900.0, 600.0)
@@ -396,7 +415,7 @@ fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow
         return Ok(window);
     }
 
-    WebviewWindowBuilder::new(app, "selector", WebviewUrl::App("/selector".into()))
+    WebviewWindowBuilder::new(app, "selector", webview_url("/selector"))
         .title("huu selector")
         .inner_size(48.0, 48.0)
         .decorations(false)
