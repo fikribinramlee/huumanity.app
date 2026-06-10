@@ -14,11 +14,25 @@ type Tab = (typeof TABS)[number];
 
 const TONES = ["Humanize", "Unpolished", "Controversial", "Direct"] as const;
 
-// Demo box starts empty for every tab — users paste their own text in to try it.
 const SAMPLES: Record<Tab, string> = {
-  Email: "",
-  DMs: "",
-  Posts: "",
+  Email: `Hey Dimitri,
+
+I am reaching out to introduce myself and explore potential synergies between our organizations. Based on my research, I believe there is significant value in connecting, and I would love to schedule a brief call at your earliest convenience to discuss how we might collaborate moving forward.
+
+Would love to chat with you. I'm free this afternoon at 4pm if you're available, or let me know what time works best for your schedule.
+
+Best regards,
+Alex`,
+
+  DMs: `Yo Shawn, I came across your profile and was thoroughly impressed by your professional accomplishments and the value you continue to deliver in your industry. I would love to connect and explore opportunities for mutual collaboration.
+
+Looking forward to engaging with your insightful content and hearing back from you at your earliest convenience.`,
+
+  Posts: `After conducting extensive research and analysis over the past several months, I am thrilled to share that AI is fundamentally transforming the way we approach productivity and workflow optimization.
+
+The implications of this technological revolution truly cannot be overstated.
+
+I will be sharing more in-depth insights in the coming days. Stay tuned for what promises to be an exciting thread.`,
 };
 
 const NAV_LINKS = [
@@ -1294,7 +1308,10 @@ export default function LandingPage() {
               <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
             </div>
             <div
-              key={activeTab}
+              // key includes isCustomMode so toggling "Paste yours" remounts
+              // the editor (which is how we swap between sample text and a
+              // blank box without React fighting contentEditable).
+              key={`${activeTab}-${isCustomMode ? "custom" : "sample"}`}
               ref={editorRef}
               contentEditable
               suppressContentEditableWarning
@@ -1303,7 +1320,7 @@ export default function LandingPage() {
               className="min-h-[380px] p-8 pt-12 sm:p-10 sm:pt-12 text-[15px] sm:text-base leading-7 text-neutral-700 whitespace-pre-wrap focus:outline-none font-sans"
               style={{ caretColor: BRAND }}
             >
-              {SAMPLES[activeTab]}
+              {isCustomMode ? "" : SAMPLES[activeTab]}
             </div>
           </div>
 
