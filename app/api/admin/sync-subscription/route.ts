@@ -1,8 +1,9 @@
 /**
  * POST /api/admin/sync-subscription
  *
- * One-time helper: looks up the signed-in user's Stripe subscription
- * and syncs their plan status to Clerk.
+ * Looks up the signed-in user's real Stripe subscription status and syncs
+ * their Clerk plan accordingly — upgrades to Pro if active, downgrades to
+ * Free if cancelled/no subscription found.
  *
  * Protected by ADMIN_SECRET header so only you can call it.
  * Safe to leave deployed — without the secret it's a 401.
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
     const stripe = getStripe();
     const { privateMeta } = await getUserMeta(userId);
 
-    // Try to find a subscription via stored customer ID, or search by email
+    // Find the Stripe customer — use stored ID or look up by email
     let customerId = privateMeta.stripeCustomerId;
     if (!customerId) {
       const clerk = await clerkClient();
@@ -52,47 +53,51 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // No Stripe customer at all → definitely free
     if (!customerId) {
-      return NextResponse.json(
-        { error: "No Stripe customer found for this account. Are you sure this user paid?" },
-        { status: 404, headers: CORS }
-      );
+      await downgradeUserToFree(userId, "", "no_customer");
+      return NextResponse.json({
+        success: true,
+        result: "free",
+        message: "No Stripe customer found — set to Free.",
+      }, { headers: CORS });
     }
 
-    // Get all active subscriptions for this customer
-    const subs = await stripe.subscriptions.list({
+    // Check for an active subscription
+    const activeSubs = await stripe.subscriptions.list({
       customer: customerId,
       status: "active",
       limit: 5,
     });
 
-    if (subs.data.length === 0) {
-      // No active sub — check if there's a cancelled/past_due one
-      const allSubs = await stripe.subscriptions.list({ customer: customerId, limit: 5 });
+    if (activeSubs.data.length > 0) {
+      const sub = activeSubs.data[0];
+      await upgradeUserToPro(userId, {
+        stripeCustomerId: customerId,
+        subscriptionId: sub.id,
+        subscriptionStatus: sub.status,
+      });
       return NextResponse.json({
-        message: "No active subscription found.",
-        customerId,
-        allSubscriptions: allSubs.data.map((s) => ({
-          id: s.id,
-          status: s.status,
-          currentPeriodEnd: new Date((s as any).current_period_end * 1000).toISOString(),
-        })),
+        success: true,
+        result: "pro",
+        message: `Synced to Pro. Subscription ${sub.id} is active.`,
       }, { headers: CORS });
     }
 
-    const activeSub = subs.data[0];
-    await upgradeUserToPro(userId, {
-      stripeCustomerId: customerId,
-      subscriptionId: activeSub.id,
-      subscriptionStatus: activeSub.status,
-    });
+    // No active sub — check if there's a cancelled one so we can record its ID
+    const allSubs = await stripe.subscriptions.list({ customer: customerId, limit: 5 });
+    const lastSub = allSubs.data[0];
+
+    await downgradeUserToFree(
+      userId,
+      lastSub?.id ?? "",
+      lastSub?.status ?? "canceled"
+    );
 
     return NextResponse.json({
       success: true,
-      message: `Synced! User ${userId} is now Pro.`,
-      subscriptionId: activeSub.id,
-      status: activeSub.status,
-      customerId,
+      result: "free",
+      message: `No active subscription found — set to Free. Last subscription status: ${lastSub?.status ?? "none"}.`,
     }, { headers: CORS });
 
   } catch (err) {
