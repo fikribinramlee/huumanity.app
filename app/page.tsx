@@ -369,13 +369,17 @@ function TutTweet({
           <span className="font-bold text-black">Alex Johnson</span>{" "}
           <span className="text-neutral-400">@alexjohnson · 2h</span>
         </p>
-        <p className="mt-1 text-[11px] leading-[1.6]">
+        {/* Reserved height fits the longest variant (the rewrite), so swapping
+            text never changes the card height — keeps all 3 columns aligned. */}
+        <p className="mt-1 text-[11px] leading-[1.6] min-h-[4.6rem]">
           {words.map((w, i) => {
             const on = i >= firstSelected;
             return (
               <span
                 key={i}
-                className={on ? "bg-[#cfe1ff] text-[#1d4ed8]" : "text-neutral-800"}
+                className={`transition-colors duration-200 ${
+                  on ? "bg-[#cfe1ff] text-[#1d4ed8]" : "text-neutral-800"
+                }`}
               >
                 {w}
                 {i < words.length - 1 ? " " : ""}
@@ -775,50 +779,50 @@ export default function LandingPage() {
     const loop = async (tok: { cancelled: boolean }) => {
       while (!tok.cancelled) {
         reset();
-        await sleep(700);
+        await sleep(1100);
         if (tok.cancelled) return;
 
         // ── COLUMN 1 — cursor selects the text, then clicks the huu button ──
         setC1Cursor("start");
-        await sleep(450);
+        await sleep(700);
         if (tok.cancelled) return;
         setC1Cursor("end"); // cursor glides bottom-right → top-left …
         for (let i = 1; i <= totalWords; i++) {
           setC1Sel(i); // … highlighting words from the last back to the first
-          await sleep(950 / totalWords);
+          await sleep(1900 / totalWords);
           if (tok.cancelled) return;
         }
-        await sleep(250);
+        await sleep(550);
         if (tok.cancelled) return;
         setC1Cursor("button");
         setC1Button(true);
-        await sleep(750);
+        await sleep(1100);
         if (tok.cancelled) return;
         setC1Bar(true); // click → tone bar fades in (as its own box above)
-        await sleep(1000);
+        await sleep(1500);
         if (tok.cancelled) return;
 
         // ── COLUMN 2 — pick Unpolished + Direct, click Enter, glide away ──
         setC2Cursor("unpolished");
-        await sleep(650);
+        await sleep(950);
         if (tok.cancelled) return;
         setC2Tone(1);
-        await sleep(550);
+        await sleep(750);
         if (tok.cancelled) return;
         setC2Cursor("direct");
-        await sleep(650);
+        await sleep(950);
         if (tok.cancelled) return;
         setC2Tone(2);
-        await sleep(550);
+        await sleep(750);
         if (tok.cancelled) return;
         setC2Cursor("enter");
-        await sleep(650);
+        await sleep(950);
         if (tok.cancelled) return;
         setC2Tone(3); // Enter clicked — stays yellow
-        await sleep(500);
+        await sleep(700);
         if (tok.cancelled) return;
         setC2Cursor("away"); // slide sideways to the right, then step 3 begins
-        await sleep(800);
+        await sleep(1100);
         if (tok.cancelled) return;
 
         // ── COLUMN 3 — shimmer 1.5s → result → accept → swap the tweet ──
@@ -826,16 +830,16 @@ export default function LandingPage() {
         await sleep(1500);
         if (tok.cancelled) return;
         setC3(2); // rewritten text + Back / Copy / Accept
-        await sleep(900);
+        await sleep(1200);
         if (tok.cancelled) return;
         setC3(3); // cursor glides onto Accept
-        await sleep(850);
+        await sleep(1200);
         if (tok.cancelled) return;
         setC3(4); // Accept clicked
-        await sleep(1000); // wait ~1s …
+        await sleep(1200); // wait ~1s …
         if (tok.cancelled) return;
         setC3(5); // … then the tweet holds the huumanity rewrite; popup fades
-        await sleep(2000); // hold, then loop
+        await sleep(2600); // hold, then loop
         if (tok.cancelled) return;
       }
     };
@@ -1656,17 +1660,21 @@ export default function LandingPage() {
         >
 
           {/* ── STEP 1 — Select a text ── */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3 mb-1">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3 mb-7">
               <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">1</span>
               <span className="font-display text-xl text-black">Select a text</span>
             </div>
-            {/* tone-bar box — its own card; fades in only after the huu button click */}
-            <div
-              className="rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit transition-all duration-500"
-              style={{ opacity: c1Bar ? 1 : 0, transform: c1Bar ? "translateY(0)" : "translateY(8px)" }}
-            >
-              <ToneBar />
+            {/* fixed-height top slot keeps the tone-bar / result boxes on one
+                line across all three columns and the tweet boxes parallel */}
+            <div className="h-[96px] mb-5">
+              {/* tone-bar box — its own card; fades in only after the huu click */}
+              <div
+                className="rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit transition-all duration-700 ease-out"
+                style={{ opacity: c1Bar ? 1 : 0, transform: c1Bar ? "translateY(0)" : "translateY(8px)" }}
+              >
+                <ToneBar />
+              </div>
             </div>
             {/* tweet box — its own card; cursor selects the text then clicks huu */}
             <div className="relative rounded-xl border border-black/10 bg-white shadow-sm p-4">
@@ -1687,26 +1695,28 @@ export default function LandingPage() {
           </div>
 
           {/* ── STEP 2 — Pick a tone(s) ── */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3 mb-1">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3 mb-7">
               <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">2</span>
               <span className="font-display text-xl text-black">Pick a tone(s)</span>
             </div>
-            {/* tone-bar box — Unpolished → Direct light up, Enter clicks; cursor lives here */}
-            <div className="relative rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit">
-              <ToneBar unpolished={c2Tone >= 1} direct={c2Tone >= 2} enter={c2Tone >= 3} />
-              <TutCursor
-                visible={c2Cursor !== "hidden" && c2Cursor !== "away"}
-                style={
-                  c2Cursor === "unpolished"
-                    ? { left: "30%", top: "52%" }
-                    : c2Cursor === "direct"
-                      ? { left: "72%", top: "52%" }
-                      : c2Cursor === "enter"
-                        ? { left: "90%", top: "52%" }
-                        : { left: "120%", top: "52%" }
-                }
-              />
+            <div className="h-[96px] mb-5">
+              {/* tone-bar box — Unpolished → Direct light up, Enter clicks; cursor lives here */}
+              <div className="relative rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit">
+                <ToneBar unpolished={c2Tone >= 1} direct={c2Tone >= 2} enter={c2Tone >= 3} />
+                <TutCursor
+                  visible={c2Cursor !== "hidden" && c2Cursor !== "away"}
+                  style={
+                    c2Cursor === "unpolished"
+                      ? { left: "30%", top: "52%" }
+                      : c2Cursor === "direct"
+                        ? { left: "72%", top: "52%" }
+                        : c2Cursor === "enter"
+                          ? { left: "90%", top: "52%" }
+                          : { left: "120%", top: "52%" }
+                  }
+                />
+              </div>
             </div>
             {/* tweet box — fully selected, waiting for the rewrite */}
             <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
@@ -1715,57 +1725,61 @@ export default function LandingPage() {
           </div>
 
           {/* ── STEP 3 — Accept the rewrite ── */}
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3 mb-1">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-3 mb-7">
               <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">3</span>
               <span className="font-display text-xl text-black">Accept the rewrite</span>
             </div>
-            {/* result box — its own card; shimmer → rewrite → cursor clicks Accept → fades */}
-            <div
-              className="relative rounded-xl border-2 border-[#fff700] bg-white p-3 shadow-[0_3px_14px_rgba(255,247,0,0.22)] transition-all duration-500"
-              style={{
-                opacity: c3 >= 1 && c3 < 5 ? 1 : 0,
-                transform: c3 >= 1 && c3 < 5 ? "translateY(0)" : "translateY(8px)",
-              }}
-            >
-              <div className="min-h-[108px] flex flex-col justify-between">
-                {c3 >= 2 ? (
-                  <>
-                    <p className="text-[9px] leading-[1.65] text-neutral-800">{TUT_REWRITTEN}</p>
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">Back</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="flex items-center gap-0.5 text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">
-                          <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                          </svg>
-                          Copy
-                        </span>
-                        <span
-                          className={`text-[8px] font-bold px-2 py-0.5 rounded-full bg-[#fff700] border border-black text-black transition-transform duration-200 ${
-                            c3 >= 4 ? "scale-90" : ""
-                          }`}
-                        >
-                          Accept
-                        </span>
+            <div className="h-[96px] mb-5">
+              {/* result box — its own card, sized to its content (no stretch, so
+                  no dead white space inside); shimmer → rewrite → cursor clicks
+                  Accept → fades. Top-aligned in the slot, so it lines up with
+                  the tone bars in columns 1 & 2. */}
+              <div
+                className="relative rounded-xl border-2 border-[#fff700] bg-white p-3 shadow-[0_3px_14px_rgba(255,247,0,0.22)] transition-all duration-700 ease-out"
+                style={{
+                  opacity: c3 >= 1 && c3 < 5 ? 1 : 0,
+                  transform: c3 >= 1 && c3 < 5 ? "translateY(0)" : "translateY(8px)",
+                }}
+              >
+                <div>
+                  {c3 >= 2 ? (
+                    <>
+                      <p className="text-[9px] leading-[1.6] text-neutral-800">{TUT_REWRITTEN}</p>
+                      <div className="mt-2.5 flex items-center justify-between">
+                        <span className="text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">Back</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-0.5 text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">
+                            <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                            Copy
+                          </span>
+                          <span
+                            className={`text-[8px] font-bold px-2 py-0.5 rounded-full bg-[#fff700] border border-black text-black transition-transform duration-200 ${
+                              c3 >= 4 ? "scale-90" : ""
+                            }`}
+                          >
+                            Accept
+                          </span>
+                        </div>
                       </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2 py-0.5">
+                      <div className="h-1.5 rounded-full huu-shimmer w-full" />
+                      <div className="h-1.5 rounded-full huu-shimmer w-11/12" />
+                      <div className="h-1.5 rounded-full huu-shimmer w-4/5" />
+                      <div className="h-1.5 rounded-full huu-shimmer w-2/3" />
                     </div>
-                  </>
-                ) : (
-                  <div className="space-y-2 py-1">
-                    <div className="h-1.5 rounded-full huu-shimmer w-full" />
-                    <div className="h-1.5 rounded-full huu-shimmer w-11/12" />
-                    <div className="h-1.5 rounded-full huu-shimmer w-4/5" />
-                    <div className="h-1.5 rounded-full huu-shimmer w-full" />
-                    <div className="h-1.5 rounded-full huu-shimmer w-2/3" />
-                  </div>
-                )}
+                  )}
+                </div>
+                <TutCursor
+                  visible={c3 >= 2 && c3 < 5}
+                  style={c3 >= 3 ? { right: "6%", bottom: "-16px" } : { right: "45%", bottom: "-26px" }}
+                />
               </div>
-              <TutCursor
-                visible={c3 >= 2 && c3 < 5}
-                style={c3 >= 3 ? { right: "6%", bottom: "8%" } : { right: "45%", bottom: "-18px" }}
-              />
             </div>
             {/* tweet box — holds the original until Accept, then the rewrite */}
             <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
