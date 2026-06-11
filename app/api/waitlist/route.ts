@@ -64,15 +64,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true, alreadyOnList: true });
     }
 
-    // Waitlist mode not enabled in Clerk Dashboard.
+    // Waitlist mode is OFF in Clerk Dashboard (main site is in normal
+    // public sign-up mode). The /join page becomes a soft marketing
+    // capture in this state — log the email so it's recoverable from
+    // Vercel logs, and tell the visitor they're on the list. Keeps /join
+    // functional during the post-waitlist transition without forcing
+    // waitlist mode back on.
     if (code === "waitlist_not_enabled" || code === "feature_requires_waitlist") {
-      console.error(
-        "[/api/waitlist] Waitlist mode is not enabled in the Clerk Dashboard."
+      console.log(
+        `[/api/waitlist] waitlist-mode-off — captured email: ${trimmed}`
       );
-      return NextResponse.json(
-        { error: "Waitlist is not active yet. Try again soon." },
-        { status: 503 }
-      );
+      return NextResponse.json({ ok: true, alreadyOnList: false });
     }
 
     console.error("[/api/waitlist] Clerk rejected entry", {
