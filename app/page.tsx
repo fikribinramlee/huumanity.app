@@ -374,8 +374,12 @@ export default function LandingPage() {
   const rightColumnRef = useRef<HTMLDivElement>(null);
   const featSectionRef = useRef<HTMLElement>(null);
   const featVizRef = useRef<HTMLDivElement>(null);
-  const tryCircleWrapRef = useRef<HTMLSpanElement>(null);
-  const tryCirclePathRef = useRef<SVGPathElement>(null);
+  const tryUnderlineWrapRef = useRef<HTMLSpanElement>(null);
+  const tryUnderlinePathRef = useRef<SVGPathElement>(null);
+  const demoBoxWrapRef = useRef<HTMLDivElement>(null);
+  const demoArrowsRef = useRef<HTMLDivElement>(null);
+  const leftArrowPathRef = useRef<SVGPathElement>(null);
+  const rightArrowPathRef = useRef<SVGPathElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const expandedRef      = useRef(false);
   const showTimerRef     = useRef<number | null>(null);
@@ -409,10 +413,12 @@ export default function LandingPage() {
     const el = benefitSectionRef.current;
     if (!el) return;
     return attachScrollScrub(el, 10000, (T) => {
-      setCursorVisible(T >= 600 && T < 7900);
-      setCursorExiting(T >= 7900 && T < 8600);
+      // Cursor stays parked on the Enter button after the click; Enter keeps
+      // its yellow "clicked" state for the rest of the timeline.
+      setCursorVisible(T >= 600);
+      setCursorExiting(false);
       setCursorPos(T >= 6500 ? 3 : T >= 5000 ? 2 : T >= 3400 ? 1 : 0);
-      setArrowFlash(T >= 7300 && T < 7900);
+      setArrowFlash(T >= 7300);
       setAnimStep(
         T >= 9500 ? 7
         : T >= 8500 ? 6
@@ -497,27 +503,52 @@ export default function LandingPage() {
     return () => window.removeEventListener("resize", compute);
   }, []);
 
-  // Hand-drawn circle around "Try huumanity Here" — the stroke sketches
+  // Hand-drawn underline beneath "Try huumanity Here" — the stroke sketches
   // itself in sync with the scroll (drawing on the way down, erasing in
   // reverse on the way up). Writes stroke-dashoffset straight to the DOM so
-  // it stays perfectly smooth without re-rendering React on every frame.
+  // it stays smooth without re-rendering React every frame.
   useEffect(() => {
-    const el = tryCircleWrapRef.current;
-    const path = tryCirclePathRef.current;
+    const el = tryUnderlineWrapRef.current;
+    const path = tryUnderlinePathRef.current;
     if (!el || !path) return;
     const len = path.getTotalLength();
     path.style.strokeDasharray = `${len}`;
     path.style.strokeDashoffset = `${len}`;
-    // gain 1.7 → the loop is fully closed around the whole headline by the
-    // time the line reaches roughly the middle of the screen (and stays
-    // complete past it). Scrolling back up erases it in reverse.
+    // gain 2 → fully underlined by the time the headline is roughly halfway
+    // up the screen, then holds. Scrolling back up erases it.
     return attachScrollScrub(
       el,
       1,
       (t) => {
         path.style.strokeDashoffset = `${len * (1 - t)}`;
       },
-      1.7
+      2
+    );
+  }, []);
+
+  // Two hand-drawn arrows that curve from beside the "Try huumanity Here"
+  // headline down to the demo box, drawing/erasing with the scroll. Tied to
+  // the box position: the arrows finish landing on the box as it comes fully
+  // onto the screen, and retract as you scroll back up past the demo.
+  useEffect(() => {
+    const el = demoBoxWrapRef.current;
+    const left = leftArrowPathRef.current;
+    const right = rightArrowPathRef.current;
+    if (!el || !left || !right) return;
+    const lLen = left.getTotalLength();
+    const rLen = right.getTotalLength();
+    left.style.strokeDasharray = `${lLen}`;
+    right.style.strokeDasharray = `${rLen}`;
+    left.style.strokeDashoffset = `${lLen}`;
+    right.style.strokeDashoffset = `${rLen}`;
+    return attachScrollScrub(
+      el,
+      1,
+      (t) => {
+        left.style.strokeDashoffset = `${lLen * (1 - t)}`;
+        right.style.strokeDashoffset = `${rLen * (1 - t)}`;
+      },
+      1.25
     );
   }, []);
 
@@ -1245,22 +1276,34 @@ export default function LandingPage() {
                 <div className="flex items-center gap-1.5 mb-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#fff700]" aria-hidden="true" />
                   <span className="font-sans text-[10px] uppercase tracking-wider font-semibold text-neutral-400">
-                    Rewritten by huu
+                    Rewritten by huumanity
                   </span>
                 </div>
                 <p className="font-sans text-[12px] leading-[1.75] text-neutral-800 whitespace-pre-line">
                   {`Dimitri, we haven't met but I'm gonna skip the networking bullshit and just say it.\n\nI'm Andrea from Acme. We run Meta ads for people across Asia who actually know what they're doing. If your calendar isn't full, that's a problem we fix. 10 extra booked calls, not leads that ghost you, actual calls with people who show up.`}
                 </p>
+                {/* Back on the left; Copy (icon) + Accept grouped on the right. */}
                 <div
-                  className="flex gap-2 mt-3"
+                  className="flex items-center justify-between gap-2 mt-3"
                   style={{
                     opacity: animStep >= 7 ? 1 : 0,
                     transition: "opacity 0.5s ease-out",
                   }}
                 >
                   <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Back</button>
-                  <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Copy</button>
-                  <button className="bg-[#fff700] text-black font-sans text-xs font-bold rounded-full px-4 py-1.5 border border-black">Accept</button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      aria-label="Copy"
+                      className="flex items-center gap-1 bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-3 py-1.5"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      Copy
+                    </button>
+                    <button className="bg-[#fff700] text-black font-sans text-xs font-bold rounded-full px-4 py-1.5 border border-black">Accept</button>
+                  </div>
                 </div>
               </div>
 
@@ -1309,12 +1352,16 @@ export default function LandingPage() {
 
         <div className="max-w-3xl mx-auto">
 
-          {/* "Try huumanity Here" sub-headline with a hand-drawn circle that
-              sketches itself around the words as you scroll down (and erases
-              itself scrolling back up). Same handwritten pen as the hero
-              annotation (neutral-400, loose stroke). */}
+          {/* Funnel region: headline + tabs + box, with two hand-drawn arrows
+              overlaid that curve from beside the headline down onto the box. */}
+          <div ref={demoArrowsRef} className="relative">
+
+          {/* "Try huumanity Here" sub-headline with a bold hand-drawn underline
+              that sketches itself beneath the words as you scroll down (and
+              erases scrolling back up). Same handwritten pen as the hero
+              annotation (neutral-400), but thicker. */}
           <p className="text-center mb-10 mt-2">
-            <span ref={tryCircleWrapRef} className="relative inline-block px-4 py-1">
+            <span ref={tryUnderlineWrapRef} className="relative inline-block px-2 pb-3">
               <span
                 className="relative z-10 font-display text-black leading-tight"
                 style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}
@@ -1323,22 +1370,19 @@ export default function LandingPage() {
               </span>
               <svg
                 className="absolute pointer-events-none"
-                style={{ left: "-8%", top: "-55%", width: "116%", height: "210%" }}
-                viewBox="0 0 320 120"
+                style={{ left: "-2%", bottom: "-6%", width: "104%", height: "42%" }}
+                viewBox="0 0 600 48"
                 preserveAspectRatio="none"
                 aria-hidden="true"
               >
-                {/* One loose, slightly overlapping loop — like someone circled
-                    the words by hand. Full closed loop so the finished state
-                    wraps the entire headline; drawn via stroke-dashoffset
-                    scrubbing (no non-scaling-stroke, so the reveal length
-                    matches getTotalLength under the stretched viewBox). */}
+                {/* Loose, slightly wavy underline — one stroke, drawn via
+                    stroke-dashoffset scrubbing. */}
                 <path
-                  ref={tryCirclePathRef}
-                  d="M 150 12 C 244 6, 314 26, 311 60 C 308 95, 232 114, 150 111 C 66 108, 7 91, 9 57 C 11 23, 92 7, 198 13"
+                  ref={tryUnderlinePathRef}
+                  d="M 10 30 C 130 16, 250 40, 370 26 C 470 15, 545 36, 592 24"
                   fill="none"
-                  stroke="#a3a3a3"
-                  strokeWidth="2"
+                  stroke="#9ca3af"
+                  strokeWidth="11"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                 />
@@ -1386,7 +1430,7 @@ export default function LandingPage() {
           </p>
 
           {/* Editable demo box */}
-          <div className="relative rounded-3xl bg-white border-2 border-black shadow-[0_8px_0_rgba(0,0,0,0.08)]">
+          <div ref={demoBoxWrapRef} className="relative rounded-3xl bg-white border-2 border-black shadow-[0_8px_0_rgba(0,0,0,0.08)] z-10">
             <div className="absolute top-4 left-5 flex gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
               <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
@@ -1407,6 +1451,38 @@ export default function LandingPage() {
             >
               {isCustomMode ? "" : SAMPLES[activeTab]}
             </div>
+          </div>
+
+          {/* Two hand-drawn arrows funnelling down from beside the headline
+              onto the demo box. Drawn via stroke-dashoffset scrubbing, tied to
+              the box entering the screen; pointer-events-none so the tabs/box
+              stay clickable. Sits behind the box (z-0 vs the box's z-10). */}
+          <svg
+            className="absolute inset-0 w-full h-full overflow-visible pointer-events-none z-0"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            <path
+              ref={leftArrowPathRef}
+              d="M 23 6 C 7 14, 5 26, 17 33 M 17 33 L 10 28 M 17 33 L 23 27"
+              fill="none"
+              stroke="#9ca3af"
+              strokeWidth="0.55"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              ref={rightArrowPathRef}
+              d="M 77 6 C 93 14, 95 26, 83 33 M 83 33 L 90 28 M 83 33 L 77 27"
+              fill="none"
+              stroke="#9ca3af"
+              strokeWidth="0.55"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+
           </div>
 
           {anchor && !expanded && (
