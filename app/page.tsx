@@ -35,6 +35,12 @@ The implications of this technological revolution truly cannot be overstated.
 I will be sharing more in-depth insights in the coming days. Stay tuned for what promises to be an exciting thread.`,
 };
 
+// 3-step tutorial visualization — the Twitter post being rewritten.
+const TUT_ORIGINAL =
+  "AI content is flooding every platform. Authenticity is now the key differentiator. Leverage human creativity to craft narratives that truly resonate.";
+const TUT_REWRITTEN =
+  "every platform is drowning in AI slop rn and honestly the only thing that actually cuts through is real human creativity, like stuff that actually sounds like a person wrote it bc they meant it";
+
 const NAV_LINKS = [
   { href: "#benefit", label: "How it Works" },
   { href: "#demo", label: "Demo" },
@@ -323,6 +329,86 @@ function attachScrollScrub(
   };
 }
 
+// ---------- 3-step tutorial: mini tweet card ----------
+
+/**
+ * Tiny Twitter-post mockup used by the 3-step "how it works" visualization
+ * under the demo headline. `selected` paints the tweet text with the blue
+ * selection highlight; `huuButton` pops the little yellow selector button in.
+ */
+function TutTweet({
+  text,
+  selected = false,
+  huuButton = false,
+}: {
+  text: string;
+  selected?: boolean;
+  huuButton?: boolean;
+}) {
+  return (
+    <div className="relative">
+      {huuButton && (
+        <span
+          className="absolute -left-1.5 -top-1.5 z-10 w-5 h-5 rounded-full bg-[#fff700] border border-black shadow flex items-center justify-center"
+          style={{ animation: "huu-btn-fadein 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
+          aria-hidden="true"
+        >
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" />
+          </svg>
+        </span>
+      )}
+      <div className="flex gap-2.5">
+        <span className="w-8 h-8 rounded-full bg-neutral-200 shrink-0" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[11px] leading-tight">
+            <span className="font-bold text-black">Alex Johnson</span>{" "}
+            <span className="text-neutral-400">@alexjohnson · 2h</span>
+          </p>
+          <p
+            className={`mt-1 text-[11px] leading-[1.55] transition-colors duration-300 ${
+              selected ? "bg-[#cfe1ff] text-[#1d4ed8]" : "text-neutral-800"
+            }`}
+          >
+            {text}
+          </p>
+          <div className="mt-2.5 flex items-center gap-5 text-neutral-400">
+            <span className="flex items-center gap-1 text-[9px]">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+              24
+            </span>
+            <span className="flex items-center gap-1 text-[9px]">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="17 1 21 5 17 9" />
+                <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                <polyline points="7 23 3 19 7 15" />
+                <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+              </svg>
+              81
+            </span>
+            <span className="flex items-center gap-1 text-[9px]">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+              142
+            </span>
+            <span className="flex items-center text-[9px]">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Component ----------
 
 export default function LandingPage() {
@@ -365,6 +451,9 @@ export default function LandingPage() {
   const [featCursorExiting, setFeatCursorExiting] = useState(false);
   const [featBtnLefts, setFeatBtnLefts] = useState<{ h: string; u: string; e: string; top: string }>({ h: "15%", u: "33%", e: "75%", top: "54%" });
   const [isCustomMode, setIsCustomMode] = useState(false);
+  // 3-step tutorial phase (0..10) — see the tutorial effect for the timeline.
+  const [tutPhase, setTutPhase] = useState(0);
+  const tutRef = useRef<HTMLDivElement>(null);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
   const savedRangeRef = useRef<Range | null>(null);
   const activeSelTextRef = useRef<string>("");
@@ -550,6 +639,65 @@ export default function LandingPage() {
       },
       1.25
     );
+  }, []);
+
+  // 3-step tutorial loop. Runs while the visualization is on screen and
+  // pauses (and resets) when it scrolls away. One cycle:
+  //   step 1 — tweet text gets selected, yellow button pops in
+  //   step 2 — Unpolished + Direct light up, Enter clicks
+  //   step 3 — shimmer for 1.5s → rewritten text → cursor glides to Accept →
+  //            click → popup fades and the tweet now holds the rewrite
+  // Everything animates with opacity/transform only, so it stays smooth.
+  useEffect(() => {
+    const el = tutRef.current;
+    if (!el) return;
+
+    let timers: number[] = [];
+    let running = false;
+
+    const clearAll = () => {
+      timers.forEach((t) => window.clearTimeout(t));
+      timers = [];
+    };
+
+    const schedule = () => {
+      clearAll();
+      setTutPhase(0);
+      const steps: [number, number][] = [
+        [400, 1],   // selection highlight + yellow button
+        [2200, 2],  // focus moves to the tone bar
+        [2900, 3],  // Unpolished lights up
+        [3500, 4],  // Direct lights up
+        [4300, 5],  // Enter clicks (stays yellow)
+        [5200, 6],  // popup appears: rewriting shimmer…
+        [6700, 7],  // …1.5s later: rewritten text shows
+        [7600, 8],  // cursor glides onto Accept
+        [8400, 9],  // Accept clicked
+        [9000, 10], // popup fades, tweet holds the rewrite
+      ];
+      timers = steps.map(([ms, ph]) =>
+        window.setTimeout(() => setTutPhase(ph), ms)
+      );
+      timers.push(window.setTimeout(schedule, 11500)); // hold, then loop
+    };
+
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !running) {
+          running = true;
+          schedule();
+        } else if (!entry.isIntersecting && running) {
+          running = false;
+          clearAll();
+        }
+      },
+      { threshold: 0.25 }
+    );
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      clearAll();
+    };
   }, []);
 
   // Track which section is in view for crossed-out nav effect.
@@ -1331,22 +1479,161 @@ export default function LandingPage() {
           <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7 max-w-xl mx-auto mb-10">
             The way AI writes is instantly recognizable. And it&apos;s quietly killing your replies, your engagement, and your credibility.
           </p>
-          <div className="flex justify-center">
-            <Link
-              href={primaryCtaHref}
-              className="inline-flex items-center gap-2.5 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-            >
-              {isWaitlist ? (
-                <>{waitlistLabel}</>
-              ) : (
-                <>
-                  <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                    <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-                  </svg>
-                  Download for macOS
-                </>
-              )}
-            </Link>
+          {/* 3-step "how the selection tool works" visualization — loops while
+              in view (see the tutorial effect): select → pick tones → accept.
+              The inactive columns dim so the sequence reads one step at a time. */}
+          <div ref={tutRef} className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-6 lg:gap-8 text-left mt-2">
+
+            {/* STEP 1 — Select a text */}
+            <div className={`flex flex-col transition-opacity duration-500 ${tutPhase <= 1 ? "opacity-100" : "opacity-40"}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="w-8 h-8 rounded-lg bg-[#fff700]/45 flex items-center justify-center font-black text-sm text-black shrink-0">1</span>
+                <span className="font-display text-xl text-black">Select a text</span>
+              </div>
+              <div className="flex-1 rounded-2xl border border-black/10 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-4">
+                {/* Ghost tone bar — hints at what appears once text is selected */}
+                <div
+                  className="mb-3 inline-flex items-center gap-1 rounded-full border border-neutral-200 px-2 py-1.5 transition-opacity duration-500"
+                  style={{ opacity: tutPhase >= 1 ? 0.85 : 0.35 }}
+                  aria-hidden="true"
+                >
+                  {TONES.map((label) => (
+                    <span key={label} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full text-neutral-400 whitespace-nowrap">
+                      {label}
+                    </span>
+                  ))}
+                  <span className="ml-0.5 w-4 h-4 rounded-full border border-neutral-300 text-neutral-400 flex items-center justify-center shrink-0">
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                  </span>
+                </div>
+                <TutTweet text={TUT_ORIGINAL} selected={tutPhase >= 1} huuButton={tutPhase >= 1} />
+              </div>
+            </div>
+
+            {/* STEP 2 — Pick a tone(s) */}
+            <div className={`flex flex-col transition-opacity duration-500 ${tutPhase >= 2 && tutPhase <= 5 ? "opacity-100" : "opacity-40"}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="w-8 h-8 rounded-lg bg-[#fff700]/45 flex items-center justify-center font-black text-sm text-black shrink-0">2</span>
+                <span className="font-display text-xl text-black">Pick a tone(s)</span>
+              </div>
+              <div className="flex-1 rounded-2xl border border-black/10 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-4">
+                {/* Live tone bar — Unpolished + Direct light up, then Enter clicks */}
+                <div className="mb-3 inline-flex items-center gap-1 rounded-full bg-white border border-neutral-200 shadow-sm px-2 py-1.5" aria-hidden="true">
+                  {[
+                    { label: "Humanize", on: false },
+                    { label: "Unpolished", on: tutPhase >= 3 },
+                    { label: "Controversial", on: false },
+                    { label: "Direct", on: tutPhase >= 4 },
+                  ].map(({ label, on }) => (
+                    <span
+                      key={label}
+                      className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap transition-colors duration-300 ${
+                        on ? "bg-[#fff700] text-black" : "text-neutral-500"
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  ))}
+                  <span
+                    className={`ml-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-300 ${
+                      tutPhase >= 5
+                        ? "bg-[#fff700] border-[#fff700] text-black"
+                        : "border-neutral-300 text-neutral-400"
+                    }`}
+                  >
+                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                      <polyline points="12 5 19 12 12 19" />
+                    </svg>
+                  </span>
+                </div>
+                <TutTweet text={TUT_ORIGINAL} selected />
+              </div>
+            </div>
+
+            {/* STEP 3 — Accept the rewrite */}
+            <div className={`flex flex-col transition-opacity duration-500 ${tutPhase >= 6 ? "opacity-100" : "opacity-40"}`}>
+              <div className="flex items-center gap-3 mb-4">
+                <span className="w-8 h-8 rounded-lg bg-[#fff700]/45 flex items-center justify-center font-black text-sm text-black shrink-0">3</span>
+                <span className="font-display text-xl text-black">Accept the rewrite</span>
+              </div>
+              <div className="flex-1 rounded-2xl border border-black/10 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-4">
+                {/* Result popup: shimmer (1.5s) → rewritten text → cursor →
+                    Accept click → popup fades and the tweet holds the rewrite */}
+                <div className="relative mb-3">
+                  <div
+                    className={`rounded-xl border-2 border-[#fff700] bg-white p-2.5 shadow-[0_3px_14px_rgba(255,247,0,0.25)] transition-all duration-500 ${
+                      tutPhase >= 10
+                        ? "opacity-0 -translate-y-1"
+                        : tutPhase >= 6
+                          ? "opacity-100 translate-y-0"
+                          : "opacity-0 translate-y-2"
+                    }`}
+                  >
+                    <div className="min-h-[104px] flex flex-col justify-between">
+                      {tutPhase >= 7 ? (
+                        <>
+                          <p className="text-[9px] leading-[1.6] text-neutral-800">{TUT_REWRITTEN}</p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">Back</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="flex items-center gap-0.5 text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">
+                                <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                </svg>
+                                Copy
+                              </span>
+                              <span
+                                className={`text-[8px] font-bold px-2 py-0.5 rounded-full bg-[#fff700] border border-black text-black transition-transform duration-200 ${
+                                  tutPhase >= 9 ? "scale-90" : ""
+                                }`}
+                              >
+                                Accept
+                              </span>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="space-y-2 py-1">
+                          <div className="h-1.5 rounded-full huu-shimmer w-full" />
+                          <div className="h-1.5 rounded-full huu-shimmer w-11/12" />
+                          <div className="h-1.5 rounded-full huu-shimmer w-4/5" />
+                          <div className="h-1.5 rounded-full huu-shimmer w-full" />
+                          <div className="h-1.5 rounded-full huu-shimmer w-2/3" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  {/* Mini macOS cursor — glides onto Accept, then fades with the popup */}
+                  <div
+                    className="absolute z-10 pointer-events-none"
+                    style={{
+                      right: tutPhase >= 8 ? "8px" : "45%",
+                      bottom: tutPhase >= 8 ? "2px" : "-22px",
+                      opacity: tutPhase >= 7 && tutPhase < 10 ? 1 : 0,
+                      transition:
+                        "right 0.9s cubic-bezier(0.33,1,0.68,1), bottom 0.9s cubic-bezier(0.33,1,0.68,1), opacity 0.3s ease",
+                    }}
+                    aria-hidden="true"
+                  >
+                    <svg width="13" height="18" viewBox="0 0 22 30" fill="none">
+                      <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="rgba(0,0,0,0.22)" transform="translate(1.5,1.5)" />
+                      <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="white" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
+                      <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="black" />
+                    </svg>
+                  </div>
+                </div>
+                <TutTweet
+                  text={tutPhase >= 10 ? TUT_REWRITTEN : TUT_ORIGINAL}
+                  selected={tutPhase < 10}
+                />
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -1453,31 +1740,45 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Two hand-drawn arrows funnelling down from beside the headline
-              onto the demo box. Drawn via stroke-dashoffset scrubbing, tied to
-              the box entering the screen; pointer-events-none so the tabs/box
-              stay clickable. Sits behind the box (z-0 vs the box's z-10). */}
+          {/* Two hand-drawn arrows: tails start at the ends of the headline's
+              underline, swoop outward into the page margins, and the tips land
+              beside the demo box pointing down-into it. Single path per arrow
+              with the head as trailing subpaths, so the dash-offset scrub
+              draws the LINE first and THEN the arrowhead. Fixed-size SVGs (no
+              preserveAspectRatio stretching) keep the strokes undistorted.
+              Hidden below lg where there's no margin space for them. */}
           <svg
-            className="absolute inset-0 w-full h-full overflow-visible pointer-events-none z-0"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
+            className="absolute hidden lg:block pointer-events-none z-0"
+            style={{ left: "-150px", top: "44px" }}
+            width="240"
+            height="300"
+            viewBox="0 0 240 300"
+            fill="none"
             aria-hidden="true"
           >
             <path
               ref={leftArrowPathRef}
-              d="M 23 6 C 7 14, 5 26, 17 33 M 17 33 L 10 28 M 17 33 L 23 27"
-              fill="none"
+              d="M 235 4 C 130 24, 60 90, 68 185 C 72 232, 84 258, 100 272 M 100 272 L 76 264 M 100 272 L 92 248"
               stroke="#9ca3af"
-              strokeWidth="0.55"
+              strokeWidth="5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+          </svg>
+          <svg
+            className="absolute hidden lg:block pointer-events-none z-0"
+            style={{ right: "-150px", top: "44px" }}
+            width="240"
+            height="300"
+            viewBox="0 0 240 300"
+            fill="none"
+            aria-hidden="true"
+          >
             <path
               ref={rightArrowPathRef}
-              d="M 77 6 C 93 14, 95 26, 83 33 M 83 33 L 90 28 M 83 33 L 77 27"
-              fill="none"
+              d="M 5 4 C 110 24, 180 90, 172 185 C 168 232, 156 258, 140 272 M 140 272 L 164 264 M 140 272 L 148 248"
               stroke="#9ca3af"
-              strokeWidth="0.55"
+              strokeWidth="5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
