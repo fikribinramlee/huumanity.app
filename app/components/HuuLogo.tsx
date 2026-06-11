@@ -17,12 +17,15 @@ export function HuuLogo({ className = "" }: { className?: string }) {
       className={`font-display inline-flex items-baseline leading-none select-none ${className}`}
       aria-label="huu"
     >
-      {/* Yellow box contains "hu" — both letters sit inside */}
+      {/* Yellow box contains "hu" — both letters sit inside. Letters are
+          always black regardless of surrounding text color, so the logo reads
+          correctly on dark surfaces (e.g. the black footer). */}
       <span
         style={{
           display: "inline-flex",
           alignItems: "flex-end",
           background: "#fff700",
+          color: "#000000",
           paddingTop: "0.2em",
           paddingLeft: "0.08em",
           paddingRight: "0.05em",

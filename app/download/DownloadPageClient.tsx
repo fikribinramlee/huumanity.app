@@ -41,17 +41,15 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
           <ol className="space-y-5 text-base sm:text-lg text-neutral-200">
             <li className="flex gap-4">
               <span className="font-display text-[#fff700] shrink-0">1.</span>
-              <span>Open the downloaded {downloadFileName} file</span>
+              <span>Open the downloaded huu file</span>
             </li>
             <li className="flex gap-4">
               <span className="font-display text-[#fff700] shrink-0">2.</span>
-              <span>Drag huu into your Applications folder</span>
+              <span>Open the app and sign up</span>
             </li>
             <li className="flex gap-4">
               <span className="font-display text-[#fff700] shrink-0">3.</span>
-              <span>
-                Open huu from Applications and finish desktop selector setup
-              </span>
+              <span>Finish the quick setup and start rephrasing anywhere</span>
             </li>
           </ol>
 
@@ -72,8 +70,8 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
           </div>
 
           <p className="mt-5 text-xs leading-5 text-neutral-500">
-            macOS may ask you to confirm the download or allow huu in
-            Accessibility the first time you open it.
+            Your computer may ask you to confirm the download or grant huu
+            permissions the first time you open it.
           </p>
           <p className="mt-3 text-sm text-neutral-400">
             Need another copy?{" "}
@@ -86,31 +84,20 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
             </button>
           </p>
         </div>
-
-        <div className="mt-12 lg:mt-8 flex items-center gap-4 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 max-w-xs">
-          <div className="w-14 h-14 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center text-[10px] text-neutral-400 text-center leading-tight">
-            QR
-            <br />
-            soon
-          </div>
-          <p className="text-xs uppercase tracking-widest text-neutral-400 font-semibold">
-            Get huu for your phone
-          </p>
-        </div>
       </div>
 
       {/* Right — browser mockup (Wispr-style visual guide) */}
-      <div className="flex-1 bg-[#1a3d2e] flex items-center justify-center px-8 py-16 lg:py-0 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_40%,#fff700_0%,transparent_50%)]" />
+      <div className="flex-1 bg-[#fdfbe7] flex items-center justify-center px-8 py-16 lg:py-0 relative overflow-hidden">
+        <div className="absolute inset-0 opacity-25 bg-[radial-gradient(circle_at_30%_40%,#fff700_0%,transparent_55%)]" />
 
         <div className="relative w-full max-w-xl">
           {/* Browser chrome */}
-          <div className="rounded-2xl bg-[#2d4a3e] shadow-2xl border border-white/10 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 bg-[#243d32] border-b border-white/5">
-              <span className="w-3 h-3 rounded-full bg-white/20" />
-              <span className="w-3 h-3 rounded-full bg-white/20" />
-              <span className="w-3 h-3 rounded-full bg-white/20" />
-              <div className="flex-1 mx-4 h-7 rounded-lg bg-white/10" />
+          <div className="rounded-2xl bg-white shadow-xl border border-black/10 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 bg-neutral-100 border-b border-black/5">
+              <span className="w-3 h-3 rounded-full bg-black/10" />
+              <span className="w-3 h-3 rounded-full bg-black/10" />
+              <span className="w-3 h-3 rounded-full bg-black/10" />
+              <div className="flex-1 mx-4 h-7 rounded-lg bg-black/5" />
               {/* Download icon highlight */}
               <div className="relative">
                 <div className="w-8 h-8 rounded-full bg-[#fff700] flex items-center justify-center shadow-lg shadow-[#fff700]/30">
@@ -154,7 +141,7 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
             </div>
           </div>
 
-          <p className="text-center text-sm text-white/50 mt-6">
+          <p className="text-center text-sm text-neutral-500 mt-6">
             Your download should start automatically
           </p>
         </div>

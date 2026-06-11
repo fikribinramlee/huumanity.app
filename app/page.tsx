@@ -257,6 +257,68 @@ function writeAnonUsage(next: AnonUsage) {
 }
 const BRAND = "#fff700";
 
+// ---------- Scroll-scrub helper ----------
+
+/**
+ * Drives an animation timeline from scroll position instead of timers.
+ *
+ * `apply` is called with a virtual time T in [0, duration] derived from how
+ * far `el` has been scrolled into view: T=0 when the element's top enters the
+ * bottom of the viewport, T=duration once the element's midpoint crosses the
+ * viewport's midpoint ("halfway past the section"). Scrolling back up runs
+ * the same timeline in reverse — the animation un-plays itself.
+ *
+ * The raw progress is eased toward its target with a small per-frame lerp
+ * (requestAnimationFrame) so fast scroll flicks still play out smoothly
+ * instead of jumping straight to the end state.
+ */
+function attachScrollScrub(
+  el: HTMLElement,
+  duration: number,
+  apply: (t: number) => void
+): () => void {
+  let target = 0;
+  let current = -1; // forces the first apply
+  let raf = 0;
+  let running = false;
+
+  const computeTarget = () => {
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const total = vh / 2 + rect.height / 2;
+    if (total <= 0) return 0;
+    return Math.min(1, Math.max(0, (vh - rect.top) / total));
+  };
+
+  const tick = () => {
+    const next = current < 0 ? target : current + (target - current) * 0.16;
+    current = Math.abs(target - next) < 0.0005 ? target : next;
+    apply(current * duration);
+    if (current !== target) {
+      raf = requestAnimationFrame(tick);
+    } else {
+      running = false;
+    }
+  };
+
+  const onScroll = () => {
+    target = computeTarget();
+    if (!running) {
+      running = true;
+      raf = requestAnimationFrame(tick);
+    }
+  };
+
+  onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  return () => {
+    window.removeEventListener("scroll", onScroll);
+    window.removeEventListener("resize", onScroll);
+    cancelAnimationFrame(raf);
+  };
+}
+
 // ---------- Component ----------
 
 export default function LandingPage() {
@@ -287,7 +349,6 @@ export default function LandingPage() {
   const [activeUseCase, setActiveUseCase] = useState<UseCase>(USE_CASES[0]);
   const [animStep, setAnimStep] = useState(0);
   const [arrowFlash, setArrowFlash] = useState(false);
-  const [animStarted, setAnimStarted] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);      // 0=email, 1=Unpolished, 2=Controversial, 3=Enter
   const [cursorVisible, setCursorVisible] = useState(false);
   const [cursorExiting, setCursorExiting] = useState(false);
@@ -295,7 +356,6 @@ export default function LandingPage() {
   // Feature section animation state
   const [featAnimStep, setFeatAnimStep] = useState(0);
   const [featArrowFlash, setFeatArrowFlash] = useState(false);
-  const [featAnimStarted, setFeatAnimStarted] = useState(false);
   const [featCursorPos, setFeatCursorPos] = useState(0); // 0=text, 1=Humanize, 2=Unpolished, 3=Enter
   const [featCursorVisible, setFeatCursorVisible] = useState(false);
   const [featCursorExiting, setFeatCursorExiting] = useState(false);
@@ -310,6 +370,8 @@ export default function LandingPage() {
   const rightColumnRef = useRef<HTMLDivElement>(null);
   const featSectionRef = useRef<HTMLElement>(null);
   const featVizRef = useRef<HTMLDivElement>(null);
+  const tryCircleWrapRef = useRef<HTMLSpanElement>(null);
+  const tryCirclePathRef = useRef<SVGPathElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const expandedRef      = useRef(false);
   const showTimerRef     = useRef<number | null>(null);
@@ -334,22 +396,30 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Start animation only when the benefit section scrolls into view.
+  // Benefit-section demo animation — scrubbed by scroll. The timeline keeps
+  // the same beats as the old timer version (cursor in → select → tone bar →
+  // hover tones → enter → result), but progress is tied to how far the
+  // section has scrolled into view: it completes once the section is halfway
+  // past the viewport center, and scrolling back up reverses it.
   useEffect(() => {
     const el = benefitSectionRef.current;
-    if (!el || animStarted) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setAnimStarted(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.25 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [animStarted]);
+    if (!el) return;
+    return attachScrollScrub(el, 10000, (T) => {
+      setCursorVisible(T >= 600 && T < 7900);
+      setCursorExiting(T >= 7900 && T < 8600);
+      setCursorPos(T >= 6500 ? 3 : T >= 5000 ? 2 : T >= 3400 ? 1 : 0);
+      setArrowFlash(T >= 7300 && T < 7900);
+      setAnimStep(
+        T >= 9500 ? 7
+        : T >= 8500 ? 6
+        : T >= 5900 ? 5
+        : T >= 4400 ? 4
+        : T >= 3300 ? 3
+        : T >= 1800 ? 2
+        : 0
+      );
+    });
+  }, []);
 
   // Compute cursor target positions from real DOM layout (updates on resize too).
   useEffect(() => {
@@ -373,60 +443,27 @@ export default function LandingPage() {
     return () => window.removeEventListener("resize", compute);
   }, []);
 
-  // Benefit-section demo animation — runs once after animStarted flips true.
-  useEffect(() => {
-    if (!animStarted) return;
-    // ── Fade in at email ──
-    const t1  = window.setTimeout(() => { setCursorPos(0); setCursorVisible(true); }, 600);
-    // Selection highlight
-    const t2  = window.setTimeout(() => setAnimStep(2), 1800);
-
-    // ── Tone picker appears, cursor moves up to Unpolished (visible, smooth) ──
-    const t3a = window.setTimeout(() => setAnimStep(3), 3300);
-    const t3b = window.setTimeout(() => setCursorPos(1), 3400); // move while visible
-    // Unpolished turns yellow once cursor has arrived (~800ms travel)
-    const t4  = window.setTimeout(() => setAnimStep(4), 4400);
-
-    // ── Cursor moves to Controversial (visible, smooth) ──
-    const t5a = window.setTimeout(() => setCursorPos(2), 5000);
-    // Controversial turns yellow
-    const t5b = window.setTimeout(() => setAnimStep(5), 5900);
-
-    // ── Cursor moves to Enter (visible, smooth) ──
-    const t6a = window.setTimeout(() => setCursorPos(3), 6500);
-    // Enter button flashes (click!)
-    const t6b = window.setTimeout(() => {
-      setArrowFlash(true);
-      window.setTimeout(() => setArrowFlash(false), 600);
-    }, 7300);
-
-    // ── Cursor exits: slides right and fades out ──
-    const t7a = window.setTimeout(() => { setCursorExiting(true); setCursorVisible(false); }, 7900);
-    const t7b = window.setTimeout(() => setCursorExiting(false), 8600); // reset
-
-    // ── Result ──
-    const t8 = window.setTimeout(() => setAnimStep(6), 8500);
-    const t9 = window.setTimeout(() => setAnimStep(7), 9500);
-
-    return () => {
-      [t1,t2,t3a,t3b,t4,t5a,t5b,t6a,t6b,t7a,t7b,t8,t9]
-        .forEach((t) => window.clearTimeout(t));
-    };
-  }, [animStarted]);
-
-  // Feature section: trigger animation when scrolled into view.
+  // Feature-section animation — scrubbed by scroll, same approach as the
+  // benefit section above.
   useEffect(() => {
     const el = featSectionRef.current;
-    if (!el || featAnimStarted) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) { setFeatAnimStarted(true); observer.disconnect(); }
-      },
-      { threshold: 0.25 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [featAnimStarted]);
+    if (!el) return;
+    return attachScrollScrub(el, 9700, (T) => {
+      setFeatCursorVisible(T >= 600 && T < 7600);
+      setFeatCursorExiting(T >= 7600 && T < 8300);
+      setFeatCursorPos(T >= 6200 ? 3 : T >= 4700 ? 2 : T >= 3200 ? 1 : 0);
+      setFeatArrowFlash(T >= 7000 && T < 7600);
+      setFeatAnimStep(
+        T >= 9200 ? 7
+        : T >= 7900 ? 6
+        : T >= 5600 ? 5
+        : T >= 4100 ? 4
+        : T >= 3000 ? 3
+        : T >= 1800 ? 2
+        : 0
+      );
+    });
+  }, []);
 
   // Feature section: compute tone-button DOM positions for cursor targeting.
   useEffect(() => {
@@ -453,29 +490,21 @@ export default function LandingPage() {
     return () => window.removeEventListener("resize", compute);
   }, []);
 
-  // Feature section: animation sequence (runs once after featAnimStarted).
+  // Hand-drawn circle around "Try huumanity Here" — the stroke sketches
+  // itself in sync with the scroll (drawing on the way down, erasing in
+  // reverse on the way up). Writes stroke-dashoffset straight to the DOM so
+  // it stays perfectly smooth without re-rendering React on every frame.
   useEffect(() => {
-    if (!featAnimStarted) return;
-    const f1  = window.setTimeout(() => { setFeatCursorPos(0); setFeatCursorVisible(true); }, 600);
-    const f2  = window.setTimeout(() => setFeatAnimStep(2), 1800);   // text selected
-    const f3a = window.setTimeout(() => setFeatAnimStep(3), 3000);   // tone bar appears
-    const f3b = window.setTimeout(() => setFeatCursorPos(1), 3200);  // cursor → Humanize
-    const f4  = window.setTimeout(() => setFeatAnimStep(4), 4100);   // Humanize yellow
-    const f5a = window.setTimeout(() => setFeatCursorPos(2), 4700);  // cursor → Unpolished
-    const f5b = window.setTimeout(() => setFeatAnimStep(5), 5600);   // Unpolished yellow
-    const f6a = window.setTimeout(() => setFeatCursorPos(3), 6200);  // cursor → Enter
-    const f6b = window.setTimeout(() => {
-      setFeatArrowFlash(true);
-      window.setTimeout(() => setFeatArrowFlash(false), 600);
-    }, 7000);
-    const f7a = window.setTimeout(() => { setFeatCursorExiting(true); setFeatCursorVisible(false); }, 7600);
-    const f7b = window.setTimeout(() => setFeatCursorExiting(false), 8300);
-    const f8  = window.setTimeout(() => setFeatAnimStep(6), 7900);   // loading
-    const f9  = window.setTimeout(() => setFeatAnimStep(7), 9200);   // result
-    return () => {
-      [f1,f2,f3a,f3b,f4,f5a,f5b,f6a,f6b,f7a,f7b,f8,f9].forEach((t) => window.clearTimeout(t));
-    };
-  }, [featAnimStarted]);
+    const el = tryCircleWrapRef.current;
+    const path = tryCirclePathRef.current;
+    if (!el || !path) return;
+    const len = path.getTotalLength();
+    path.style.strokeDasharray = `${len}`;
+    path.style.strokeDashoffset = `${len}`;
+    return attachScrollScrub(el, 1, (t) => {
+      path.style.strokeDashoffset = `${len * (1 - t)}`;
+    });
+  }, []);
 
   // Track which section is in view for crossed-out nav effect.
   // Uses a shared Set so that when ALL sections leave the viewport (i.e. hero is showing)
@@ -1048,7 +1077,8 @@ export default function LandingPage() {
               </h2>
 
               <p className="font-sans text-white/55 text-base leading-7">
-                Rephrase any AI text into four distinct human voices without leaving your tab
+                Rephrase your AI copy right inside whatever you&apos;re working
+                in without opening another AI chat to do it
               </p>
 
               <div>
@@ -1230,8 +1260,10 @@ export default function LandingPage() {
         ref={demoSectionRef}
         className="relative bg-white px-6 pt-6 pb-10 sm:pt-8 sm:pb-12"
       >
-        {/* Headline block — wider container so text stays on one line on desktop */}
-        <div className="max-w-5xl mx-auto text-center mb-20">
+        {/* Headline block — wider container so text stays on one line on desktop.
+            Tight bottom margin: the "Try huumanity Here" line below sits close
+            to this CTA so the hand-drawn circle has room to breathe. */}
+        <div className="max-w-5xl mx-auto text-center mb-8">
           <h2
             className="font-display text-black leading-[1.02] tracking-tight mb-5 md:whitespace-nowrap"
             style={{ fontSize: "clamp(2rem, 4.8vw, 3.75rem)" }}
@@ -1262,14 +1294,38 @@ export default function LandingPage() {
 
         <div className="max-w-3xl mx-auto">
 
-          {/* "Try it here" sub-headline — slightly smaller than the "People know
-              it's written by AI" H2 above (clamp 2rem→3.75rem), but still
-              large enough to read as a section headline of its own. */}
-          <p
-            className="text-center font-display text-black mb-6 leading-tight"
-            style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}
-          >
-            Try huumanity Here
+          {/* "Try huumanity Here" sub-headline with a hand-drawn circle that
+              sketches itself around the words as you scroll down (and erases
+              itself scrolling back up). Same handwritten pen as the hero
+              annotation (neutral-400, loose stroke). */}
+          <p className="text-center mb-10 mt-2">
+            <span ref={tryCircleWrapRef} className="relative inline-block px-4 py-1">
+              <span
+                className="relative z-10 font-display text-black leading-tight"
+                style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}
+              >
+                Try huumanity Here
+              </span>
+              <svg
+                className="absolute pointer-events-none"
+                style={{ left: "-6%", top: "-42%", width: "112%", height: "184%" }}
+                viewBox="0 0 320 120"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                {/* One loose, slightly overlapping loop — like someone circled
+                    the words by hand. Drawn via stroke-dashoffset scrubbing. */}
+                <path
+                  ref={tryCirclePathRef}
+                  d="M 162 14 C 250 6, 314 30, 312 60 C 310 94, 230 112, 152 108 C 74 104, 8 88, 10 56 C 12 24, 96 8, 200 16"
+                  fill="none"
+                  stroke="#a3a3a3"
+                  strokeWidth="3"
+                  strokeLinecap="round"
+                  vectorEffect="non-scaling-stroke"
+                />
+              </svg>
+            </span>
           </p>
 
           {/* Yellow tab bar + Paste yours button */}
@@ -1308,7 +1364,7 @@ export default function LandingPage() {
             Select any text below and choose a style.
           </p>
           <p className="text-center text-sm text-neutral-500 mb-8">
-            Just like the example illustration further down ↓
+            Paste your own texts to test the demo ↓
           </p>
 
           {/* Editable demo box */}
@@ -1801,10 +1857,11 @@ export default function LandingPage() {
           {/* RIGHT: Copy */}
           <div className="flex flex-col gap-6">
             <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">
-              Rephrase anything without leaving your work
+              Stop switching tabs to fix your AI copy
             </h2>
             <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7">
-              Stop copying text into ChatGPT to fix it. Select whatever you want to change; a sentence, a paragraph, a whole email. And huumanity rewrites it right where it sits without switching tabs.
+              Why switch between your AI chat and your work space when you can
+              select the text right where it is and rephrase it in seconds.
             </p>
             <div className="flex items-center gap-3 flex-wrap">
               <Link
@@ -1980,7 +2037,7 @@ export default function LandingPage() {
 
       {/* 9. FOOTER (black) */}
       <footer className="bg-black text-white">
-        <div className="w-full max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 sm:grid-cols-4 gap-10">
+        <div className="w-full max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 sm:grid-cols-3 gap-10">
           {/* Brand */}
           <div className="col-span-2 sm:col-span-1">
             <HuuLogo className="text-3xl" />
@@ -2007,25 +2064,6 @@ export default function LandingPage() {
                   </a>
                 </li>
               ))}
-            </ul>
-          </div>
-
-          {/* Pricing */}
-          <div>
-            <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
-              Pricing
-            </h4>
-            <ul className="space-y-2">
-              <li>
-                <a href="#pricing" className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors">
-                  Free plan
-                </a>
-              </li>
-              <li>
-                <a href="#pricing" className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors">
-                  Pro — $10/mo
-                </a>
-              </li>
             </ul>
           </div>
 
