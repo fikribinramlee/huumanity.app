@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -332,48 +332,58 @@ function attachScrollScrub(
 // ---------- 3-step tutorial: mini tweet card ----------
 
 /**
- * Tiny Twitter-post mockup used by the 3-step "how it works" visualization
- * under the demo headline. `selected` paints the tweet text with the blue
- * selection highlight; `huuButton` pops the little yellow selector button in.
+ * Tiny Twitter-post mockup used by the 3-step "how it works" visualization.
+ * `selCount` highlights that many words counting from the END of the text, so
+ * the selection can be animated word-by-word like a real cursor drag (rather
+ * than flashing on as one solid blue block). `huuButton` pops the little
+ * yellow selector button in beside the first words.
  */
 function TutTweet({
   text,
-  selected = false,
+  selCount = 0,
   huuButton = false,
 }: {
   text: string;
-  selected?: boolean;
+  selCount?: number;
   huuButton?: boolean;
 }) {
+  const words = text.split(" ");
+  const firstSelected = words.length - Math.max(0, Math.min(selCount, words.length));
   return (
-    <div className="relative">
-      {huuButton && (
-        <span
-          className="absolute -left-1.5 -top-1.5 z-10 w-5 h-5 rounded-full bg-[#fff700] border border-black shadow flex items-center justify-center"
-          style={{ animation: "huu-btn-fadein 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
-          aria-hidden="true"
-        >
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="19" x2="12" y2="5" />
-            <polyline points="5 12 12 5 19 12" />
-          </svg>
-        </span>
-      )}
-      <div className="flex gap-2.5">
-        <span className="w-8 h-8 rounded-full bg-neutral-200 shrink-0" aria-hidden="true" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] leading-tight">
-            <span className="font-bold text-black">Alex Johnson</span>{" "}
-            <span className="text-neutral-400">@alexjohnson · 2h</span>
-          </p>
-          <p
-            className={`mt-1 text-[11px] leading-[1.55] transition-colors duration-300 ${
-              selected ? "bg-[#cfe1ff] text-[#1d4ed8]" : "text-neutral-800"
-            }`}
+    <div className="flex gap-2.5">
+      <span className="w-8 h-8 rounded-full bg-neutral-200 shrink-0" aria-hidden="true" />
+      <div className="relative min-w-0 flex-1">
+        {huuButton && (
+          <span
+            className="absolute -left-5 top-4 z-10 w-5 h-5 rounded-full bg-[#fff700] border border-black shadow flex items-center justify-center"
+            style={{ animation: "huu-btn-fadein 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
+            aria-hidden="true"
           >
-            {text}
-          </p>
-          <div className="mt-2.5 flex items-center gap-5 text-neutral-400">
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
+          </span>
+        )}
+        <p className="text-[11px] leading-tight">
+          <span className="font-bold text-black">Alex Johnson</span>{" "}
+          <span className="text-neutral-400">@alexjohnson · 2h</span>
+        </p>
+        <p className="mt-1 text-[11px] leading-[1.6]">
+          {words.map((w, i) => {
+            const on = i >= firstSelected;
+            return (
+              <span
+                key={i}
+                className={on ? "bg-[#cfe1ff] text-[#1d4ed8]" : "text-neutral-800"}
+              >
+                {w}
+                {i < words.length - 1 ? " " : ""}
+              </span>
+            );
+          })}
+        </p>
+        <div className="mt-2.5 flex items-center gap-5 text-neutral-400">
             <span className="flex items-center gap-1 text-[9px]">
               <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
@@ -403,8 +413,71 @@ function TutTweet({
               </svg>
             </span>
           </div>
-        </div>
       </div>
+    </div>
+  );
+}
+
+/** The floating tone bar shown in the tutorial (its own little box). */
+function ToneBar({
+  unpolished = false,
+  direct = false,
+  enter = false,
+}: {
+  unpolished?: boolean;
+  direct?: boolean;
+  enter?: boolean;
+}) {
+  const tones = [
+    { label: "Humanize", on: false },
+    { label: "Unpolished", on: unpolished },
+    { label: "Controversial", on: false },
+    { label: "Direct", on: direct },
+  ];
+  return (
+    <div className="inline-flex items-center gap-1" aria-hidden="true">
+      {tones.map(({ label, on }) => (
+        <span
+          key={label}
+          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap transition-colors duration-300 ${
+            on ? "bg-[#fff700] text-black" : "text-neutral-500"
+          }`}
+        >
+          {label}
+        </span>
+      ))}
+      <span
+        className={`ml-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-300 ${
+          enter ? "bg-[#fff700] border-[#fff700] text-black" : "border-neutral-300 text-neutral-400"
+        }`}
+      >
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12" />
+          <polyline points="12 5 19 12 12 19" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
+/** Mini macOS arrow cursor used by the tutorial; position via `style`. */
+function TutCursor({ visible, style }: { visible: boolean; style: CSSProperties }) {
+  return (
+    <div
+      className="absolute z-20 pointer-events-none"
+      style={{
+        opacity: visible ? 1 : 0,
+        transition:
+          "left 0.8s cubic-bezier(0.33,1,0.68,1), top 0.8s cubic-bezier(0.33,1,0.68,1), right 0.8s cubic-bezier(0.33,1,0.68,1), bottom 0.8s cubic-bezier(0.33,1,0.68,1), opacity 0.35s ease",
+        ...style,
+      }}
+      aria-hidden="true"
+    >
+      <svg width="13" height="18" viewBox="0 0 22 30" fill="none">
+        <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="rgba(0,0,0,0.22)" transform="translate(1.5,1.5)" />
+        <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="white" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
+        <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="black" />
+      </svg>
     </div>
   );
 }
@@ -451,9 +524,19 @@ export default function LandingPage() {
   const [featCursorExiting, setFeatCursorExiting] = useState(false);
   const [featBtnLefts, setFeatBtnLefts] = useState<{ h: string; u: string; e: string; top: string }>({ h: "15%", u: "33%", e: "75%", top: "54%" });
   const [isCustomMode, setIsCustomMode] = useState(false);
-  // 3-step tutorial phase (0..10) — see the tutorial effect for the timeline.
-  const [tutPhase, setTutPhase] = useState(0);
+  // 3-step tutorial state. All three columns are always visible; the
+  // animation plays through them in sequence (col 1 → 2 → 3), holds, repeats.
   const tutRef = useRef<HTMLDivElement>(null);
+  // Column 1 — select text
+  const [c1Sel, setC1Sel] = useState(0); // # of words highlighted, counting from the END
+  const [c1Cursor, setC1Cursor] = useState<"hidden" | "start" | "end" | "button">("hidden");
+  const [c1Button, setC1Button] = useState(false); // yellow selector button
+  const [c1Bar, setC1Bar] = useState(false); // tone-bar box faded in
+  // Column 2 — pick tone(s)
+  const [c2Tone, setC2Tone] = useState(0); // 0 none · 1 Unpolished · 2 +Direct · 3 Enter clicked
+  const [c2Cursor, setC2Cursor] = useState<"hidden" | "unpolished" | "direct" | "enter" | "away">("hidden");
+  // Column 3 — accept the rewrite
+  const [c3, setC3] = useState(0); // 0 idle · 1 shimmer · 2 result · 3 cursor→accept · 4 clicked · 5 replaced
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
   const savedRangeRef = useRef<Range | null>(null);
   const activeSelTextRef = useRef<string>("");
@@ -467,8 +550,10 @@ export default function LandingPage() {
   const tryUnderlinePathRef = useRef<SVGPathElement>(null);
   const demoBoxWrapRef = useRef<HTMLDivElement>(null);
   const demoArrowsRef = useRef<HTMLDivElement>(null);
-  const leftArrowPathRef = useRef<SVGPathElement>(null);
-  const rightArrowPathRef = useRef<SVGPathElement>(null);
+  const leftShaftRef = useRef<SVGPathElement>(null);
+  const leftHeadRef = useRef<SVGPathElement>(null);
+  const rightShaftRef = useRef<SVGPathElement>(null);
+  const rightHeadRef = useRef<SVGPathElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
   const expandedRef      = useRef(false);
   const showTimerRef     = useRef<number | null>(null);
@@ -621,82 +706,162 @@ export default function LandingPage() {
   // onto the screen, and retract as you scroll back up past the demo.
   useEffect(() => {
     const el = demoBoxWrapRef.current;
-    const left = leftArrowPathRef.current;
-    const right = rightArrowPathRef.current;
-    if (!el || !left || !right) return;
-    const lLen = left.getTotalLength();
-    const rLen = right.getTotalLength();
-    left.style.strokeDasharray = `${lLen}`;
-    right.style.strokeDasharray = `${rLen}`;
-    left.style.strokeDashoffset = `${lLen}`;
-    right.style.strokeDashoffset = `${rLen}`;
+    const ls = leftShaftRef.current;
+    const lh = leftHeadRef.current;
+    const rs = rightShaftRef.current;
+    const rh = rightHeadRef.current;
+    if (!el || !ls || !lh || !rs || !rh) return;
+
+    const lsLen = ls.getTotalLength();
+    const lhLen = lh.getTotalLength();
+    const rsLen = rs.getTotalLength();
+    const rhLen = rh.getTotalLength();
+    for (const [p, len] of [
+      [ls, lsLen],
+      [lh, lhLen],
+      [rs, rsLen],
+      [rh, rhLen],
+    ] as [SVGPathElement, number][]) {
+      p.style.strokeDasharray = `${len}`;
+      p.style.strokeDashoffset = `${len}`;
+    }
+
+    // The shaft draws over the first 82% of the timeline; the arrowHEAD only
+    // starts once the shaft is fully connected (t ≥ 0.82) and finishes by t=1.
+    // This guarantees the head never floats ahead of an unfinished line.
+    const HEAD_START = 0.82;
     return attachScrollScrub(
       el,
       1,
       (t) => {
-        left.style.strokeDashoffset = `${lLen * (1 - t)}`;
-        right.style.strokeDashoffset = `${rLen * (1 - t)}`;
+        const shaftT = Math.min(1, t / HEAD_START);
+        const headT = Math.max(0, (t - HEAD_START) / (1 - HEAD_START));
+        ls.style.strokeDashoffset = `${lsLen * (1 - shaftT)}`;
+        rs.style.strokeDashoffset = `${rsLen * (1 - shaftT)}`;
+        lh.style.strokeDashoffset = `${lhLen * (1 - headT)}`;
+        rh.style.strokeDashoffset = `${rhLen * (1 - headT)}`;
       },
       1.25
     );
   }, []);
 
-  // 3-step tutorial loop. Runs while the visualization is on screen and
-  // pauses (and resets) when it scrolls away. One cycle:
-  //   step 1 — tweet text gets selected, yellow button pops in
-  //   step 2 — Unpolished + Direct light up, Enter clicks
-  //   step 3 — shimmer for 1.5s → rewritten text → cursor glides to Accept →
-  //            click → popup fades and the tweet now holds the rewrite
-  // Everything animates with opacity/transform only, so it stays smooth.
+  // 3-step tutorial sequence. All three columns stay visible; the animation
+  // plays col 1 → 2 → 3 then holds 2s and repeats, but only while the block is
+  // on screen. Driven by an awaitable, cancellable timeline so each beat is
+  // explicit and the whole thing stays smooth (opacity / transform only).
   useEffect(() => {
     const el = tutRef.current;
     if (!el) return;
 
-    let timers: number[] = [];
-    let running = false;
+    const totalWords = TUT_ORIGINAL.split(" ").length;
+    let token = { cancelled: true };
+    let timeoutId: number | undefined;
 
-    const clearAll = () => {
-      timers.forEach((t) => window.clearTimeout(t));
-      timers = [];
+    const sleep = (ms: number) =>
+      new Promise<void>((res) => {
+        timeoutId = window.setTimeout(res, ms);
+      });
+
+    const reset = () => {
+      setC1Sel(0);
+      setC1Cursor("hidden");
+      setC1Button(false);
+      setC1Bar(false);
+      setC2Tone(0);
+      setC2Cursor("hidden");
+      setC3(0);
     };
 
-    const schedule = () => {
-      clearAll();
-      setTutPhase(0);
-      const steps: [number, number][] = [
-        [400, 1],   // selection highlight + yellow button
-        [2200, 2],  // focus moves to the tone bar
-        [2900, 3],  // Unpolished lights up
-        [3500, 4],  // Direct lights up
-        [4300, 5],  // Enter clicks (stays yellow)
-        [5200, 6],  // popup appears: rewriting shimmer…
-        [6700, 7],  // …1.5s later: rewritten text shows
-        [7600, 8],  // cursor glides onto Accept
-        [8400, 9],  // Accept clicked
-        [9000, 10], // popup fades, tweet holds the rewrite
-      ];
-      timers = steps.map(([ms, ph]) =>
-        window.setTimeout(() => setTutPhase(ph), ms)
-      );
-      timers.push(window.setTimeout(schedule, 11500)); // hold, then loop
+    const loop = async (tok: { cancelled: boolean }) => {
+      while (!tok.cancelled) {
+        reset();
+        await sleep(700);
+        if (tok.cancelled) return;
+
+        // ── COLUMN 1 — cursor selects the text, then clicks the huu button ──
+        setC1Cursor("start");
+        await sleep(450);
+        if (tok.cancelled) return;
+        setC1Cursor("end"); // cursor glides bottom-right → top-left …
+        for (let i = 1; i <= totalWords; i++) {
+          setC1Sel(i); // … highlighting words from the last back to the first
+          await sleep(950 / totalWords);
+          if (tok.cancelled) return;
+        }
+        await sleep(250);
+        if (tok.cancelled) return;
+        setC1Cursor("button");
+        setC1Button(true);
+        await sleep(750);
+        if (tok.cancelled) return;
+        setC1Bar(true); // click → tone bar fades in (as its own box above)
+        await sleep(1000);
+        if (tok.cancelled) return;
+
+        // ── COLUMN 2 — pick Unpolished + Direct, click Enter, glide away ──
+        setC2Cursor("unpolished");
+        await sleep(650);
+        if (tok.cancelled) return;
+        setC2Tone(1);
+        await sleep(550);
+        if (tok.cancelled) return;
+        setC2Cursor("direct");
+        await sleep(650);
+        if (tok.cancelled) return;
+        setC2Tone(2);
+        await sleep(550);
+        if (tok.cancelled) return;
+        setC2Cursor("enter");
+        await sleep(650);
+        if (tok.cancelled) return;
+        setC2Tone(3); // Enter clicked — stays yellow
+        await sleep(500);
+        if (tok.cancelled) return;
+        setC2Cursor("away"); // slide sideways to the right, then step 3 begins
+        await sleep(800);
+        if (tok.cancelled) return;
+
+        // ── COLUMN 3 — shimmer 1.5s → result → accept → swap the tweet ──
+        setC3(1); // rewriting shimmer
+        await sleep(1500);
+        if (tok.cancelled) return;
+        setC3(2); // rewritten text + Back / Copy / Accept
+        await sleep(900);
+        if (tok.cancelled) return;
+        setC3(3); // cursor glides onto Accept
+        await sleep(850);
+        if (tok.cancelled) return;
+        setC3(4); // Accept clicked
+        await sleep(1000); // wait ~1s …
+        if (tok.cancelled) return;
+        setC3(5); // … then the tweet holds the huumanity rewrite; popup fades
+        await sleep(2000); // hold, then loop
+        if (tok.cancelled) return;
+      }
+    };
+
+    const start = () => {
+      if (!token.cancelled) return; // already running
+      token = { cancelled: false };
+      loop(token);
+    };
+    const stop = () => {
+      token.cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+      reset();
     };
 
     const obs = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting && !running) {
-          running = true;
-          schedule();
-        } else if (!entry.isIntersecting && running) {
-          running = false;
-          clearAll();
-        }
+        if (entry.isIntersecting) start();
+        else stop();
       },
-      { threshold: 0.25 }
+      { threshold: 0.2 }
     );
     obs.observe(el);
     return () => {
       obs.disconnect();
-      clearAll();
+      stop();
     };
   }, []);
 
@@ -1466,178 +1631,154 @@ export default function LandingPage() {
         ref={demoSectionRef}
         className="relative bg-white px-6 pt-6 pb-10 sm:pt-8 sm:pb-12"
       >
-        {/* Headline block — wider container so text stays on one line on desktop.
-            Tight bottom margin: the "Try huumanity Here" line below sits close
-            to this CTA so the hand-drawn circle has room to breathe. */}
-        <div className="max-w-5xl mx-auto text-center mb-8">
+        {/* Headline */}
+        <div className="max-w-3xl mx-auto text-center">
           <h2
             className="font-display text-black leading-[1.02] tracking-tight mb-5 md:whitespace-nowrap"
             style={{ fontSize: "clamp(2rem, 4.8vw, 3.75rem)" }}
           >
             People know it&apos;s written by AI
           </h2>
-          <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7 max-w-xl mx-auto mb-10">
+          <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7 max-w-xl mx-auto">
             The way AI writes is instantly recognizable. And it&apos;s quietly killing your replies, your engagement, and your credibility.
           </p>
-          {/* 3-step "how the selection tool works" visualization — loops while
-              in view (see the tutorial effect): select → pick tones → accept.
-              The inactive columns dim so the sequence reads one step at a time. */}
-          <div ref={tutRef} className="grid grid-cols-1 md:grid-cols-3 gap-8 md:gap-6 lg:gap-8 text-left mt-2">
-
-            {/* STEP 1 — Select a text */}
-            <div className={`flex flex-col transition-opacity duration-500 ${tutPhase <= 1 ? "opacity-100" : "opacity-40"}`}>
-              <div className="flex items-center gap-3 mb-4">
-                <span className="w-8 h-8 rounded-lg bg-[#fff700]/45 flex items-center justify-center font-black text-sm text-black shrink-0">1</span>
-                <span className="font-display text-xl text-black">Select a text</span>
-              </div>
-              <div className="flex-1 rounded-2xl border border-black/10 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-4">
-                {/* Ghost tone bar — hints at what appears once text is selected */}
-                <div
-                  className="mb-3 inline-flex items-center gap-1 rounded-full border border-neutral-200 px-2 py-1.5 transition-opacity duration-500"
-                  style={{ opacity: tutPhase >= 1 ? 0.85 : 0.35 }}
-                  aria-hidden="true"
-                >
-                  {TONES.map((label) => (
-                    <span key={label} className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full text-neutral-400 whitespace-nowrap">
-                      {label}
-                    </span>
-                  ))}
-                  <span className="ml-0.5 w-4 h-4 rounded-full border border-neutral-300 text-neutral-400 flex items-center justify-center shrink-0">
-                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                      <polyline points="12 5 19 12 12 19" />
-                    </svg>
-                  </span>
-                </div>
-                <TutTweet text={TUT_ORIGINAL} selected={tutPhase >= 1} huuButton={tutPhase >= 1} />
-              </div>
-            </div>
-
-            {/* STEP 2 — Pick a tone(s) */}
-            <div className={`flex flex-col transition-opacity duration-500 ${tutPhase >= 2 && tutPhase <= 5 ? "opacity-100" : "opacity-40"}`}>
-              <div className="flex items-center gap-3 mb-4">
-                <span className="w-8 h-8 rounded-lg bg-[#fff700]/45 flex items-center justify-center font-black text-sm text-black shrink-0">2</span>
-                <span className="font-display text-xl text-black">Pick a tone(s)</span>
-              </div>
-              <div className="flex-1 rounded-2xl border border-black/10 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-4">
-                {/* Live tone bar — Unpolished + Direct light up, then Enter clicks */}
-                <div className="mb-3 inline-flex items-center gap-1 rounded-full bg-white border border-neutral-200 shadow-sm px-2 py-1.5" aria-hidden="true">
-                  {[
-                    { label: "Humanize", on: false },
-                    { label: "Unpolished", on: tutPhase >= 3 },
-                    { label: "Controversial", on: false },
-                    { label: "Direct", on: tutPhase >= 4 },
-                  ].map(({ label, on }) => (
-                    <span
-                      key={label}
-                      className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap transition-colors duration-300 ${
-                        on ? "bg-[#fff700] text-black" : "text-neutral-500"
-                      }`}
-                    >
-                      {label}
-                    </span>
-                  ))}
-                  <span
-                    className={`ml-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-300 ${
-                      tutPhase >= 5
-                        ? "bg-[#fff700] border-[#fff700] text-black"
-                        : "border-neutral-300 text-neutral-400"
-                    }`}
-                  >
-                    <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                      <polyline points="12 5 19 12 12 19" />
-                    </svg>
-                  </span>
-                </div>
-                <TutTweet text={TUT_ORIGINAL} selected />
-              </div>
-            </div>
-
-            {/* STEP 3 — Accept the rewrite */}
-            <div className={`flex flex-col transition-opacity duration-500 ${tutPhase >= 6 ? "opacity-100" : "opacity-40"}`}>
-              <div className="flex items-center gap-3 mb-4">
-                <span className="w-8 h-8 rounded-lg bg-[#fff700]/45 flex items-center justify-center font-black text-sm text-black shrink-0">3</span>
-                <span className="font-display text-xl text-black">Accept the rewrite</span>
-              </div>
-              <div className="flex-1 rounded-2xl border border-black/10 bg-white shadow-[0_2px_12px_rgba(0,0,0,0.05)] p-4">
-                {/* Result popup: shimmer (1.5s) → rewritten text → cursor →
-                    Accept click → popup fades and the tweet holds the rewrite */}
-                <div className="relative mb-3">
-                  <div
-                    className={`rounded-xl border-2 border-[#fff700] bg-white p-2.5 shadow-[0_3px_14px_rgba(255,247,0,0.25)] transition-all duration-500 ${
-                      tutPhase >= 10
-                        ? "opacity-0 -translate-y-1"
-                        : tutPhase >= 6
-                          ? "opacity-100 translate-y-0"
-                          : "opacity-0 translate-y-2"
-                    }`}
-                  >
-                    <div className="min-h-[104px] flex flex-col justify-between">
-                      {tutPhase >= 7 ? (
-                        <>
-                          <p className="text-[9px] leading-[1.6] text-neutral-800">{TUT_REWRITTEN}</p>
-                          <div className="mt-2 flex items-center justify-between">
-                            <span className="text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">Back</span>
-                            <div className="flex items-center gap-1.5">
-                              <span className="flex items-center gap-0.5 text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">
-                                <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                                </svg>
-                                Copy
-                              </span>
-                              <span
-                                className={`text-[8px] font-bold px-2 py-0.5 rounded-full bg-[#fff700] border border-black text-black transition-transform duration-200 ${
-                                  tutPhase >= 9 ? "scale-90" : ""
-                                }`}
-                              >
-                                Accept
-                              </span>
-                            </div>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="space-y-2 py-1">
-                          <div className="h-1.5 rounded-full huu-shimmer w-full" />
-                          <div className="h-1.5 rounded-full huu-shimmer w-11/12" />
-                          <div className="h-1.5 rounded-full huu-shimmer w-4/5" />
-                          <div className="h-1.5 rounded-full huu-shimmer w-full" />
-                          <div className="h-1.5 rounded-full huu-shimmer w-2/3" />
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  {/* Mini macOS cursor — glides onto Accept, then fades with the popup */}
-                  <div
-                    className="absolute z-10 pointer-events-none"
-                    style={{
-                      right: tutPhase >= 8 ? "8px" : "45%",
-                      bottom: tutPhase >= 8 ? "2px" : "-22px",
-                      opacity: tutPhase >= 7 && tutPhase < 10 ? 1 : 0,
-                      transition:
-                        "right 0.9s cubic-bezier(0.33,1,0.68,1), bottom 0.9s cubic-bezier(0.33,1,0.68,1), opacity 0.3s ease",
-                    }}
-                    aria-hidden="true"
-                  >
-                    <svg width="13" height="18" viewBox="0 0 22 30" fill="none">
-                      <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="rgba(0,0,0,0.22)" transform="translate(1.5,1.5)" />
-                      <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="white" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
-                      <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="black" />
-                    </svg>
-                  </div>
-                </div>
-                <TutTweet
-                  text={tutPhase >= 10 ? TUT_REWRITTEN : TUT_ORIGINAL}
-                  selected={tutPhase < 10}
-                />
-              </div>
-            </div>
-
-          </div>
         </div>
 
-        <div className="max-w-3xl mx-auto">
+        {/* 3-step "how the selection tool works" visualization. All three
+            columns stay visible; the animation plays through them in sequence
+            (1 → 2 → 3), holds, and repeats while on screen. Spans the same
+            max-w-6xl width as the feature section's black box, so column 1 sits
+            at the far left and column 3 at the far right. Each column stacks a
+            separate tone-bar / result box above a separate tweet box. */}
+        <div
+          ref={tutRef}
+          className="max-w-6xl mx-auto mt-20 sm:mt-28 grid grid-cols-1 md:grid-cols-3 gap-10 lg:gap-14 text-left"
+        >
+
+          {/* ── STEP 1 — Select a text ── */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 mb-1">
+              <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">1</span>
+              <span className="font-display text-xl text-black">Select a text</span>
+            </div>
+            {/* tone-bar box — its own card; fades in only after the huu button click */}
+            <div
+              className="rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit transition-all duration-500"
+              style={{ opacity: c1Bar ? 1 : 0, transform: c1Bar ? "translateY(0)" : "translateY(8px)" }}
+            >
+              <ToneBar />
+            </div>
+            {/* tweet box — its own card; cursor selects the text then clicks huu */}
+            <div className="relative rounded-xl border border-black/10 bg-white shadow-sm p-4">
+              <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} huuButton={c1Button} />
+              <TutCursor
+                visible={c1Cursor !== "hidden"}
+                style={
+                  c1Cursor === "start"
+                    ? { right: "12%", top: "62%" }
+                    : c1Cursor === "end"
+                      ? { left: "8%", top: "30%" }
+                      : c1Cursor === "button"
+                        ? { left: "1%", top: "26%" }
+                        : { left: "50%", top: "60%" }
+                }
+              />
+            </div>
+          </div>
+
+          {/* ── STEP 2 — Pick a tone(s) ── */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 mb-1">
+              <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">2</span>
+              <span className="font-display text-xl text-black">Pick a tone(s)</span>
+            </div>
+            {/* tone-bar box — Unpolished → Direct light up, Enter clicks; cursor lives here */}
+            <div className="relative rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit">
+              <ToneBar unpolished={c2Tone >= 1} direct={c2Tone >= 2} enter={c2Tone >= 3} />
+              <TutCursor
+                visible={c2Cursor !== "hidden" && c2Cursor !== "away"}
+                style={
+                  c2Cursor === "unpolished"
+                    ? { left: "30%", top: "52%" }
+                    : c2Cursor === "direct"
+                      ? { left: "72%", top: "52%" }
+                      : c2Cursor === "enter"
+                        ? { left: "90%", top: "52%" }
+                        : { left: "120%", top: "52%" }
+                }
+              />
+            </div>
+            {/* tweet box — fully selected, waiting for the rewrite */}
+            <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
+              <TutTweet text={TUT_ORIGINAL} selCount={TUT_ORIGINAL.split(" ").length} />
+            </div>
+          </div>
+
+          {/* ── STEP 3 — Accept the rewrite ── */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3 mb-1">
+              <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">3</span>
+              <span className="font-display text-xl text-black">Accept the rewrite</span>
+            </div>
+            {/* result box — its own card; shimmer → rewrite → cursor clicks Accept → fades */}
+            <div
+              className="relative rounded-xl border-2 border-[#fff700] bg-white p-3 shadow-[0_3px_14px_rgba(255,247,0,0.22)] transition-all duration-500"
+              style={{
+                opacity: c3 >= 1 && c3 < 5 ? 1 : 0,
+                transform: c3 >= 1 && c3 < 5 ? "translateY(0)" : "translateY(8px)",
+              }}
+            >
+              <div className="min-h-[108px] flex flex-col justify-between">
+                {c3 >= 2 ? (
+                  <>
+                    <p className="text-[9px] leading-[1.65] text-neutral-800">{TUT_REWRITTEN}</p>
+                    <div className="mt-2 flex items-center justify-between">
+                      <span className="text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">Back</span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="flex items-center gap-0.5 text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">
+                          <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
+                          Copy
+                        </span>
+                        <span
+                          className={`text-[8px] font-bold px-2 py-0.5 rounded-full bg-[#fff700] border border-black text-black transition-transform duration-200 ${
+                            c3 >= 4 ? "scale-90" : ""
+                          }`}
+                        >
+                          Accept
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="space-y-2 py-1">
+                    <div className="h-1.5 rounded-full huu-shimmer w-full" />
+                    <div className="h-1.5 rounded-full huu-shimmer w-11/12" />
+                    <div className="h-1.5 rounded-full huu-shimmer w-4/5" />
+                    <div className="h-1.5 rounded-full huu-shimmer w-full" />
+                    <div className="h-1.5 rounded-full huu-shimmer w-2/3" />
+                  </div>
+                )}
+              </div>
+              <TutCursor
+                visible={c3 >= 2 && c3 < 5}
+                style={c3 >= 3 ? { right: "6%", bottom: "8%" } : { right: "45%", bottom: "-18px" }}
+              />
+            </div>
+            {/* tweet box — holds the original until Accept, then the rewrite */}
+            <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
+              <TutTweet
+                text={c3 >= 5 ? TUT_REWRITTEN : TUT_ORIGINAL}
+                selCount={c3 >= 5 ? 0 : TUT_ORIGINAL.split(" ").length}
+              />
+            </div>
+          </div>
+
+        </div>
+
+        <div className="max-w-3xl mx-auto mt-24 sm:mt-32">
 
           {/* Funnel region: headline + tabs + box, with two hand-drawn arrows
               overlaid that curve from beside the headline down onto the box. */}
@@ -1757,8 +1898,16 @@ export default function LandingPage() {
             aria-hidden="true"
           >
             <path
-              ref={leftArrowPathRef}
-              d="M 235 4 C 130 24, 60 90, 68 185 C 72 232, 84 258, 100 272 M 100 272 L 76 264 M 100 272 L 92 248"
+              ref={leftShaftRef}
+              d="M 235 4 C 130 24, 60 90, 68 185 C 72 232, 84 258, 100 272"
+              stroke="#9ca3af"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              ref={leftHeadRef}
+              d="M 100 272 L 76 264 M 100 272 L 92 248"
               stroke="#9ca3af"
               strokeWidth="5"
               strokeLinecap="round"
@@ -1775,8 +1924,16 @@ export default function LandingPage() {
             aria-hidden="true"
           >
             <path
-              ref={rightArrowPathRef}
-              d="M 5 4 C 110 24, 180 90, 172 185 C 168 232, 156 258, 140 272 M 140 272 L 164 264 M 140 272 L 148 248"
+              ref={rightShaftRef}
+              d="M 5 4 C 110 24, 180 90, 172 185 C 168 232, 156 258, 140 272"
+              stroke="#9ca3af"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              ref={rightHeadRef}
+              d="M 140 272 L 164 264 M 140 272 L 148 248"
               stroke="#9ca3af"
               strokeWidth="5"
               strokeLinecap="round"
