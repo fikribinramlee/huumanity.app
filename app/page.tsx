@@ -275,7 +275,8 @@ const BRAND = "#fff700";
 function attachScrollScrub(
   el: HTMLElement,
   duration: number,
-  apply: (t: number) => void
+  apply: (t: number) => void,
+  gain = 1
 ): () => void {
   let target = 0;
   let current = -1; // forces the first apply
@@ -287,11 +288,14 @@ function attachScrollScrub(
     const vh = window.innerHeight;
     const total = vh / 2 + rect.height / 2;
     if (total <= 0) return 0;
-    return Math.min(1, Math.max(0, (vh - rect.top) / total));
+    // `gain` > 1 makes the timeline reach 1 before the element hits the dead
+    // center of the viewport, then hold complete — useful when the animation
+    // should be fully played "by the halfway point" rather than exactly at it.
+    return Math.min(1, Math.max(0, ((vh - rect.top) / total) * gain));
   };
 
   const tick = () => {
-    const next = current < 0 ? target : current + (target - current) * 0.16;
+    const next = current < 0 ? target : current + (target - current) * 0.2;
     current = Math.abs(target - next) < 0.0005 ? target : next;
     apply(current * duration);
     if (current !== target) {
@@ -449,10 +453,13 @@ export default function LandingPage() {
     const el = featSectionRef.current;
     if (!el) return;
     return attachScrollScrub(el, 9700, (T) => {
-      setFeatCursorVisible(T >= 600 && T < 7600);
-      setFeatCursorExiting(T >= 7600 && T < 8300);
+      // Cursor fades in and then STAYS on the Enter button (pos 3) — it no
+      // longer slides away after the click. Enter keeps its clicked/yellow
+      // state so the cursor reads as resting on the active button.
+      setFeatCursorVisible(T >= 600);
+      setFeatCursorExiting(false);
       setFeatCursorPos(T >= 6200 ? 3 : T >= 4700 ? 2 : T >= 3200 ? 1 : 0);
-      setFeatArrowFlash(T >= 7000 && T < 7600);
+      setFeatArrowFlash(T >= 7000);
       setFeatAnimStep(
         T >= 9200 ? 7
         : T >= 7900 ? 6
@@ -501,9 +508,17 @@ export default function LandingPage() {
     const len = path.getTotalLength();
     path.style.strokeDasharray = `${len}`;
     path.style.strokeDashoffset = `${len}`;
-    return attachScrollScrub(el, 1, (t) => {
-      path.style.strokeDashoffset = `${len * (1 - t)}`;
-    });
+    // gain 1.7 → the loop is fully closed around the whole headline by the
+    // time the line reaches roughly the middle of the screen (and stays
+    // complete past it). Scrolling back up erases it in reverse.
+    return attachScrollScrub(
+      el,
+      1,
+      (t) => {
+        path.style.strokeDashoffset = `${len * (1 - t)}`;
+      },
+      1.7
+    );
   }, []);
 
   // Track which section is in view for crossed-out nav effect.
@@ -1308,21 +1323,24 @@ export default function LandingPage() {
               </span>
               <svg
                 className="absolute pointer-events-none"
-                style={{ left: "-6%", top: "-42%", width: "112%", height: "184%" }}
+                style={{ left: "-8%", top: "-55%", width: "116%", height: "210%" }}
                 viewBox="0 0 320 120"
                 preserveAspectRatio="none"
                 aria-hidden="true"
               >
                 {/* One loose, slightly overlapping loop — like someone circled
-                    the words by hand. Drawn via stroke-dashoffset scrubbing. */}
+                    the words by hand. Full closed loop so the finished state
+                    wraps the entire headline; drawn via stroke-dashoffset
+                    scrubbing (no non-scaling-stroke, so the reveal length
+                    matches getTotalLength under the stretched viewBox). */}
                 <path
                   ref={tryCirclePathRef}
-                  d="M 162 14 C 250 6, 314 30, 312 60 C 310 94, 230 112, 152 108 C 74 104, 8 88, 10 56 C 12 24, 96 8, 200 16"
+                  d="M 150 12 C 244 6, 314 26, 311 60 C 308 95, 232 114, 150 111 C 66 108, 7 91, 9 57 C 11 23, 92 7, 198 13"
                   fill="none"
                   stroke="#a3a3a3"
-                  strokeWidth="3"
+                  strokeWidth="2"
                   strokeLinecap="round"
-                  vectorEffect="non-scaling-stroke"
+                  strokeLinejoin="round"
                 />
               </svg>
             </span>
