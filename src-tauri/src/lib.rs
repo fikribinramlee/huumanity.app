@@ -295,14 +295,169 @@ fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection
     (x.round() as i32, y.round() as i32)
 }
 
-/// Mirror of the TypeScript `isRephrashable` ground rule.
-/// Single uppercase-initial word → proper noun → false.
-/// Single ALL-CAPS word → acronym → false.
-/// Single word < 3 letters → false.
-/// Multi-word → pass if ≥50 % of non-space chars are letters.
+/// Strong "this is not prose" signals: code, math, data, or design tokens.
+/// Mirror of the TypeScript `looksLikeCodeOrData` (no regex — plain scanning).
+fn looks_like_code_or_data(s: &str) -> bool {
+    let non_space: String = s.chars().filter(|c| !c.is_whitespace()).collect();
+    if non_space.is_empty() {
+        return true;
+    }
+    let len = non_space.chars().count() as f64;
+
+    let digits = non_space.chars().filter(|c| c.is_ascii_digit()).count() as f64;
+    let letters = non_space.chars().filter(|c| c.is_ascii_alphabetic()).count() as f64;
+    let code_symbols = non_space
+        .chars()
+        .filter(|c| "{}[]()<>=+*/\\|^~%$@#_`".contains(*c))
+        .count() as f64;
+
+    // 1. symbol-dense → code / formula / design
+    if code_symbols / len > 0.12 {
+        return true;
+    }
+    // 2. digit-dense → number / calculation / data
+    if digits / len > 0.30 {
+        return true;
+    }
+    // 3. letter-sparse → not prose
+    if letters / len < 0.45 {
+        return true;
+    }
+
+    // 4. explicit code / markup token patterns
+    let code_seqs = [
+        "=>", "===", "!==", "==", "!=", "<=", ">=", "&&", "||", "::", "/>", "</", "/*", "*/",
+    ];
+    if code_seqs.iter().any(|seq| s.contains(seq)) {
+        return true;
+    }
+    let st = s.trim();
+    if st.ends_with(';') {
+        return true;
+    }
+    if let Some(first) = st.chars().next() {
+        if "{}[]".contains(first) {
+            return true;
+        }
+    }
+    if let Some(last) = st.chars().last() {
+        if "{}[]".contains(last) {
+            return true;
+        }
+    }
+    // "<" immediately followed by a letter → markup tag open
+    let chars: Vec<char> = s.chars().collect();
+    for i in 0..chars.len().saturating_sub(1) {
+        if chars[i] == '<' && chars[i + 1].is_ascii_alphabetic() {
+            return true;
+        }
+    }
+    // language keywords (word-boundary via alnum tokenization)
+    let keywords = [
+        "function", "const", "let", "var", "return", "import", "export", "class", "def",
+        "public", "private", "static", "void", "null", "undefined", "async", "await", "elif",
+        "println", "console", "printf",
+    ];
+    let lower = s.to_lowercase();
+    if lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|t| !t.is_empty())
+        .any(|t| keywords.contains(&t))
+    {
+        return true;
+    }
+
+    // 5. arithmetic / equations: any "=", or "number op number"
+    if s.contains('=') {
+        return true;
+    }
+    let is_op = |c: char| "-+*/^×÷".contains(c);
+    let mut i = 0usize;
+    while i < chars.len() {
+        if chars[i].is_ascii_digit() {
+            let mut j = i + 1;
+            while j < chars.len() && chars[j] == ' ' {
+                j += 1;
+            }
+            if j < chars.len() && is_op(chars[j]) {
+                let mut k = j + 1;
+                while k < chars.len() && chars[k] == ' ' {
+                    k += 1;
+                }
+                if k < chars.len() && chars[k].is_ascii_digit() {
+                    return true;
+                }
+            }
+        }
+        i += 1;
+    }
+
+    // 6. design tokens — hex colors
+    for idx in 0..chars.len() {
+        if chars[idx] == '#' {
+            let mut j = idx + 1;
+            while j < chars.len() && chars[j].is_ascii_hexdigit() {
+                j += 1;
+            }
+            let hex_len = j - (idx + 1);
+            let boundary = j >= chars.len() || !chars[j].is_alphanumeric();
+            if (3..=8).contains(&hex_len) && boundary {
+                return true;
+            }
+        }
+    }
+    // CSS units: number run then unit token
+    let units = [
+        "px", "rem", "em", "vh", "vw", "vmin", "vmax", "pt", "pc", "mm", "cm", "ch", "fr", "deg",
+        "ms",
+    ];
+    let mut i = 0usize;
+    while i < chars.len() {
+        if chars[i].is_ascii_digit() {
+            let mut j = i;
+            while j < chars.len() && (chars[j].is_ascii_digit() || chars[j] == '.') {
+                j += 1;
+            }
+            let mut k = j;
+            while k < chars.len() && chars[k].is_ascii_alphabetic() {
+                k += 1;
+            }
+            if k > j {
+                let unit: String = chars[j..k].iter().collect::<String>().to_lowercase();
+                let boundary = k >= chars.len() || !chars[k].is_alphanumeric();
+                if boundary && units.contains(&unit.as_str()) {
+                    return true;
+                }
+            }
+            i = j.max(i + 1);
+        } else {
+            i += 1;
+        }
+    }
+    // color / transform functions: name immediately followed by "("
+    let fns = [
+        "rgb(", "rgba(", "hsl(", "hsla(", "hwb(", "var(", "calc(", "url(", "translate(",
+        "translatex(", "translatey(", "rotate(", "scale(", "matrix(", "linear-gradient(",
+        "radial-gradient(",
+    ];
+    if fns.iter().any(|f| lower.contains(f)) {
+        return true;
+    }
+
+    false
+}
+
+/// Mirror of the TypeScript `isRephrashable` ground rule. The yellow button is
+/// for rephrasing natural-language prose only — reject code, math, formulas,
+/// numbers, data, and design tokens, plus single names/acronyms/stubs.
 fn is_rephrashable(text: &str) -> bool {
     let trimmed = text.trim();
     if trimmed.is_empty() {
+        return false;
+    }
+
+    // Hard reject anything that reads as code / math / data / design.
+    if looks_like_code_or_data(trimmed) {
         return false;
     }
 
@@ -310,8 +465,14 @@ fn is_rephrashable(text: &str) -> bool {
 
     if words.len() == 1 {
         let word = words[0];
-        let letters: String = word.chars().filter(|c| c.is_alphabetic()).collect();
-        if letters.len() < 3 {
+        let letters: String = word.chars().filter(|c| c.is_ascii_alphabetic()).collect();
+        let letter_len = letters.chars().count();
+        let word_len = word.chars().count();
+        if letter_len < 3 {
+            return false;
+        }
+        // Must be essentially all letters — rejects stubs like "v2", "px", "h1".
+        if (letter_len as f64) / (word_len as f64) < 0.8 {
             return false;
         }
         // ALL-CAPS / acronym
@@ -325,13 +486,21 @@ fn is_rephrashable(text: &str) -> bool {
         return true;
     }
 
-    // Multi-word: letter ratio check
+    // Multi-word: prose is letter-dominated …
     let non_space: String = trimmed.chars().filter(|c| !c.is_whitespace()).collect();
     if non_space.is_empty() {
         return false;
     }
-    let letter_count = non_space.chars().filter(|c| c.is_alphabetic()).count();
-    letter_count as f64 / non_space.len() as f64 >= 0.50
+    let letter_count = non_space.chars().filter(|c| c.is_ascii_alphabetic()).count();
+    if (letter_count as f64) / (non_space.chars().count() as f64) < 0.55 {
+        return false;
+    }
+    // … and needs at least two real alphabetic words (≥2 letters each).
+    let wordy = words
+        .iter()
+        .filter(|w| w.chars().filter(|c| c.is_ascii_alphabetic()).count() >= 2)
+        .count();
+    wordy >= 2
 }
 
 /// Resolve the URL a Tauri window should load.
