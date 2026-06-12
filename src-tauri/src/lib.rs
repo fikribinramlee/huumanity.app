@@ -524,7 +524,7 @@ fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
         window
     } else {
         WebviewWindowBuilder::new(app, "main", webview_url("/editor"))
-            .title("huumanity")
+            .title("")
             .inner_size(1200.0, 800.0)
             .min_inner_size(900.0, 600.0)
             .resizable(true)

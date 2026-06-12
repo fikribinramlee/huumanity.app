@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
+import { SignInButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isRephrashable } from "./lib/isRephrashable";
@@ -1349,29 +1349,12 @@ export default function LandingPage() {
 
           {/* Auth controls — right */}
           <div className="shrink-0 flex items-center gap-3">
-            {isLoaded && isSignedIn && !isWaitlist ? (
-              <a
-                href="/download"
-                className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-              >
-                <DownloadCtaContent platform={downloadPlatform} />
-              </a>
-            ) : isWaitlist ? (
-              <a
-                href={primaryCtaHref}
-                className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-              >
-                <DownloadCtaContent platform={downloadPlatform} waitlist />
-              </a>
-            ) : (
-              <>
-               <SignUpButton mode="redirect" forceRedirectUrl="/download">
-                <button className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
-                  <DownloadCtaContent platform={downloadPlatform} />
-                </button>
-              </SignUpButton>
-              </>
-            )}
+            <a
+              href={primaryCtaHref}
+              className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+            >
+              <DownloadCtaContent platform={downloadPlatform} waitlist={isWaitlist} />
+            </a>
           </div>
         </div>
       </header>
@@ -1393,27 +1376,12 @@ export default function LandingPage() {
           </p>
 
           {/* Download CTA */}
-          {isLoaded && isSignedIn && !isWaitlist ? (
-            <a
-              href="/download"
-              className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-            >
-              <DownloadCtaContent platform={downloadPlatform} />
-            </a>
-          ) : isWaitlist ? (
-            <a
-              href={primaryCtaHref}
-              className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-            >
-              <DownloadCtaContent platform={downloadPlatform} waitlist />
-            </a>
-          ) : (
-            <SignUpButton mode="redirect" forceRedirectUrl="/download">
-              <button className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
-                <DownloadCtaContent platform={downloadPlatform} />
-              </button>
-            </SignUpButton>
-          )}
+          <a
+            href={primaryCtaHref}
+            className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+          >
+            <DownloadCtaContent platform={downloadPlatform} waitlist={isWaitlist} />
+          </a>
 
           {/* Handwritten annotation */}
           <div className="mt-10 flex flex-col items-center gap-1">
@@ -1468,7 +1436,7 @@ export default function LandingPage() {
 
               <div>
                 <Link
-                  href={isWaitlist ? primaryCtaHref : "/sign-up"}
+                  href={primaryCtaHref}
                   className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
                 >
                   {isWaitlist ? waitlistLabel : "Try it free"}
