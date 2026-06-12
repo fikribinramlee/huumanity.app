@@ -7,7 +7,10 @@ export const metadata: Metadata = {
     "Download the huumanity desktop app and humanize text anywhere on your Mac.",
 };
 
-const DOWNLOAD_FILE = "huu-v1.mvp.dmg";
+// Stable filename — `npm run tauri:release` always overwrites this file with the
+// freshest build (see `scripts/copy-tauri-bundle.mjs`). DO NOT version this
+// filename; the version lives inside the bundle itself.
+const DOWNLOAD_FILE = "huu-mac.dmg";
 const DOWNLOAD_URL =
   process.env.NEXT_PUBLIC_DOWNLOAD_URL ?? `/downloads/${DOWNLOAD_FILE}`;
 

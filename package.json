@@ -12,7 +12,8 @@
     "tauri": "tauri",
     "kill:3000": "lsof -ti :3000 | xargs kill -9 2>/dev/null || true",
     "tauri:dev": "npm run kill:3000 && tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "tauri:release": "tauri build && node scripts/copy-tauri-bundle.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
