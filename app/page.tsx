@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { SignInButton, useUser } from "@clerk/nextjs";
+import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isRephrashable } from "./lib/isRephrashable";
@@ -1347,14 +1347,32 @@ export default function LandingPage() {
           {/* Divider */}
           <div className="hidden md:block w-px h-5 bg-black/15 mx-6 shrink-0" />
 
-          {/* Auth controls — right */}
+          {/* Auth controls — right.
+              Waitlist site → /join (inline email capture).
+              Main site + signed in → straight to /download.
+              Main site + signed out → Clerk sign-up, then /download. */}
           <div className="shrink-0 flex items-center gap-3">
-            <a
-              href={primaryCtaHref}
-              className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-            >
-              <DownloadCtaContent platform={downloadPlatform} waitlist={isWaitlist} />
-            </a>
+            {isWaitlist ? (
+              <a
+                href={primaryCtaHref}
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+              >
+                <DownloadCtaContent platform={downloadPlatform} waitlist />
+              </a>
+            ) : isLoaded && isSignedIn ? (
+              <a
+                href="/download"
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+              >
+                <DownloadCtaContent platform={downloadPlatform} />
+              </a>
+            ) : (
+              <SignUpButton mode="redirect" forceRedirectUrl="/download">
+                <button className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
+                  <DownloadCtaContent platform={downloadPlatform} />
+                </button>
+              </SignUpButton>
+            )}
           </div>
         </div>
       </header>
@@ -1375,13 +1393,28 @@ export default function LandingPage() {
             the text selection tool that rephrases AI copy into unpolished-human sounding words across every app.
           </p>
 
-          {/* Download CTA */}
-          <a
-            href={primaryCtaHref}
-            className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-          >
-            <DownloadCtaContent platform={downloadPlatform} waitlist={isWaitlist} />
-          </a>
+          {/* Download CTA — same routing as the header. */}
+          {isWaitlist ? (
+            <a
+              href={primaryCtaHref}
+              className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+            >
+              <DownloadCtaContent platform={downloadPlatform} waitlist />
+            </a>
+          ) : isLoaded && isSignedIn ? (
+            <a
+              href="/download"
+              className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+            >
+              <DownloadCtaContent platform={downloadPlatform} />
+            </a>
+          ) : (
+            <SignUpButton mode="redirect" forceRedirectUrl="/download">
+              <button className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
+                <DownloadCtaContent platform={downloadPlatform} />
+              </button>
+            </SignUpButton>
+          )}
 
           {/* Handwritten annotation */}
           <div className="mt-10 flex flex-col items-center gap-1">
@@ -1435,12 +1468,27 @@ export default function LandingPage() {
               </p>
 
               <div>
-                <Link
-                  href={primaryCtaHref}
-                  className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-                >
-                  {isWaitlist ? waitlistLabel : "Try it free"}
-                </Link>
+                {isWaitlist ? (
+                  <Link
+                    href={primaryCtaHref}
+                    className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+                  >
+                    {waitlistLabel}
+                  </Link>
+                ) : isLoaded && isSignedIn ? (
+                  <Link
+                    href="/download"
+                    className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+                  >
+                    Try it free
+                  </Link>
+                ) : (
+                  <SignUpButton mode="redirect" forceRedirectUrl="/download">
+                    <button className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
+                      Try it free
+                    </button>
+                  </SignUpButton>
+                )}
               </div>
             </div>
 
