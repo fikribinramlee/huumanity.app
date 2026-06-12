@@ -492,10 +492,23 @@ useEffect(() => {
   };
 
   const handleSignIn = () => {
-    // Navigate the current window to Clerk sign-in. This is same-origin in both
-    // the website and the desktop shell, so the session cookie lands in the right
-    // cookie jar. After sign-in Clerk redirects back to /editor, where the
-    // `useUser()` effect resolves the session and flips to the app view.
+    // Wispr Flow-style desktop auth: bounce the user to a real browser tab so
+    // they sign in once on the website, land on /app-verified, and click
+    // "Open huumanity" — which deep-links back into the app.
+    //
+    // On the website itself (regular browser), there is no separate "app" to
+    // bounce to, so we navigate in-window to Clerk and come back to /editor.
+    const isTauri =
+      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+    if (isTauri) {
+      const url = "https://huumanity.app/sign-in?redirect_url=/app-verified";
+      // window.open(_blank) in a Tauri webview defers to the OS default browser
+      // when no opener-plugin handler is registered, which is what we want.
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
     window.location.assign("/sign-in?redirect_url=/editor");
   };
 
@@ -523,30 +536,96 @@ useEffect(() => {
             onClick={handleSignIn}
             className="mt-8 flex w-full max-w-[340px] items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-black text-white transition hover:bg-neutral-900"
           >
-            Sign in
+            Sign in via browser
             <IcArrowUpRight />
           </button>
 
-          <p className="mt-6 text-xs text-neutral-400">
-            Don&apos;t have an account?{" "}
-            <button
-              onClick={() =>
-                window.location.assign("/sign-up?redirect_url=/editor")
-              }
-              className="font-bold text-black underline-offset-2 hover:underline"
+          <p className="mt-6 text-xs text-neutral-500 leading-5 max-w-[340px]">
+            By signing up, you agree to our{" "}
+            <a
+              href="https://huumanity.app/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-black underline underline-offset-2"
             >
-              Sign up
-            </button>
+              Terms of Service
+            </a>{" "}
+            and{" "}
+            <a
+              href="https://huumanity.app/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-bold text-black underline underline-offset-2"
+            >
+              Privacy Policy
+            </a>.
           </p>
         </div>
 
-        {/* Right panel — dark brand */}
-        <div className="hidden sm:flex sm:w-[54%] flex-col items-center justify-center bg-black px-12">
-          <p className="font-display text-5xl text-[#fff700] leading-[1.08] text-center">
-            Stop writing<br />like a robot.
-          </p>
-          <p className="mt-5 text-center text-base text-white/50 max-w-xs leading-7">
-            Select any text. Pick a tone. Sound human. In every app on your Mac.
+        {/* Right panel — workspace mockup illustrating the "works in any app"
+            value prop, in the spirit of Wispr Flow's onboarding hero. */}
+        <div className="hidden sm:flex sm:w-[54%] flex-col items-center justify-center bg-[#f5f4ef] px-10 py-16 relative overflow-hidden">
+          <div className="text-center mb-10">
+            <h2 className="font-display text-5xl text-black leading-[1.08]">
+              Works inside every app.
+              <br />
+              <span className="text-neutral-500">No copy-paste needed.</span>
+            </h2>
+          </div>
+
+          {/* Notion-style workspace mockup */}
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-[0_8px_40px_rgba(0,0,0,0.08)] border border-black/[0.06] overflow-hidden">
+            {/* Top chrome — fake browser dots + page title */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-black/5 bg-neutral-50">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F57]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]" />
+              <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]" />
+              <span className="ml-3 text-[11px] font-semibold text-neutral-400">
+                Untitled — Notion
+              </span>
+            </div>
+
+            {/* Page body */}
+            <div className="px-6 py-6">
+              <h3 className="font-display text-xl text-black mb-3">
+                Launch announcement
+              </h3>
+
+              {/* Paragraph 1 — plain copy */}
+              <p className="text-[13px] leading-[1.7] text-neutral-700 mb-3">
+                Today, we&apos;re excited to share a new chapter in our journey.
+              </p>
+
+              {/* Paragraph 2 — selected AI-sounding text, highlighted */}
+              <p className="text-[13px] leading-[1.7] text-neutral-700 relative">
+                <span className="bg-[#fff700]/40 box-decoration-clone px-0.5 rounded-sm">
+                  In today&apos;s rapidly evolving landscape, leveraging
+                  cutting-edge solutions to drive impactful outcomes has never
+                  been more critical.
+                </span>
+
+                {/* Floating yellow huu button anchored to the highlight */}
+                <span
+                  className="absolute -right-3 -top-7 inline-flex items-center gap-1.5 rounded-full border-2 border-black bg-[#fff700] px-3 py-1 text-[11px] font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)]"
+                  aria-hidden="true"
+                >
+                  <span className="font-display text-sm leading-none">huu</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </span>
+              </p>
+
+              <p className="text-[13px] leading-[1.7] text-neutral-300 mt-3">
+                The implications truly cannot be overstated. Stay tuned…
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-8 text-center text-sm text-neutral-500 max-w-xs leading-6">
+            Highlight any text in any app. huu rewrites it so it sounds like a
+            real person.
           </p>
         </div>
       </main>
