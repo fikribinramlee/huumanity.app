@@ -528,12 +528,13 @@ export default function LandingPage() {
   const [featCursorExiting, setFeatCursorExiting] = useState(false);
   const [featBtnLefts, setFeatBtnLefts] = useState<{ h: string; u: string; e: string; top: string }>({ h: "15%", u: "33%", e: "75%", top: "54%" });
   const [isCustomMode, setIsCustomMode] = useState(false);
-  // 3-step tutorial state. All three columns are always visible; the
-  // animation plays through them in sequence (col 1 → 2 → 3), holds, repeats.
+  // 3-step tutorial state. The animation plays col 1 → 2 → 3 in sequence.
+  // `currentStep` tracks which column is "live" so the others dim back.
   const tutRef = useRef<HTMLDivElement>(null);
+  const [currentStep, setCurrentStep] = useState<0 | 1 | 2 | 3>(1);
   // Column 1 — select text
   const [c1Sel, setC1Sel] = useState(0); // # of words highlighted, counting from the END
-  const [c1Cursor, setC1Cursor] = useState<"hidden" | "start" | "end" | "button">("hidden");
+  const [c1Cursor, setC1Cursor] = useState<"hidden" | "start" | "end" | "button" | "after">("hidden");
   const [c1Button, setC1Button] = useState(false); // yellow selector button
   const [c1Bar, setC1Bar] = useState(false); // tone-bar box faded in
   // Column 2 — pick tone(s)
@@ -774,6 +775,7 @@ export default function LandingPage() {
       setC2Tone(0);
       setC2Cursor("hidden");
       setC3(0);
+      setCurrentStep(1); // step 1 starts fully lit; cols 2 & 3 dim
     };
 
     const loop = async (tok: { cancelled: boolean }) => {
@@ -796,13 +798,18 @@ export default function LandingPage() {
         if (tok.cancelled) return;
         setC1Cursor("button");
         setC1Button(true);
-        await sleep(1100);
+        await sleep(900); // hold on the click so it reads as a press
         if (tok.cancelled) return;
-        setC1Bar(true); // click → tone bar fades in (as its own box above)
-        await sleep(1500);
+        setC1Bar(true); // click → tone bar starts fading in above
+        setC1Cursor("after"); // cursor glides slightly left of the button
+        await sleep(500);
+        if (tok.cancelled) return;
+        setC1Cursor("hidden"); // …then fades away softly
+        await sleep(900);
         if (tok.cancelled) return;
 
         // ── COLUMN 2 — pick Unpolished + Direct, click Enter, glide away ──
+        setCurrentStep(2); // attention moves to step 2; col 1 dims back
         setC2Cursor("unpolished");
         await sleep(950);
         if (tok.cancelled) return;
@@ -826,6 +833,7 @@ export default function LandingPage() {
         if (tok.cancelled) return;
 
         // ── COLUMN 3 — shimmer 1.5s → result → accept → swap the tweet ──
+        setCurrentStep(3); // step 3 "pops" — everything lights up at full opacity
         setC3(1); // rewriting shimmer
         await sleep(1500);
         if (tok.cancelled) return;
@@ -1659,8 +1667,13 @@ export default function LandingPage() {
           className="max-w-6xl mx-auto mt-20 sm:mt-28 grid grid-cols-1 md:grid-cols-3 gap-10 lg:gap-14 text-left"
         >
 
-          {/* ── STEP 1 — Select a text ── */}
-          <div className="flex flex-col">
+          {/* ── STEP 1 — Select a text ──
+              Lit during step 1 and step 3 (the "everything pops up" beat). */}
+          <div
+            className={`flex flex-col transition-opacity duration-700 ${
+              currentStep === 1 || currentStep === 3 ? "opacity-100" : "opacity-30"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-7">
               <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">1</span>
               <span className="font-display text-xl text-black">Select a text</span>
@@ -1687,15 +1700,28 @@ export default function LandingPage() {
                     : c1Cursor === "end"
                       ? { left: "8%", top: "30%" }
                       : c1Cursor === "button"
-                        ? { left: "1%", top: "26%" }
-                        : { left: "50%", top: "60%" }
+                        ? // cursor tip lands on the yellow huu button (which
+                          // sits at -left-5 top-4 over the avatar gap)
+                          { left: "8%", top: "32%" }
+                        : c1Cursor === "after"
+                          ? // slight left/down of the button — cursor walks
+                            // away while fading
+                            { left: "1%", top: "40%" }
+                          : // "hidden" — keep same coords so the fade-out has
+                            // no jump
+                            { left: "1%", top: "40%" }
                 }
               />
             </div>
           </div>
 
-          {/* ── STEP 2 — Pick a tone(s) ── */}
-          <div className="flex flex-col">
+          {/* ── STEP 2 — Pick a tone(s) ──
+              Lit during step 2 and step 3. */}
+          <div
+            className={`flex flex-col transition-opacity duration-700 ${
+              currentStep === 2 || currentStep === 3 ? "opacity-100" : "opacity-30"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-7">
               <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">2</span>
               <span className="font-display text-xl text-black">Pick a tone(s)</span>
@@ -1724,8 +1750,13 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* ── STEP 3 — Accept the rewrite ── */}
-          <div className="flex flex-col">
+          {/* ── STEP 3 — Accept the rewrite ──
+              Lit only during step 3 — the final reveal pops everything. */}
+          <div
+            className={`flex flex-col transition-opacity duration-700 ${
+              currentStep === 3 ? "opacity-100" : "opacity-30"
+            }`}
+          >
             <div className="flex items-center gap-3 mb-7">
               <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">3</span>
               <span className="font-display text-xl text-black">Accept the rewrite</span>
@@ -1777,7 +1808,13 @@ export default function LandingPage() {
                 </div>
                 <TutCursor
                   visible={c3 >= 2 && c3 < 5}
-                  style={c3 >= 3 ? { right: "6%", bottom: "-16px" } : { right: "45%", bottom: "-26px" }}
+                  style={
+                    c3 >= 3
+                      ? // tip sits on the Accept button at the box's bottom-right
+                        { right: "8%", bottom: "10%" }
+                      : // resting just below the box before gliding onto Accept
+                        { right: "45%", bottom: "-26px" }
+                  }
                 />
               </div>
             </div>
