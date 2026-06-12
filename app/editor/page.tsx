@@ -492,23 +492,10 @@ useEffect(() => {
   };
 
   const handleSignIn = () => {
-    // Wispr Flow-style desktop auth: bounce the user to a real browser tab so
-    // they sign in once on the website, land on /app-verified, and click
-    // "Open huumanity" — which deep-links back into the app.
-    //
-    // On the website itself (regular browser), there is no separate "app" to
-    // bounce to, so we navigate in-window to Clerk and come back to /editor.
-    const isTauri =
-      typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
-
-    if (isTauri) {
-      const url = "https://huumanity.app/sign-in?redirect_url=/app-verified";
-      // window.open(_blank) in a Tauri webview defers to the OS default browser
-      // when no opener-plugin handler is registered, which is what we want.
-      window.open(url, "_blank", "noopener,noreferrer");
-      return;
-    }
-
+    // The desktop app webview now loads `huumanity.app/editor` directly, so it
+    // is same-origin with the website and shares Clerk's cookie jar. A plain
+    // in-window navigation lands the session cookie in the right place — no
+    // browser bounce or deep link required.
     window.location.assign("/sign-in?redirect_url=/editor");
   };
 
@@ -536,7 +523,7 @@ useEffect(() => {
             onClick={handleSignIn}
             className="mt-8 flex w-full max-w-[340px] items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-black text-white transition hover:bg-neutral-900"
           >
-            Sign in via browser
+            Sign in
             <IcArrowUpRight />
           </button>
 
