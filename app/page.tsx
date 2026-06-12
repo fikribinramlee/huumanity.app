@@ -1432,7 +1432,7 @@ export default function LandingPage() {
       <section
         id="benefit"
         ref={benefitSectionRef}
-        className="bg-white px-4 sm:px-6 pt-24 sm:pt-28 pb-4 sm:pb-6"
+        className="bg-white px-4 sm:px-6 pt-24 sm:pt-28 pb-3"
       >
         {/* Everything lives inside the black box */}
         <div className="bg-black rounded-[2.5rem] w-full overflow-hidden">
@@ -1655,19 +1655,21 @@ export default function LandingPage() {
       <section
         id="demo"
         ref={demoSectionRef}
-        className="relative bg-white px-6 pt-6 pb-10 sm:pt-8 sm:pb-12"
+        className="relative bg-white px-4 sm:px-6 pt-3 pb-10 sm:pb-12"
       >
-        {/* Headline */}
-        <div className="max-w-3xl mx-auto text-center">
-          <h2
-            className="font-display text-black leading-[1.02] tracking-tight mb-5 md:whitespace-nowrap"
-            style={{ fontSize: "clamp(2rem, 4.8vw, 3.75rem)" }}
-          >
-            People know it&apos;s written by AI
-          </h2>
-          <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7 max-w-xl mx-auto">
-            The way AI writes is instantly recognizable. And it&apos;s quietly killing your replies, your engagement, and your credibility.
-          </p>
+        {/* Headline — yellow rounded box, visually attached to the black benefit box above */}
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-[#fff700] rounded-[2.5rem] px-8 sm:px-14 py-14 sm:py-20 text-center">
+            <h2
+              className="font-display text-black leading-[1.02] tracking-tight mb-5"
+              style={{ fontSize: "clamp(2rem, 4.8vw, 3.75rem)" }}
+            >
+              People know it&apos;s written by AI
+            </h2>
+            <p className="font-sans text-black/60 text-base sm:text-lg leading-7 max-w-xl mx-auto">
+              The way AI writes is instantly recognizable. And it&apos;s quietly killing your replies, your engagement, and your credibility.
+            </p>
+          </div>
         </div>
 
         {/* 3-step "how the selection tool works" visualization. All three
