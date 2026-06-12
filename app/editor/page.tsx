@@ -307,9 +307,9 @@ export default function EditorPage() {
           : "Allow huu in macOS Accessibility to enable desktop selection."
       );
       return allowed;
-    } catch {
+    } catch (err) {
       setAccessibilityAllowed(false);
-      setDetectorStatus("Could not check Accessibility permission.");
+      setDetectorStatus(`Could not check Accessibility permission — ${String(err)}`);
       return false;
     }
   }, []);
@@ -339,9 +339,9 @@ export default function EditorPage() {
       );
       await refreshApiConnection();
       return health;
-    } catch {
+    } catch (err) {
       setSelectorHealth(null);
-      setDetectorStatus("Could not read selector health.");
+      setDetectorStatus(`Could not read selector health — ${String(err)}`);
       return null;
     } finally {
       setIsCheckingHealth(false);
@@ -482,9 +482,9 @@ useEffect(() => {
     try {
       await invoke("request_accessibility_permission");
       await invoke("open_accessibility_settings");
-    } catch {
+    } catch (err) {
       setCaptureError(
-        "Open System Settings and allow huu under Accessibility."
+        `Could not open Accessibility settings — ${String(err)}. Open System Settings → Privacy & Security → Accessibility and enable huu.`
       );
     }
   };
