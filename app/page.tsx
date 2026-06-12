@@ -1668,10 +1668,10 @@ export default function LandingPage() {
         >
 
           {/* ── STEP 1 — Select a text ──
-              Lit during step 1 and step 3 (the "everything pops up" beat). */}
+              Lit from step 1 onward (stays at 100% once it has played). */}
           <div
             className={`flex flex-col transition-opacity duration-700 ${
-              currentStep === 1 || currentStep === 3 ? "opacity-100" : "opacity-30"
+              currentStep >= 1 ? "opacity-100" : "opacity-30"
             }`}
           >
             <div className="flex items-center gap-3 mb-7">
@@ -1716,10 +1716,10 @@ export default function LandingPage() {
           </div>
 
           {/* ── STEP 2 — Pick a tone(s) ──
-              Lit during step 2 and step 3. */}
+              Lit from step 2 onward (stays at 100% once it has played). */}
           <div
             className={`flex flex-col transition-opacity duration-700 ${
-              currentStep === 2 || currentStep === 3 ? "opacity-100" : "opacity-30"
+              currentStep >= 2 ? "opacity-100" : "opacity-30"
             }`}
           >
             <div className="flex items-center gap-3 mb-7">
