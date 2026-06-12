@@ -523,7 +523,7 @@ useEffect(() => {
             onClick={handleSignIn}
             className="mt-8 flex w-full max-w-[340px] items-center justify-center gap-2 rounded-xl bg-black px-6 py-4 text-sm font-black text-white transition hover:bg-neutral-900"
           >
-            Sign in
+            Sign in via browser
             <IcArrowUpRight />
           </button>
 
