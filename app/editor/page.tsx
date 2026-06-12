@@ -2,17 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useUser, useClerk, SignIn } from "@clerk/nextjs";
 import { ExternalRewritePanel } from "../components/ExternalRewritePanel";
 import { ScratchpadEditor } from "../components/ScratchpadEditor";
 import { isRephrashable } from "../lib/isRephrashable";
 import { HuuLogo } from "../components/HuuLogo";
+import { clerkAppearance } from "../lib/clerkAppearance";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type View = "home" | "scratchpad";
 type SettingsTab = "account" | "billing";
-type AuthState = "login" | "verified" | "app";
+type AuthState = "login" | "signing-in" | "verified" | "app";
 type Plan = "free" | "pro";
 
 type SubscriptionStatus = {
@@ -492,11 +493,12 @@ useEffect(() => {
   };
 
   const handleSignIn = () => {
-    // The desktop app webview now loads `huumanity.app/editor` directly, so it
-    // is same-origin with the website and shares Clerk's cookie jar. A plain
-    // in-window navigation lands the session cookie in the right place — no
-    // browser bounce or deep link required.
-    window.location.assign("/sign-in?redirect_url=/editor");
+    // Sign in *in-window* inside the app's own webview (same origin as
+    // huumanity.app), so Clerk's session cookie lands in the right cookie jar
+    // and the app is actually authenticated. We render Clerk's <SignIn> embedded
+    // in the "signing-in" state rather than bouncing to the system browser
+    // (whose separate cookie jar would never authenticate the app).
+    setAuthState("signing-in");
   };
 
   // ── Auth: Login screen ─────────────────────────────────────────────────────
@@ -614,6 +616,35 @@ useEffect(() => {
             Highlight any text in any app. huu rewrites it so it sounds like a
             real person.
           </p>
+        </div>
+      </main>
+    );
+  }
+
+  // ── Auth: Sign-in screen (embedded Clerk, in-window) ───────────────────────
+
+  if (authState === "signing-in") {
+    return (
+      <main className="flex h-screen w-screen flex-col items-center overflow-y-auto bg-white text-black">
+        {/* Top bar — back button to return to the menu at any time */}
+        <div className="flex w-full max-w-md items-center px-6 pt-8">
+          <button
+            onClick={() => setAuthState("login")}
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 -ml-2 text-sm font-bold text-neutral-500 transition hover:text-black"
+          >
+            <IcChevronLeft />
+            Back
+          </button>
+        </div>
+
+        <div className="flex flex-1 flex-col items-center justify-center px-6 py-8">
+          <SignIn
+            routing="hash"
+            appearance={clerkAppearance}
+            signUpUrl="/sign-up"
+            forceRedirectUrl="/editor"
+            signInUrl="/editor"
+          />
         </div>
       </main>
     );
