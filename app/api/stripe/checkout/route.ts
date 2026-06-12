@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
       body.priceId ??
       process.env.STRIPE_PRICE_MONTHLY ??
       "price_1TgPXi2ceurudS1gl7UZeNmZ";
+    const desktop = body.desktop === true;
 
     const clerk = await clerkClient();
     const user = await clerk.users.getUser(userId);
@@ -62,7 +63,12 @@ export async function POST(req: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
       allow_promotion_codes: true,
-      success_url: `https://huumanity.app/editor?upgraded=true`,
+      // Desktop checkout happens in the system browser, so send success to the
+      // /payment-success handoff page (its "Open huumanity" button deep-links
+      // back into the app). Website checkout stays in-page.
+      success_url: desktop
+        ? `https://huumanity.app/payment-success`
+        : `https://huumanity.app/editor?upgraded=true`,
       cancel_url: `https://huumanity.app/editor`,
       metadata: { clerkUserId: userId },
       subscription_data: {

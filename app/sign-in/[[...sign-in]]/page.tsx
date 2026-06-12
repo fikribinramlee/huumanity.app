@@ -2,7 +2,16 @@ import { SignIn } from "@clerk/nextjs";
 import { HuuLogo } from "../../components/HuuLogo";
 import { clerkAppearance } from "../../lib/clerkAppearance";
 
-export default function SignInPage() {
+export default async function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  // `next` carries the desktop handoff target (/app-verified). Default to
+  // /download for website visitors. Only allow same-site relative paths.
+  const { next } = await searchParams;
+  const redirectUrl = next && next.startsWith("/") ? next : "/download";
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-white px-6 py-12">
       <div className="mb-9 flex flex-col items-center text-center">
@@ -14,7 +23,11 @@ export default function SignInPage() {
           Sign in to keep your writing human.
         </p>
       </div>
-      <SignIn appearance={clerkAppearance} fallbackRedirectUrl="/download" />
+      <SignIn
+        appearance={clerkAppearance}
+        forceRedirectUrl={redirectUrl}
+        signUpUrl={`/sign-up?next=${encodeURIComponent(redirectUrl)}`}
+      />
     </div>
   );
 }

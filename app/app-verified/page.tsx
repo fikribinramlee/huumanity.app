@@ -4,12 +4,30 @@ import { useEffect, useState } from "react";
 
 export default function AppVerifiedPage() {
   const [step, setStep] = useState<"circle" | "check" | "done">("circle");
+  // Deep link that re-opens the desktop app. We append a one-time Clerk sign-in
+  // token so the app can establish its own session (the browser cookie can't
+  // cross into the app's webview). Falls back to a plain open if minting fails.
+  const [deepLink, setDeepLink] = useState("huu://open");
 
   // Sequence: draw circle → draw check → show text/button
   useEffect(() => {
     const t1 = setTimeout(() => setStep("check"), 500);
     const t2 = setTimeout(() => setStep("done"), 1100);
     return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, []);
+
+  // Mint the handoff token from the authenticated browser session.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/desktop/sign-in-token", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.token) {
+          setDeepLink(`huu://open?ticket=${encodeURIComponent(data.token)}`);
+        }
+      })
+      .catch(() => { /* keep plain huu://open fallback */ });
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -70,7 +88,7 @@ export default function AppVerifiedPage() {
           </p>
 
           <a
-            href="huu://open"
+            href={deepLink}
             className="mt-8 inline-flex items-center gap-2 rounded-2xl border-2 border-black bg-[#fff700] px-12 py-5 text-xl font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
           >
             Open huumanity

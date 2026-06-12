@@ -2,12 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useUser, useClerk, SignIn } from "@clerk/nextjs";
+import { useUser, useClerk } from "@clerk/nextjs";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalRewritePanel } from "../components/ExternalRewritePanel";
 import { ScratchpadEditor } from "../components/ScratchpadEditor";
 import { isRephrashable } from "../lib/isRephrashable";
 import { HuuLogo } from "../components/HuuLogo";
-import { clerkAppearance } from "../lib/clerkAppearance";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -124,6 +124,9 @@ export default function EditorPage() {
   const { user, isLoaded: clerkLoaded } = useUser();
   const { signOut } = useClerk();
 
+  // True while redeeming a sign-in ticket from a `huu://open?ticket=…` deep link.
+  const [redeeming, setRedeeming] = useState(false);
+
   // UI
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [activeView, setActiveView] = useState<View>("home");
@@ -216,7 +219,10 @@ export default function EditorPage() {
       const res = await fetch(`${apiBase()}/api/stripe/checkout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ priceId }),
+        // `desktop` tells the server to send Stripe's success_url to the
+        // /payment-success handoff page (which deep-links back into the app)
+        // instead of straight to /editor.
+        body: JSON.stringify({ priceId, desktop: tauri }),
       });
       const text = await res.text();
       let data: { url?: string; error?: string } = {};
@@ -228,10 +234,14 @@ export default function EditorPage() {
       }
 
       if (tauri) {
-        // Navigate the app window to Stripe. After payment Stripe redirects to
-        // success_url (/editor?upgraded=true), landing back in the app where the
-        // `upgraded=true` effect flips to Pro and confirms with the server.
-        window.location.assign(data.url);
+        // Desktop: open Stripe in the system browser. After payment Stripe
+        // redirects to /payment-success, whose "Open huumanity" button deep-links
+        // back into the app with a fresh session token + the upgraded flag.
+        try {
+          await openUrl(data.url);
+        } catch {
+          window.location.assign(data.url);
+        }
         return;
       }
 
@@ -358,6 +368,23 @@ export default function EditorPage() {
       setAuthState("app");
     }
   }, [clerkLoaded, user]);
+
+  // Redeem a one-time sign-in ticket delivered by the `huu://open?ticket=…` deep
+  // link. This is how the desktop app picks up the session created in the system
+  // browser. We hand the ticket to Clerk's <SignIn> via the `__clerk_ticket`
+  // query param, which it processes automatically and then redirects to `next`,
+  // landing back in the editor with the session live in the app's own webview.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const ticket = params.get("ticket");
+    if (!ticket) return;
+
+    setRedeeming(true);
+    const next = params.get("upgraded") === "true" ? "/editor?upgraded=true" : "/editor";
+    window.location.assign(
+      `/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}&next=${encodeURIComponent(next)}`
+    );
+  }, []);
 
   // Seed name fields when Clerk user loads
   useEffect(() => {
@@ -492,13 +519,22 @@ useEffect(() => {
     setHasCompletedSetup(true);
   };
 
-  const handleSignIn = () => {
-    // Sign in *in-window* inside the app's own webview (same origin as
-    // huumanity.app), so Clerk's session cookie lands in the right cookie jar
-    // and the app is actually authenticated. We render Clerk's <SignIn> embedded
-    // in the "signing-in" state rather than bouncing to the system browser
-    // (whose separate cookie jar would never authenticate the app).
-    setAuthState("signing-in");
+  const handleSignIn = async () => {
+    if (isTauriRuntime()) {
+      // Desktop: sign in / sign up in the system browser. The success page
+      // (/app-verified) hands a one-time sign-in token back via the
+      // `huu://open?ticket=…` deep link, which this app redeems on return.
+      setAuthState("signing-in"); // show the "finish in your browser" screen
+      try {
+        await openUrl("https://huumanity.app/sign-up?next=/app-verified");
+      } catch {
+        // Opener unavailable (old build) — fall back to in-window navigation.
+        window.location.assign("/sign-up?next=/app-verified");
+      }
+      return;
+    }
+    // Website: normal in-window sign-in.
+    window.location.assign("/sign-in?redirect_url=/editor");
   };
 
   // ── Auth: Login screen ─────────────────────────────────────────────────────
@@ -621,13 +657,24 @@ useEffect(() => {
     );
   }
 
-  // ── Auth: Sign-in screen (embedded Clerk, in-window) ───────────────────────
+  // ── Auth: Redeeming a sign-in ticket from the deep link ────────────────────
+
+  if (redeeming) {
+    return (
+      <main className="flex h-screen w-screen flex-col items-center justify-center gap-5 bg-white text-black">
+        <span className="h-8 w-8 animate-spin rounded-full border-[3px] border-black/15 border-t-black" />
+        <p className="text-sm font-bold text-neutral-500">Signing you in…</p>
+      </main>
+    );
+  }
+
+  // ── Auth: Waiting for the user to finish in the system browser ─────────────
 
   if (authState === "signing-in") {
     return (
       <main className="flex h-screen w-screen flex-col items-center overflow-y-auto bg-white text-black">
         {/* Top bar — back button to return to the menu at any time */}
-        <div className="flex w-full max-w-md items-center px-6 pt-8">
+        <div className="flex w-full max-w-lg items-center px-6 pt-8">
           <button
             onClick={() => setAuthState("login")}
             className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 -ml-2 text-sm font-bold text-neutral-500 transition hover:text-black"
@@ -637,14 +684,26 @@ useEffect(() => {
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center px-6 py-8">
-          <SignIn
-            routing="hash"
-            appearance={clerkAppearance}
-            signUpUrl="/sign-up"
-            forceRedirectUrl="/editor"
-            signInUrl="/editor"
-          />
+        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 pb-12 text-center max-w-sm mx-auto">
+          <span className="flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-[#fff700] ring-2 ring-black shadow-[0_4px_0_rgba(0,0,0,0.12)]">
+            <span className="h-6 w-6 animate-spin rounded-full border-[3px] border-black/20 border-t-black" />
+          </span>
+          <div>
+            <h1 className="font-display text-3xl leading-tight">
+              Finish signing in
+            </h1>
+            <p className="mt-2 text-sm text-neutral-500 leading-6">
+              We opened your browser to sign in. Once you&apos;re done, click{" "}
+              <span className="font-bold text-black">Open huumanity</span> and
+              you&apos;ll land right back here.
+            </p>
+          </div>
+          <button
+            onClick={handleSignIn}
+            className="text-sm font-bold text-neutral-500 underline underline-offset-4 transition hover:text-black"
+          >
+            Didn&apos;t open? Try again
+          </button>
         </div>
       </main>
     );

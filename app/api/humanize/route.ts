@@ -39,7 +39,7 @@ export async function OPTIONS() {
 const ANTI_AI_RULES = `
 You must follow these rules strictly. These are the patterns that make writing sound AI-generated. Violating any of them means the output fails.
 
-BANNED PATTERNS — never do any of these:
+BANNED PATTERNS. never do any of these:
 1. Do not start with "Most [noun]..." as a hook. e.g. "Most founders...", "Most people...", "Most marketers..."
 2. Do not use em dashes (— or --) anywhere in the output.
 3. Do not use excessive full stops to create a staccato rhythm. e.g. "It works. It's fast. It's simple." this is a AI pattern.

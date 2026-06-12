@@ -17,6 +17,13 @@
       "csp": null
     }
   },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["huu"]
+      }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",

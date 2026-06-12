@@ -4,6 +4,9 @@ import { useEffect, useState } from "react";
 
 export default function PaymentSuccessPage() {
   const [step, setStep] = useState<"circle" | "check" | "done">("circle");
+  // Deep link back into the app, carrying a one-time sign-in token so the app
+  // re-establishes its session and the `upgraded` flag so it confirms Pro.
+  const [deepLink, setDeepLink] = useState("huu://open?upgraded=true");
 
   useEffect(() => {
     const t1 = setTimeout(() => setStep("check"), 500);
@@ -12,6 +15,22 @@ export default function PaymentSuccessPage() {
       clearTimeout(t1);
       clearTimeout(t2);
     };
+  }, []);
+
+  // Mint the handoff token from the authenticated browser session.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/desktop/sign-in-token", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (!cancelled && data?.token) {
+          setDeepLink(
+            `huu://open?upgraded=true&ticket=${encodeURIComponent(data.token)}`
+          );
+        }
+      })
+      .catch(() => { /* keep plain fallback */ });
+    return () => { cancelled = true; };
   }, []);
 
   return (
@@ -59,7 +78,7 @@ export default function PaymentSuccessPage() {
           </p>
 
           <a
-            href="huu://open?upgraded=true"
+            href={deepLink}
             className="mt-8 inline-flex items-center gap-2 rounded-2xl border-2 border-black bg-[#fff700] px-12 py-5 text-xl font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
           >
             Open huumanity

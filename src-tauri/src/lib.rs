@@ -47,6 +47,8 @@ struct SelectorHealth {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_opener::init())
         .manage(SelectorState::default())
         .invoke_handler(tauri::generate_handler![
             capture_selected_text,
@@ -78,6 +80,22 @@ pub fn run() {
             show_main_window(app.handle())?;
             ensure_selector_window(app.handle())?;
             start_selection_watcher(app.handle().clone());
+
+            // Handle `huu://open?ticket=…` deep links from the "Open huumanity"
+            // buttons on the post-sign-up / payment-success pages. We forward the
+            // query string onto the editor URL so the web app can redeem the
+            // one-time sign-in token and (if present) confirm the upgrade.
+            {
+                use tauri_plugin_deep_link::DeepLinkExt;
+                let handle = app.handle().clone();
+                app.deep_link().on_open_url(move |event| {
+                    handle_deep_link(&handle, event.urls());
+                });
+                // Cold start: the app may have been launched *by* the deep link.
+                if let Ok(Some(urls)) = app.deep_link().get_current() {
+                    handle_deep_link(app.handle(), urls);
+                }
+            }
 
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -516,6 +534,37 @@ fn webview_url(path: &str) -> WebviewUrl {
     } else {
         let full = format!("https://huumanity.app{path}");
         WebviewUrl::External(full.parse().expect("valid huumanity.app url"))
+    }
+}
+
+/// Forward an incoming `huu://open?…` deep link onto the editor, carrying its
+/// query string (the sign-in `ticket` and optional `upgraded` flag) so the web
+/// app can finish authenticating the desktop session.
+fn handle_deep_link(app: &tauri::AppHandle, urls: Vec<tauri::Url>) {
+    let Some(url) = urls.into_iter().next() else {
+        return;
+    };
+    let query = url.query().map(|q| format!("?{q}")).unwrap_or_default();
+
+    let target = if cfg!(debug_assertions) {
+        format!("http://localhost:3000/editor{query}")
+    } else {
+        format!("https://huumanity.app/editor{query}")
+    };
+
+    if let Err(err) = show_main_window(app) {
+        debug_log(&format!("deep link: show main window failed: {err}"));
+    }
+
+    if let Some(window) = app.get_webview_window("main") {
+        match target.parse::<tauri::Url>() {
+            Ok(parsed) => {
+                if let Err(err) = window.navigate(parsed) {
+                    debug_log(&format!("deep link: navigate failed: {err}"));
+                }
+            }
+            Err(err) => debug_log(&format!("deep link: bad target url: {err}")),
+        }
     }
 }
 
