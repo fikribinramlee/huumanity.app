@@ -14,7 +14,7 @@ export default function SignUpPage() {
           Sound human in every app on your Mac.
         </p>
       </div>
-      <SignUp appearance={clerkAppearance} fallbackRedirectUrl="/download" />
+      <SignUp appearance={clerkAppearance} forceRedirectUrl="/download" />
     </div>
   );
 }
