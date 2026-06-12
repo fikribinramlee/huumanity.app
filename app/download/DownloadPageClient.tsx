@@ -9,7 +9,10 @@ type Props = {
 };
 
 export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
+  const hasUrl = Boolean(downloadUrl);
+
   const triggerDownload = useCallback(() => {
+    if (!downloadUrl) return;
     const link = document.createElement("a");
     link.href = downloadUrl;
     link.download = downloadFileName;
@@ -21,9 +24,10 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
 
   // Auto-download once when the page loads (Wispr Flow style).
   useEffect(() => {
+    if (!hasUrl) return;
     const timer = window.setTimeout(triggerDownload, 600);
     return () => window.clearTimeout(timer);
-  }, [triggerDownload]);
+  }, [hasUrl, triggerDownload]);
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
@@ -53,36 +57,46 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
             </li>
           </ol>
 
-          <div className="mt-9 rounded-3xl border border-white/10 bg-white/5 p-5">
-            <p className="text-sm font-bold text-white">
-              Download not starting automatically?
-            </p>
-            <div className="mt-4 flex flex-wrap items-center gap-3">
-              <span className="text-sm text-neutral-400">Use this instead →</span>
-              <button
-                type="button"
-                onClick={triggerDownload}
-                className="rounded-full border-2 border-[#fff700] bg-[#fff700] px-5 py-2.5 text-sm font-black text-black transition hover:brightness-95"
-              >
-                Download Here
-              </button>
+          {hasUrl ? (
+            <>
+              <div className="mt-9 rounded-3xl border border-white/10 bg-white/5 p-5">
+                <p className="text-sm font-bold text-white">
+                  Download not starting automatically?
+                </p>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <span className="text-sm text-neutral-400">Use this instead →</span>
+                  <button
+                    type="button"
+                    onClick={triggerDownload}
+                    className="rounded-full border-2 border-[#fff700] bg-[#fff700] px-5 py-2.5 text-sm font-black text-black transition hover:brightness-95"
+                  >
+                    Download Here
+                  </button>
+                </div>
+              </div>
+              <p className="mt-5 text-xs leading-5 text-neutral-500">
+                Your computer may ask you to confirm the download or grant huu
+                permissions the first time you open it.
+              </p>
+              <p className="mt-3 text-sm text-neutral-400">
+                Need another copy?{" "}
+                <button
+                  type="button"
+                  onClick={triggerDownload}
+                  className="text-white underline underline-offset-4 hover:text-[#fff700] transition-colors"
+                >
+                  Download again
+                </button>
+              </p>
+            </>
+          ) : (
+            <div className="mt-9 rounded-3xl border border-white/10 bg-white/5 p-5">
+              <p className="text-sm font-bold text-white">Download coming soon</p>
+              <p className="mt-2 text-sm text-neutral-400">
+                We&apos;re getting the latest build ready. Check back in a few minutes.
+              </p>
             </div>
-          </div>
-
-          <p className="mt-5 text-xs leading-5 text-neutral-500">
-            Your computer may ask you to confirm the download or grant huu
-            permissions the first time you open it.
-          </p>
-          <p className="mt-3 text-sm text-neutral-400">
-            Need another copy?{" "}
-            <button
-              type="button"
-              onClick={triggerDownload}
-              className="text-white underline underline-offset-4 hover:text-[#fff700] transition-colors"
-            >
-              Download again
-            </button>
-          </p>
+          )}
         </div>
       </div>
 

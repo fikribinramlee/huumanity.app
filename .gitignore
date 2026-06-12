@@ -45,3 +45,8 @@ next-env.d.ts
 
 # tauri
 /src-tauri/target/
+
+# desktop binaries — too large for Vercel; host on GitHub Releases instead
+/public/downloads/*.dmg
+/public/downloads/*.exe
+/public/downloads/*.msi
