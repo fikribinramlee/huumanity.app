@@ -532,9 +532,12 @@ export default function LandingPage() {
   // `currentStep` tracks which column is "live" so the others dim back.
   const tutRef = useRef<HTMLDivElement>(null);
   const [currentStep, setCurrentStep] = useState<0 | 1 | 2 | 3>(1);
-  // Column 1 — select text
+  // Column 1 — select text. Cursor position and visibility are decoupled so
+  // we never animate the position while invisible. Without this the cursor
+  // would teleport between cycles (and between right/left anchored states).
   const [c1Sel, setC1Sel] = useState(0); // # of words highlighted, counting from the END
-  const [c1Cursor, setC1Cursor] = useState<"hidden" | "start" | "end" | "button" | "after">("hidden");
+  const [c1CursorPos, setC1CursorPos] = useState<"start" | "end" | "button" | "after">("start");
+  const [c1CursorOn, setC1CursorOn] = useState(false);
   const [c1Button, setC1Button] = useState(false); // yellow selector button
   const [c1Bar, setC1Bar] = useState(false); // tone-bar box faded in
   // Column 2 — pick tone(s)
@@ -769,7 +772,10 @@ export default function LandingPage() {
 
     const reset = () => {
       setC1Sel(0);
-      setC1Cursor("hidden");
+      // Silently move the cursor back to the start position while invisible —
+      // the next loop will fade it in there with no slide.
+      setC1CursorPos("start");
+      setC1CursorOn(false);
       setC1Button(false);
       setC1Bar(false);
       setC2Tone(0);
@@ -785,26 +791,34 @@ export default function LandingPage() {
         if (tok.cancelled) return;
 
         // ── COLUMN 1 — cursor selects the text, then clicks the huu button ──
-        setC1Cursor("start");
-        await sleep(700);
+        // Cursor fades IN at the "start" position (set by reset). Position
+        // changes only happen while it's visible, so it always glides — never
+        // teleports. Sequence:
+        //   appear at start → glide up-left while words highlight backward →
+        //   pause → yellow button pops in → cursor glides ONTO the button →
+        //   click → tone bar fades in above + cursor walks left and fades.
+        setC1CursorOn(true);
+        await sleep(800); // let the fade-in finish + read the start pose
         if (tok.cancelled) return;
-        setC1Cursor("end"); // cursor glides bottom-right → top-left …
+        setC1CursorPos("end"); // begin gliding to the start-of-text area
         for (let i = 1; i <= totalWords; i++) {
-          setC1Sel(i); // … highlighting words from the last back to the first
-          await sleep(1900 / totalWords);
+          setC1Sel(i); // highlight words from the last back to the first
+          await sleep(2200 / totalWords);
           if (tok.cancelled) return;
         }
         await sleep(550);
         if (tok.cancelled) return;
-        setC1Cursor("button");
-        setC1Button(true);
-        await sleep(900); // hold on the click so it reads as a press
+        setC1Button(true); // yellow huu button pops in beside "AI content"
+        await sleep(600); // wait out the pop-in before "clicking" it
+        if (tok.cancelled) return;
+        setC1CursorPos("button"); // cursor glides onto the button
+        await sleep(1000); // hold on the click so it reads as a press
         if (tok.cancelled) return;
         setC1Bar(true); // click → tone bar starts fading in above
-        setC1Cursor("after"); // cursor glides slightly left of the button
-        await sleep(500);
+        setC1CursorPos("after"); // cursor glides slightly left of the button
+        await sleep(600);
         if (tok.cancelled) return;
-        setC1Cursor("hidden"); // …then fades away softly
+        setC1CursorOn(false); // …then fades away softly at the "after" pose
         await sleep(900);
         if (tok.cancelled) return;
 
@@ -1692,24 +1706,25 @@ export default function LandingPage() {
             {/* tweet box — its own card; cursor selects the text then clicks huu */}
             <div className="relative rounded-xl border border-black/10 bg-white shadow-sm p-4">
               <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} huuButton={c1Button} />
+              {/* All step-1 positions use LEFT/TOP only (never right/bottom) —
+                  mixing the two snaps the un-set anchor to `auto`, which is
+                  not transitionable and was making the cursor teleport. */}
               <TutCursor
-                visible={c1Cursor !== "hidden"}
+                visible={c1CursorOn}
                 style={
-                  c1Cursor === "start"
-                    ? { right: "12%", top: "62%" }
-                    : c1Cursor === "end"
-                      ? { left: "8%", top: "30%" }
-                      : c1Cursor === "button"
-                        ? // cursor tip lands on the yellow huu button (which
-                          // sits at -left-5 top-4 over the avatar gap)
-                          { left: "8%", top: "32%" }
-                        : c1Cursor === "after"
-                          ? // slight left/down of the button — cursor walks
-                            // away while fading
-                            { left: "1%", top: "40%" }
-                          : // "hidden" — keep same coords so the fade-out has
-                            // no jump
-                            { left: "1%", top: "40%" }
+                  c1CursorPos === "start"
+                    ? // end of the last line of text ("…truly resonate.")
+                      { left: "52%", top: "58%" }
+                    : c1CursorPos === "end"
+                      ? // just left of "AI" at the start of the tweet text
+                        { left: "16%", top: "22%" }
+                      : c1CursorPos === "button"
+                        ? // tip directly on the yellow huu button (sits at
+                          // -left-5 top-4 over the avatar gap)
+                          { left: "13%", top: "27%" }
+                        : // "after" — slight left/down of the button as the
+                          // cursor walks away
+                          { left: "4%", top: "36%" }
                 }
               />
             </div>
