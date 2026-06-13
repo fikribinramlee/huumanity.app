@@ -305,50 +305,62 @@ fn show_selector_for_selection(
 const SELECTOR_DOT_SIZE: f64 = 30.0;
 
 fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection) -> (i32, i32) {
-    // The dot ALWAYS sits just to the LEFT of the selection, vertically centered
-    // on the first line. One predictable location — never on top of the text,
-    // never on the right, never under the pointer (which made it "run away").
-    //
-    // We're computing the WINDOW's top-left; the 20px button is centered inside
-    // the 30px transparent window, so the visible dot lands ~`gap`+5px left of
-    // the text edge.
+    // Exactly two allowed placements:
+    //   PLAN A (default): just to the LEFT of the selection, vertically centered
+    //                     on the first line of the selected text.
+    //   PLAN B (fallback): if there isn't room on the left — the text hugs the
+    //                     screen's left edge — sit ON TOP of the first word
+    //                     (above the selection's start), never jammed over the
+    //                     text against the margin.
+    // We compute the WINDOW's top-left; the 20px button is centered inside the
+    // 30px transparent window.
     let gap = 6.0;
     let is_point = selection.width <= 2.0 && selection.height <= 2.0;
 
-    // Horizontal: left of the selection's left edge (for both real and fallback
-    // rects — for the cursor fallback we only know the pointer x, so "left of it"
-    // is the best predictable guess).
-    let mut x = selection.x - SELECTOR_DOT_SIZE - gap;
-
-    // Vertical: center the dot on the FIRST line of the selection. Cap the line
-    // height so a tall multi-line selection still anchors the dot to its top line
-    // instead of its vertical middle.
-    let mut y = if is_point {
-        // Pointer fallback: lift the dot a touch above the caret line.
-        selection.y - SELECTOR_DOT_SIZE - gap
-    } else {
-        let first_line = selection.height.min(24.0);
-        selection.y + (first_line / 2.0) - (SELECTOR_DOT_SIZE / 2.0)
-    };
-
-    if let Ok(Some(monitor)) = app.primary_monitor() {
+    // Screen bounds in logical points.
+    let (min_x, min_y, max_x, max_y) = if let Ok(Some(monitor)) = app.primary_monitor() {
         let scale = monitor.scale_factor();
         let position = monitor.position();
         let size = monitor.size();
-
         let min_x = position.x as f64 / scale;
         let min_y = position.y as f64 / scale;
-        let max_x = min_x + (size.width as f64 / scale) - (SELECTOR_DOT_SIZE + 4.0);
-        let max_y = min_y + (size.height as f64 / scale) - (SELECTOR_DOT_SIZE + 4.0);
-
-        // If the selection hugs the left screen edge there's no room to the left,
-        // so pin to the left margin (a slight overlap with the text is fine).
-        x = x.clamp(min_x + 4.0, max_x.max(min_x + 4.0));
-        y = y.clamp(min_y + 4.0, max_y.max(min_y + 4.0));
+        (
+            min_x,
+            min_y,
+            min_x + (size.width as f64 / scale) - (SELECTOR_DOT_SIZE + 4.0),
+            min_y + (size.height as f64 / scale) - (SELECTOR_DOT_SIZE + 4.0),
+        )
     } else {
-        x = x.max(4.0);
-        y = y.max(4.0);
-    }
+        (0.0, 0.0, f64::MAX, f64::MAX)
+    };
+
+    // First-line height, capped so a tall multi-line selection still anchors the
+    // dot to its TOP line rather than its vertical middle.
+    let first_line = if is_point {
+        SELECTOR_DOT_SIZE
+    } else {
+        selection.height.min(24.0)
+    };
+    let line_center_y = selection.y + (first_line / 2.0) - (SELECTOR_DOT_SIZE / 2.0);
+
+    // Does the dot fit to the LEFT of the selection without running off-screen?
+    let left_x = selection.x - SELECTOR_DOT_SIZE - gap;
+    let room_on_left = left_x >= min_x + 4.0;
+
+    let (mut x, mut y) = if room_on_left {
+        // PLAN A — beside the words.
+        (left_x, line_center_y)
+    } else {
+        // PLAN B — on top of the first word. Align to the selection's left edge
+        // and lift above the first line. If that pushes off the top of the
+        // screen, the clamp below tucks it to the top edge, still over the first
+        // word.
+        (selection.x, selection.y - SELECTOR_DOT_SIZE - gap)
+    };
+
+    // Final safety clamp so the window is always fully on-screen.
+    x = x.clamp(min_x + 4.0, max_x.max(min_x + 4.0));
+    y = y.clamp(min_y + 4.0, max_y.max(min_y + 4.0));
 
     (x.round() as i32, y.round() as i32)
 }
@@ -916,6 +928,7 @@ fn platform_current_selection_probe() -> SelectionProbe {
 #[cfg(target_os = "macos")]
 mod macos_accessibility {
     use std::sync::atomic::{AtomicI32, Ordering};
+    use std::time::{Duration, Instant};
     use std::{ffi::c_void, ptr};
 
     use core_foundation::{
@@ -962,6 +975,10 @@ mod macos_accessibility {
             result: *mut CFTypeRef,
         ) -> AXError;
         fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
+        fn AXUIElementSetMessagingTimeout(
+            element: AXUIElementRef,
+            timeout_in_seconds: f32,
+        ) -> AXError;
         fn AXUIElementSetAttributeValue(
             element: AXUIElementRef,
             attribute: CFStringRef,
@@ -1029,6 +1046,15 @@ mod macos_accessibility {
                 };
             }
 
+            // CAP EVERY AX IPC CALL. Each AXUIElementCopy… is a synchronous
+            // round-trip into the *other* app's process. With no timeout the
+            // default is effectively unbounded, so one slow response from a
+            // heavy page (e.g. a giant DOM) blocks this whole watcher thread for
+            // many seconds — the real cause of "the button takes 30s to appear."
+            // Set globally on the system-wide element (applies process-wide) so
+            // every call below returns an error after 0.25s instead of hanging.
+            AXUIElementSetMessagingTimeout(system, 0.25);
+
             // Unlock selection reporting in Chromium/Electron apps (Notion,
             // Chrome, Slack, …) before we read. Native apps are unaffected.
             enable_focused_app_accessibility(system);
@@ -1044,7 +1070,14 @@ mod macos_accessibility {
             };
 
             let source_pid = copy_element_pid(focused as AXUIElementRef);
-            let selection_read = find_selection_in_element_tree(focused as AXUIElementRef, 3);
+            // Hard wall on the whole tree walk. Even with a per-call timeout, a
+            // wide tree could still chain many calls; this guarantees a single
+            // poll never spends more than ~350ms searching before giving up and
+            // trying again on the next tick. Combined with the 0.25s per-call
+            // cap, the worst-case poll is well under a second — never 30.
+            let deadline = Instant::now() + Duration::from_millis(350);
+            let selection_read =
+                find_selection_in_element_tree(focused as AXUIElementRef, 3, deadline);
             if selection_read.is_none() {
                 CFRelease(focused);
                 return SelectionProbe {
@@ -1131,7 +1164,14 @@ mod macos_accessibility {
     unsafe fn find_selection_in_element_tree(
         element: AXUIElementRef,
         remaining_depth: usize,
+        deadline: Instant,
     ) -> Option<SelectionRead> {
+        // Bail the instant we blow the time budget — keeps a single poll from
+        // chaining dozens of (possibly slow) IPC calls deep into a big tree.
+        if Instant::now() >= deadline {
+            return None;
+        }
+
         if let Some(selection) = read_selection_from_element(element) {
             return Some(selection);
         }
@@ -1141,9 +1181,15 @@ mod macos_accessibility {
         }
 
         for attr_name in ["AXFocusedUIElement", "AXParent"] {
+            if Instant::now() >= deadline {
+                return None;
+            }
             if let Some(related) = copy_attribute(element, attr_name) {
-                let selection =
-                    find_selection_in_element_tree(related as AXUIElementRef, remaining_depth - 1);
+                let selection = find_selection_in_element_tree(
+                    related as AXUIElementRef,
+                    remaining_depth - 1,
+                    deadline,
+                );
                 CFRelease(related);
                 if selection.is_some() {
                     return selection;
@@ -1154,14 +1200,19 @@ mod macos_accessibility {
         if let Some(children_ref) = copy_attribute(element, "AXChildren") {
             let children =
                 CFArray::<*const c_void>::wrap_under_create_rule(children_ref as CFArrayRef);
-            for child in children.get_all_values().into_iter().take(80) {
+            for child in children.get_all_values().into_iter().take(32) {
+                if Instant::now() >= deadline {
+                    return None;
+                }
                 if child.is_null() {
                     continue;
                 }
 
-                if let Some(selection) =
-                    find_selection_in_element_tree(child as AXUIElementRef, remaining_depth - 1)
-                {
+                if let Some(selection) = find_selection_in_element_tree(
+                    child as AXUIElementRef,
+                    remaining_depth - 1,
+                    deadline,
+                ) {
                     return Some(selection);
                 }
             }
