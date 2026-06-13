@@ -8,7 +8,7 @@
 
 import { clerkClient } from "@clerk/nextjs/server";
 
-export const FREE_DAILY_LIMIT = 10;
+export const FREE_DAILY_LIMIT = Number(process.env.FREE_DAILY_LIMIT ?? 10);
 
 export type Plan = "free" | "pro";
 
