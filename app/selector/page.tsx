@@ -249,73 +249,66 @@ export default function SelectorPage() {
 
   return (
     <main
-      className="h-screen w-screen bg-transparent p-2"
+      className="flex h-screen w-screen flex-col items-center justify-end bg-transparent p-2"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           void closeSelector();
         }
       }}
     >
+      {/* Minimal pill bar — mirrors the website demo: white box, bright yellow
+          border, no black header, no drop shadow, single row, Jost font. A
+          subtle gray X sits in the top-right corner. Anchored to the bottom of
+          the (transparent) window so it appears directly above the selection. */}
       <section
-        className="overflow-hidden rounded-2xl border-2 border-[#fff700] bg-white shadow-2xl"
+        className="relative w-fit max-w-full overflow-hidden rounded-2xl border-2 border-[#fff700] bg-white"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <div className="flex items-center justify-between gap-3 border-b border-black/10 bg-black px-4 py-2.5">
-          <div className="flex items-center gap-2.5">
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#fff700]">
-              huu
-            </p>
-            <span className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/60">
-              {canReplaceSelection ? "replace" : "copy only"}
-            </span>
-          </div>
-          <button
-            onClick={closeSelector}
-            className="rounded-full p-1 text-white/60 transition hover:bg-white/10 hover:text-white"
-            aria-label="Close"
+        {/* Subtle, always-available close. Smaller than the dot's arrow. */}
+        <button
+          onClick={closeSelector}
+          aria-label="Close"
+          className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full text-neutral-300 transition hover:bg-neutral-100 hover:text-neutral-600"
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
 
-        <div className="p-4">
+        <div className="p-3">
           {popupStage === "select" && (
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex flex-wrap gap-2">
-                {TONES.map((tone) => {
-                  const isOn = selectedTones.includes(tone);
-                  return (
-                    <button
-                      key={tone}
-                      onClick={() => toggleTone(tone)}
-                      className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${
-                        isOn
-                          ? "bg-[#fff700] text-black ring-2 ring-black"
-                          : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-                      }`}
-                    >
-                      {tone}
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="flex items-center gap-1.5 pr-5">
+              {TONES.map((tone) => {
+                const isOn = selectedTones.includes(tone);
+                return (
+                  <button
+                    key={tone}
+                    onClick={() => toggleTone(tone)}
+                    className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                      isOn
+                        ? "bg-[#fff700] text-black ring-2 ring-black"
+                        : "bg-neutral-100 text-black hover:bg-neutral-200"
+                    }`}
+                  >
+                    {tone}
+                  </button>
+                );
+              })}
               <button
                 onClick={handleGenerate}
                 disabled={selectedTones.length === 0}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[#fff700] text-black transition hover:bg-[#fff700] disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label="Generate"
+                className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[#fff700] text-black transition hover:bg-[#fff700] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <svg
                   width="14"
@@ -335,30 +328,23 @@ export default function SelectorPage() {
           )}
 
           {popupStage === "loading" || isGenerating ? (
-            <div className="space-y-2.5 py-2">
+            <div className="w-[380px] max-w-full space-y-2.5 py-1 pr-5">
               <div className="huu-shimmer h-2.5 w-full rounded-full" />
               <div className="huu-shimmer h-2.5 w-11/12 rounded-full" />
               <div className="huu-shimmer h-2.5 w-4/5 rounded-full" />
-              <p className="pt-2 text-center text-[11px] text-neutral-500">
+              <p className="pt-1 text-center text-[11px] text-neutral-500">
                 Rewriting…
               </p>
             </div>
           ) : popupStage === "result" && resultText ? (
-            <div className="mb-4 max-h-40 overflow-auto rounded-xl border border-black/[0.08] bg-[#fafaf8] px-3.5 py-3 whitespace-pre-wrap text-sm leading-6 text-neutral-800">
-              {resultText}
-            </div>
-          ) : null}
-
-          {error && (
-            <p className="mb-3 text-xs font-semibold text-red-600">{error}</p>
-          )}
-
-          <div className="flex justify-between gap-2">
-            {popupStage === "result" && resultText ? (
-              <>
+            <div className="w-[380px] max-w-full">
+              <p className="mb-3 max-h-40 overflow-auto whitespace-pre-wrap pr-5 text-[13px] leading-6 text-neutral-800">
+                {resultText}
+              </p>
+              <div className="flex items-center justify-between gap-2">
                 <button
                   onClick={handleBack}
-                  className="flex items-center gap-1 rounded-full border-2 border-[#fff700] px-4 py-2 text-xs font-bold hover:bg-[#fff700]/30"
+                  className="flex items-center gap-1 rounded-full border-2 border-[#fff700] px-3.5 py-1.5 text-[11px] font-semibold text-black transition-colors hover:bg-[#fff700]/30"
                 >
                   <svg
                     width="12"
@@ -378,8 +364,8 @@ export default function SelectorPage() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleCopy}
-                    className="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-2 text-xs font-bold hover:bg-neutral-200"
                     aria-label="Copy"
+                    className="flex items-center gap-1 rounded-full bg-neutral-100 px-3 py-1.5 text-[11px] font-semibold text-black transition-colors hover:bg-neutral-200"
                   >
                     {copied ? (
                       <>
@@ -398,36 +384,27 @@ export default function SelectorPage() {
                         Copied
                       </>
                     ) : (
-                      <>
-                        <svg
-                          width="13"
-                          height="13"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                        </svg>
-                        Copy
-                      </>
+                      "Copy"
                     )}
                   </button>
                   {canReplaceSelection ? (
                     <button
                       onClick={handleAccept}
-                      className="rounded-full border-2 border-black bg-[#fff700] px-4 py-2 text-xs font-black hover:brightness-95"
+                      className="rounded-full border border-black bg-[#fff700] px-4 py-1.5 text-[11px] font-bold text-black transition hover:brightness-95"
                     >
                       Accept
                     </button>
                   ) : null}
                 </div>
-              </>
-            ) : null}
-          </div>
+              </div>
+            </div>
+          ) : null}
+
+          {error && (
+            <p className="mt-2 max-w-[380px] text-[11px] font-semibold text-red-600">
+              {error}
+            </p>
+          )}
         </div>
       </section>
     </main>

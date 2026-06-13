@@ -657,18 +657,39 @@ fn expand_selector_window(
     }
 
     let window = ensure_selector_window(&app)?;
-    let width = 460;
-    let height = 320;
-    let x = (selection.x + (selection.width / 2.0) - (width as f64 / 2.0))
-        .max(0.0)
-        .round() as i32;
-    let y = (selection.y - height as f64 - 12.0).max(0.0).round() as i32;
+    // The window is a transparent canvas; the panel is anchored to its BOTTOM
+    // edge (CSS justify-end). So we place the window's bottom just above the
+    // selection and let the panel grow upward — that keeps it directly above
+    // the text instead of floating hundreds of px overhead.
+    let width = 460.0;
+    let height = 260.0;
+    let gap = 8.0;
+
+    let mut x = selection.x + (selection.width / 2.0) - (width / 2.0);
+    let mut y = selection.y - gap - height;
+
+    if let Ok(Some(monitor)) = app.primary_monitor() {
+        let scale = monitor.scale_factor();
+        let position = monitor.position();
+        let size = monitor.size();
+        let min_x = position.x as f64 / scale;
+        let min_y = position.y as f64 / scale;
+        let max_x = min_x + (size.width as f64 / scale) - width;
+        x = x.clamp(min_x, max_x.max(min_x));
+        // If there isn't room above (selection near the top), drop below it.
+        if y < min_y {
+            y = selection.y + selection.height.max(1.0) + gap;
+        }
+    } else {
+        x = x.max(0.0);
+        y = y.max(0.0);
+    }
 
     window
-        .set_size(LogicalSize::new(width as f64, height as f64))
+        .set_size(LogicalSize::new(width, height))
         .map_err(|e| e.to_string())?;
     window
-        .set_position(LogicalPosition::new(x as f64, y as f64))
+        .set_position(LogicalPosition::new(x.round(), y.round()))
         .map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
     window.set_focus().map_err(|e| e.to_string())?;
