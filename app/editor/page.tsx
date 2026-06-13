@@ -136,9 +136,9 @@ export default function EditorPage() {
   const [subscription, setSubscription] = useState<SubscriptionStatus>({
     plan: process.env.NEXT_PUBLIC_TEST_PRO === "true" ? "pro" : "free",
     usageCount: 0,
-    limit: 5,
+    limit: 10,
     unlimited: process.env.NEXT_PUBLIC_TEST_PRO === "true",
-    remaining: process.env.NEXT_PUBLIC_TEST_PRO === "true" ? null : 5,
+    remaining: process.env.NEXT_PUBLIC_TEST_PRO === "true" ? null : 10,
   });
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -1464,7 +1464,7 @@ useEffect(() => {
                         <p className="mb-6 text-sm text-neutral-500">/forever</p>
                         <ul className="space-y-3 text-sm text-neutral-400 flex-1">
                           <li className="flex items-start gap-2.5">
-                            <span className="mt-0.5 text-[#fff700]">✓</span>5 rewrites per day
+                            <span className="mt-0.5 text-[#fff700]">✓</span>10 rewrites per day
                           </li>
                           <li className="flex items-start gap-2.5">
                             <span className="mt-0.5 text-[#fff700]">✓</span>All 4 tones
