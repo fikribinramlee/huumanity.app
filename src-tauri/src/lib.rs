@@ -1269,6 +1269,37 @@ mod macos_accessibility {
     }
 
     unsafe fn copy_selection_rect(element: AXUIElementRef) -> Option<CGRect> {
+        // Native AppKit text views (TextEdit, Mail, native fields) expose the
+        // selection geometry through AXSelectedTextRange + AXBoundsForRange.
+        if let Some(rect) = rect_via_selected_range(element) {
+            return Some(rect);
+        }
+        // Web content (Safari/Chrome and every Electron app — Claude, Notion,
+        // VS Code, Slack, Discord, …) does NOT implement AXBoundsForRange. It
+        // exposes selection geometry through the text-marker API instead.
+        // Without this branch those apps return no rect and we fall back to the
+        // cursor position — which is exactly why the dot floated above the text
+        // or landed mid-screen there.
+        rect_via_text_markers(element)
+    }
+
+    /// Pull a CGRect out of an AXValue, returning None if it isn't one.
+    unsafe fn cg_rect_from_ax_value(value: CFTypeRef) -> Option<CGRect> {
+        let mut rect = CGRect::new(&Default::default(), &Default::default());
+        let did_read = AXValueGetValue(
+            value as AXValueRef,
+            AX_VALUE_CG_RECT,
+            &mut rect as *mut CGRect as *mut c_void,
+        );
+        if did_read == 0 {
+            None
+        } else {
+            Some(rect)
+        }
+    }
+
+    /// Native text-field path: AXSelectedTextRange → AXBoundsForRange.
+    unsafe fn rect_via_selected_range(element: AXUIElementRef) -> Option<CGRect> {
         let range_attr = CFString::new("AXSelectedTextRange");
         let mut range_ref: CFTypeRef = ptr::null();
         let range_error = AXUIElementCopyAttributeValue(
@@ -1295,19 +1326,45 @@ mod macos_accessibility {
             return None;
         }
 
-        let mut rect = CGRect::new(&Default::default(), &Default::default());
-        let did_read = AXValueGetValue(
-            bounds_ref as AXValueRef,
-            AX_VALUE_CG_RECT,
-            &mut rect as *mut CGRect as *mut c_void,
-        );
+        let rect = cg_rect_from_ax_value(bounds_ref);
         CFRelease(bounds_ref);
+        rect
+    }
 
-        if did_read == 0 {
+    /// Web-content path: AXSelectedTextMarkerRange → AXBoundsForTextMarkerRange.
+    /// This is how Chromium/WebKit report selection geometry; for a multi-line
+    /// selection it returns the union rect, whose left edge is the text column's
+    /// start — exactly where we want the dot anchored.
+    unsafe fn rect_via_text_markers(element: AXUIElementRef) -> Option<CGRect> {
+        let marker_attr = CFString::new("AXSelectedTextMarkerRange");
+        let mut marker_ref: CFTypeRef = ptr::null();
+        let marker_error = AXUIElementCopyAttributeValue(
+            element,
+            marker_attr.as_concrete_TypeRef(),
+            &mut marker_ref,
+        );
+
+        if marker_error != AX_ERROR_SUCCESS || marker_ref.is_null() {
             return None;
         }
 
-        Some(rect)
+        let bounds_attr = CFString::new("AXBoundsForTextMarkerRange");
+        let mut bounds_ref: CFTypeRef = ptr::null();
+        let bounds_error = AXUIElementCopyParameterizedAttributeValue(
+            element,
+            bounds_attr.as_concrete_TypeRef(),
+            marker_ref,
+            &mut bounds_ref,
+        );
+        CFRelease(marker_ref);
+
+        if bounds_error != AX_ERROR_SUCCESS || bounds_ref.is_null() {
+            return None;
+        }
+
+        let rect = cg_rect_from_ax_value(bounds_ref);
+        CFRelease(bounds_ref);
+        rect
     }
 }
 
