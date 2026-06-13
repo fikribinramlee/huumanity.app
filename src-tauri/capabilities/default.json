@@ -15,6 +15,7 @@
   "permissions": [
     "core:default",
     "deep-link:default",
-    "opener:default"
+    "opener:default",
+    "allow-app-commands"
   ]
 }
