@@ -26,6 +26,10 @@ struct SelectorState {
     selection: Mutex<Option<DesktopSelection>>,
     last_status: Mutex<String>,
     watcher_running: Mutex<bool>,
+    // True while the expanded tone/result panel is open. The background watcher
+    // checks this and leaves the window completely alone so it never hides or
+    // repositions the panel out from under the user.
+    popup_open: Mutex<bool>,
 }
 
 struct SelectionProbe {
@@ -150,9 +154,13 @@ fn paste_text(text: String) -> Result<(), String> {
 #[tauri::command]
 fn paste_text_into_source(
     app: tauri::AppHandle,
+    state: State<'_, SelectorState>,
     text: String,
     source_pid: Option<i32>,
 ) -> Result<(), String> {
+    if let Ok(mut open) = state.popup_open.lock() {
+        *open = false;
+    }
     if let Some(window) = app.get_webview_window("selector") {
         let _ = window.hide();
     }
@@ -262,6 +270,10 @@ fn show_selector_for_selection(
         let mut current = state.selection.lock().map_err(|e| e.to_string())?;
         *current = Some(selection.clone());
     }
+    // Showing the small dot means the expanded panel is not open.
+    if let Ok(mut open) = state.popup_open.lock() {
+        *open = false;
+    }
 
     let window = ensure_selector_window(app)?;
     let (x, y) = selector_button_position(app, &selection);
@@ -278,7 +290,7 @@ fn show_selector_for_selection(
     ));
 
     window
-        .set_size(LogicalSize::new(48.0, 48.0))
+        .set_size(LogicalSize::new(SELECTOR_DOT_SIZE, SELECTOR_DOT_SIZE))
         .map_err(|e| e.to_string())?;
     window
         .set_position(LogicalPosition::new(x as f64, y as f64))
@@ -287,11 +299,30 @@ fn show_selector_for_selection(
     Ok(())
 }
 
+/// Logical size of the collapsed floating dot window. ~the size of the macOS
+/// cursor; leaves a few px of transparent padding around the 20px button for
+/// its soft CSS shadow.
+const SELECTOR_DOT_SIZE: f64 = 30.0;
+
 fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection) -> (i32, i32) {
-    // Place button above the selection, left-aligned with it.
-    // 48px button + 10px gap above the top edge of the selection rect.
-    let mut x = selection.x;
-    let mut y = selection.y - 48.0 - 10.0;
+    // The button must sit *beside* the selected text, never on top of it and
+    // never under the pointer (which makes it "run away" as the cursor nears).
+    //
+    // - Real selection rect: place the dot just past the right edge of the
+    //   selection, aligned to its top line.
+    // - Cursor-fallback rect (1x1, used when the app doesn't expose selection
+    //   bounds — most browsers/Electron): offset up-and-right of the pointer so
+    //   the dot is clearly beside where the mouse released, never beneath it.
+    let is_point = selection.width <= 2.0 && selection.height <= 2.0;
+
+    let (mut x, mut y) = if is_point {
+        (selection.x + 16.0, selection.y - SELECTOR_DOT_SIZE - 6.0)
+    } else {
+        (
+            selection.x + selection.width + 8.0,
+            selection.y - 4.0,
+        )
+    };
 
     if let Ok(Some(monitor)) = app.primary_monitor() {
         let scale = monitor.scale_factor();
@@ -300,8 +331,14 @@ fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection
 
         let min_x = position.x as f64 / scale;
         let min_y = position.y as f64 / scale;
-        let max_x = min_x + (size.width as f64 / scale) - 56.0;
-        let max_y = min_y + (size.height as f64 / scale) - 56.0;
+        let max_x = min_x + (size.width as f64 / scale) - (SELECTOR_DOT_SIZE + 8.0);
+        let max_y = min_y + (size.height as f64 / scale) - (SELECTOR_DOT_SIZE + 8.0);
+
+        // If placing it to the right would run off-screen, flip to the left of
+        // the selection instead so it stays beside the text.
+        if !is_point && x > max_x {
+            x = (selection.x - SELECTOR_DOT_SIZE - 8.0).max(min_x + 8.0);
+        }
 
         x = x.clamp(min_x + 8.0, max_x.max(min_x + 8.0));
         y = y.clamp(min_y + 8.0, max_y.max(min_y + 8.0));
@@ -599,6 +636,11 @@ fn expand_selector_window(
         .clone()
         .ok_or_else(|| "No selected text available.".to_string())?;
 
+    // The panel is now open — tell the watcher to hands-off until it closes.
+    if let Ok(mut open) = state.popup_open.lock() {
+        *open = true;
+    }
+
     let window = ensure_selector_window(&app)?;
     let width = 460;
     let height = 320;
@@ -619,7 +661,13 @@ fn expand_selector_window(
 }
 
 #[tauri::command]
-fn hide_selector_window(app: tauri::AppHandle) -> Result<(), String> {
+fn hide_selector_window(
+    app: tauri::AppHandle,
+    state: State<'_, SelectorState>,
+) -> Result<(), String> {
+    if let Ok(mut open) = state.popup_open.lock() {
+        *open = false;
+    }
     if let Some(window) = app.get_webview_window("selector") {
         window.hide().map_err(|e| e.to_string())?;
     }
@@ -635,9 +683,13 @@ fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow
 
     WebviewWindowBuilder::new(app, "selector", webview_url("/selector"))
         .title("huu selector")
-        .inner_size(48.0, 48.0)
+        .inner_size(SELECTOR_DOT_SIZE, SELECTOR_DOT_SIZE)
         .decorations(false)
         .transparent(true)
+        // No native window drop-shadow — that soft square is what showed up as a
+        // "frame / lines" around the circle. The button carries its own subtle
+        // CSS shadow instead.
+        .shadow(false)
         .always_on_top(true)
         .visible_on_all_workspaces(true)
         .visible(false)
@@ -648,14 +700,23 @@ fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow
 
 fn start_selection_watcher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
+        // The selection is keyed by its TEXT (+ source app), never by screen
+        // coordinates. This is the fix for the "button plays tag with the
+        // cursor" bug: when an app doesn't expose selection bounds we fall back
+        // to the pointer location, and if the key included coordinates every
+        // mouse twitch would look like a brand-new selection and re-show / move
+        // the button. Keying on text means the same highlighted phrase is the
+        // same selection no matter where the mouse goes.
         let mut last_selection_key = String::new();
         let mut last_probe_status = String::new();
-        // How many consecutive polls must see the same selection before we show
-        // the button. At 350 ms per poll this is ~700 ms of stability — the
-        // cursor must have stopped moving before the button appears.
+        // Consecutive polls the same text must persist before we show the dot.
+        // At 200 ms/poll this is ~400 ms — long enough that we don't pop up
+        // mid-drag, short enough to feel instant once the mouse is released.
         const STABLE_POLLS_REQUIRED: u32 = 2;
         let mut stable_count: u32 = 0;
-        let mut pending_selection: Option<DesktopSelection> = None;
+        // Once the dot is shown for a selection we freeze it — no further
+        // repositioning until the selection text actually changes.
+        let mut shown_for_key = false;
 
         let state = app.state::<SelectorState>();
         if let Ok(mut watcher_running) = state.watcher_running.lock() {
@@ -665,7 +726,13 @@ fn start_selection_watcher(app: tauri::AppHandle) {
         debug_log("selection watcher started");
 
         loop {
-            std::thread::sleep(Duration::from_millis(350));
+            std::thread::sleep(Duration::from_millis(200));
+
+            // Hands off entirely while the expanded panel is open — never hide
+            // or move a panel the user is interacting with.
+            if state.popup_open.lock().map(|open| *open).unwrap_or(false) {
+                continue;
+            }
 
             let probe = platform_current_selection_probe();
             if probe.status != last_probe_status {
@@ -676,65 +743,55 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 last_probe_status = probe.status.clone();
             }
 
-            let Some(selection) = probe.selection else {
-                // No selection — reset and hide any visible button
-                if !last_selection_key.is_empty() {
+            // Decide whether this poll yielded a rephrashable selection.
+            let rephrashable = probe
+                .selection
+                .as_ref()
+                .map(|s| {
+                    let t = s.text.trim();
+                    !t.is_empty() && is_rephrashable(t)
+                })
+                .unwrap_or(false);
+
+            if !rephrashable {
+                // No usable selection — drop any shown dot and clear tracking.
+                if !last_selection_key.is_empty() || shown_for_key {
                     last_selection_key.clear();
                     stable_count = 0;
-                    pending_selection = None;
+                    shown_for_key = false;
                     if let Some(window) = app.get_webview_window("selector") {
                         let _ = window.hide();
                     }
                 }
                 continue;
-            };
+            }
 
+            let selection = probe.selection.expect("rephrashable implies Some");
             let trimmed = selection.text.trim().to_string();
-            if trimmed.is_empty() {
-                continue;
-            }
 
-            // Ground rule: skip proper nouns, acronyms, short words
-            if !is_rephrashable(&trimmed) {
-                if !last_selection_key.is_empty() {
-                    last_selection_key.clear();
-                    stable_count = 0;
-                    pending_selection = None;
-                    if let Some(window) = app.get_webview_window("selector") {
-                        let _ = window.hide();
-                    }
-                }
-                continue;
-            }
-
-            let selection_key = format!(
-                "{}:{}:{}:{}:{}",
-                trimmed,
-                selection.x.round(),
-                selection.y.round(),
-                selection.width.round(),
-                selection.height.round()
-            );
+            // Key on text + source app only — deliberately NOT coordinates.
+            let selection_key = format!("{}\u{0}{:?}", trimmed, selection.source_pid);
 
             if selection_key != last_selection_key {
-                // Selection changed — restart stability counter, store candidate
+                // A genuinely different selection — restart stability tracking.
                 last_selection_key = selection_key;
                 stable_count = 1;
-                pending_selection = Some(selection);
-            } else {
-                // Same selection as last poll — increment stability
+                shown_for_key = false;
+            } else if !shown_for_key {
+                // Same text as last poll and not shown yet — count toward the
+                // stability threshold, then show using the freshest coordinates
+                // (the mouse has usually settled by now).
                 stable_count += 1;
 
-                if stable_count == STABLE_POLLS_REQUIRED {
-                    // Selection has been stable for ~700 ms — show the button
-                    if let Some(sel) = pending_selection.take() {
-                        if let Err(err) = show_selector_for_selection(&app, &state, sel) {
-                            debug_log(&format!("show selector failed: {err}"));
-                        }
+                if stable_count >= STABLE_POLLS_REQUIRED {
+                    if let Err(err) = show_selector_for_selection(&app, &state, selection) {
+                        debug_log(&format!("show selector failed: {err}"));
                     }
+                    shown_for_key = true;
                 }
-                // Beyond STABLE_POLLS_REQUIRED: already showing, do nothing
             }
+            // Same text and already shown → do nothing. The dot stays frozen in
+            // place, so moving the cursor toward it can never make it flee.
         }
     });
 }
@@ -855,6 +912,7 @@ fn platform_current_selection_probe() -> SelectionProbe {
 
 #[cfg(target_os = "macos")]
 mod macos_accessibility {
+    use std::sync::atomic::{AtomicI32, Ordering};
     use std::{ffi::c_void, ptr};
 
     use core_foundation::{
@@ -901,7 +959,42 @@ mod macos_accessibility {
             result: *mut CFTypeRef,
         ) -> AXError;
         fn AXUIElementGetPid(element: AXUIElementRef, pid: *mut i32) -> AXError;
+        fn AXUIElementSetAttributeValue(
+            element: AXUIElementRef,
+            attribute: CFStringRef,
+            value: CFTypeRef,
+        ) -> AXError;
         fn AXValueGetValue(value: AXValueRef, value_type: i32, value_ptr: *mut c_void) -> Boolean;
+    }
+
+    // Last app PID we flipped AXManualAccessibility on, so we only do it once per
+    // app rather than every poll.
+    static LAST_AX_APP_PID: AtomicI32 = AtomicI32::new(0);
+
+    /// Chromium-based apps (Chrome, Edge, Brave) and Electron apps (Notion,
+    /// Slack, VS Code, Discord, …) keep their accessibility tree — including
+    /// `AXSelectedText` — switched off until an assistive client asks for it by
+    /// setting `AXManualAccessibility` on the application element. Without this,
+    /// the selector never sees selections in any of those apps. Best-effort and
+    /// idempotent: unsupported apps just return an error we ignore.
+    unsafe fn enable_focused_app_accessibility(system: AXUIElementRef) {
+        let Some(app_el) = copy_attribute(system, "AXFocusedApplication") else {
+            return;
+        };
+
+        if let Some(pid) = copy_element_pid(app_el as AXUIElementRef) {
+            if LAST_AX_APP_PID.swap(pid, Ordering::Relaxed) != pid {
+                let attr = CFString::new("AXManualAccessibility");
+                let value = CFBoolean::true_value();
+                AXUIElementSetAttributeValue(
+                    app_el as AXUIElementRef,
+                    attr.as_concrete_TypeRef(),
+                    value.as_CFType().as_concrete_TypeRef(),
+                );
+            }
+        }
+
+        CFRelease(app_el);
     }
 
     pub fn is_trusted(prompt: bool) -> bool {
@@ -932,6 +1025,10 @@ mod macos_accessibility {
                     status: "system accessibility element unavailable".to_string(),
                 };
             }
+
+            // Unlock selection reporting in Chromium/Electron apps (Notion,
+            // Chrome, Slack, …) before we read. Native apps are unaffected.
+            enable_focused_app_accessibility(system);
 
             let focused = copy_focused_element(system);
             CFRelease(system as CFTypeRef);
