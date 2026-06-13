@@ -732,6 +732,13 @@ fn start_selection_watcher(app: tauri::AppHandle) {
         // Once the dot is shown for a selection we freeze it — no further
         // repositioning until the selection text actually changes.
         let mut shown_for_key = false;
+        // The web/Electron accessibility tree FLICKERS: a poll mid-interaction
+        // frequently returns "no selection" for a beat even though the text is
+        // still highlighted. Hiding on the first miss is what made the dot
+        // vanish/reappear and "play tag" (each recovery re-showed it at the new
+        // cursor). So we only hide after several CONSECUTIVE misses.
+        const MISSES_BEFORE_HIDE: u32 = 4;
+        let mut miss_count: u32 = 0;
 
         let state = app.state::<SelectorState>();
         if let Ok(mut watcher_running) = state.watcher_running.lock() {
@@ -758,6 +765,14 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 last_probe_status = probe.status.clone();
             }
 
+            // SELF-FOCUS: the user is interacting with our own dot/panel. Leave
+            // the window EXACTLY as-is — don't hide, don't move, don't reset.
+            // This is what lets the click actually land on the button instead of
+            // the watcher yanking the window away.
+            if probe.status == "huu-self-focused" {
+                continue;
+            }
+
             // Decide whether this poll yielded a rephrashable selection.
             let rephrashable = probe
                 .selection
@@ -769,23 +784,34 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 .unwrap_or(false);
 
             if !rephrashable {
-                // No usable selection — drop any shown dot and clear tracking.
-                if !last_selection_key.is_empty() || shown_for_key {
-                    last_selection_key.clear();
-                    stable_count = 0;
-                    shown_for_key = false;
-                    if let Some(window) = app.get_webview_window("selector") {
-                        let _ = window.hide();
+                // A miss. Could be a genuine deselection OR just the web a11y
+                // tree flickering. Only hide once we've missed several polls in
+                // a row — a single dropout must NOT disturb the frozen dot.
+                if shown_for_key || !last_selection_key.is_empty() {
+                    miss_count += 1;
+                    if miss_count >= MISSES_BEFORE_HIDE {
+                        last_selection_key.clear();
+                        stable_count = 0;
+                        shown_for_key = false;
+                        miss_count = 0;
+                        if let Some(window) = app.get_webview_window("selector") {
+                            let _ = window.hide();
+                        }
                     }
                 }
                 continue;
             }
 
+            // A hit — reset the miss debounce.
+            miss_count = 0;
+
             let selection = probe.selection.expect("rephrashable implies Some");
             let trimmed = selection.text.trim().to_string();
 
-            // Key on text + source app only — deliberately NOT coordinates.
-            let selection_key = format!("{}\u{0}{:?}", trimmed, selection.source_pid);
+            // Key on TEXT ONLY — deliberately NOT coordinates or pid. The same
+            // highlighted phrase is the same selection no matter where the mouse
+            // goes, so the dot never chases the cursor.
+            let selection_key = trimmed.clone();
 
             if selection_key != last_selection_key {
                 // A genuinely different selection — restart stability tracking.
@@ -1070,6 +1096,20 @@ mod macos_accessibility {
             };
 
             let source_pid = copy_element_pid(focused as AXUIElementRef);
+
+            // SELF-FOCUS GUARD. When the user clicks our yellow dot (or the
+            // expanded panel), focus moves to huumanity itself. The watcher must
+            // NOT read "no selection" and hide the dot out from under the click —
+            // that's why clicking did nothing. Signal self-focus distinctly so
+            // the watcher leaves the window exactly as-is.
+            if source_pid == Some(std::process::id() as i32) {
+                CFRelease(focused);
+                return SelectionProbe {
+                    selection: None,
+                    status: "huu-self-focused".to_string(),
+                };
+            }
+
             // Hard wall on the whole tree walk. Even with a per-call timeout, a
             // wide tree could still chain many calls; this guarantees a single
             // poll never spends more than ~350ms searching before giving up and
@@ -1326,42 +1366,65 @@ mod macos_accessibility {
         selected_text.to_string()
     }
 
-    unsafe fn copy_selection_rect(element: AXUIElementRef) -> Option<CGRect> {
-        // Try the focused element first (works for native AppKit text views).
-        if let Some(rect) = rect_via_selected_range(element) {
-            return Some(rect);
-        }
-        if let Some(rect) = rect_via_text_markers(element) {
-            return Some(rect);
-        }
+    /// A rect we can actually anchor the button to: positive area, finite, and
+    /// not absurdly large. This is the filter that rejects the degenerate
+    /// `(0, 956, 0, 0)` empty-range rect web areas hand back when we ask the
+    /// wrong way — accepting it was what dumped us onto the cursor fallback.
+    fn is_real_rect(r: &CGRect) -> bool {
+        r.origin.x.is_finite()
+            && r.origin.y.is_finite()
+            && r.size.width > 4.0
+            && r.size.height > 4.0
+            && r.size.width < 100_000.0
+            && r.size.height < 100_000.0
+    }
 
-        // In Chromium / WebKit the geometry APIs (AXBoundsForTextMarkerRange,
-        // AXBoundsForRange) live on the AXWebArea element, which is an ANCESTOR
-        // of the focused element — not the focused element itself. Walk up the
-        // parent chain (up to 8 levels) and retry on each ancestor until we find
-        // one that returns a real rect.
+    unsafe fn copy_selection_rect(element: AXUIElementRef) -> Option<CGRect> {
+        // Build the focused element + up to 8 ancestors. In web content the
+        // geometry lives on the AXWebArea (an ancestor), so we must try the
+        // whole chain — but we keep walking PAST any element that only offers a
+        // degenerate/empty rect instead of stopping at the first non-null one.
+        let mut chain: Vec<AXUIElementRef> = vec![element];
+        let mut owned: Vec<CFTypeRef> = Vec::new();
         let mut current = element;
-        let mut ancestors: Vec<CFTypeRef> = Vec::new();
         for _ in 0..8 {
             let Some(parent_ref) = copy_attribute(current, "AXParent") else {
                 break;
             };
-            let parent = parent_ref as AXUIElementRef;
-            if let Some(rect) = rect_via_selected_range(parent) {
-                ancestors.iter().for_each(|r| CFRelease(*r));
-                CFRelease(parent_ref);
-                return Some(rect);
-            }
-            if let Some(rect) = rect_via_text_markers(parent) {
-                ancestors.iter().for_each(|r| CFRelease(*r));
-                CFRelease(parent_ref);
-                return Some(rect);
-            }
-            ancestors.push(parent_ref);
-            current = parent;
+            owned.push(parent_ref);
+            current = parent_ref as AXUIElementRef;
+            chain.push(current);
         }
-        ancestors.iter().for_each(|r| CFRelease(*r));
-        None
+
+        let mut found: Option<CGRect> = None;
+        'outer: for (depth, el) in chain.iter().enumerate() {
+            // Markers FIRST: in web content the selected-range path returns the
+            // empty/garbage rect, while the marker range reflects the actual
+            // highlighted text. Native fields have no markers and fall through
+            // to the range path.
+            for (label, rect) in [
+                ("markers", rect_via_text_markers(*el)),
+                ("range", rect_via_selected_range(*el)),
+            ] {
+                if let Some(r) = rect {
+                    let real = is_real_rect(&r);
+                    super::debug_log(&format!(
+                        "  rect_try depth={depth} via={label} rect=({}, {}, {}, {}) real={real}",
+                        r.origin.x.round(),
+                        r.origin.y.round(),
+                        r.size.width.round(),
+                        r.size.height.round()
+                    ));
+                    if real {
+                        found = Some(r);
+                        break 'outer;
+                    }
+                }
+            }
+        }
+
+        owned.iter().for_each(|r| CFRelease(*r));
+        found
     }
 
     /// Pull a CGRect out of an AXValue, returning None if it isn't one.
