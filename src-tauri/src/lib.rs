@@ -1227,9 +1227,16 @@ mod macos_accessibility {
             return None;
         }
 
+        let rect = copy_selection_rect(element);
+        super::debug_log(&format!(
+            "rect_lookup text_len={} rect={:?}",
+            text.len(),
+            rect.map(|r| (r.origin.x.round(), r.origin.y.round(), r.size.width.round(), r.size.height.round()))
+        ));
+
         Some(SelectionRead {
             text,
-            rect: copy_selection_rect(element),
+            rect,
             can_replace: can_replace_selection(element),
         })
     }
@@ -1320,18 +1327,41 @@ mod macos_accessibility {
     }
 
     unsafe fn copy_selection_rect(element: AXUIElementRef) -> Option<CGRect> {
-        // Native AppKit text views (TextEdit, Mail, native fields) expose the
-        // selection geometry through AXSelectedTextRange + AXBoundsForRange.
+        // Try the focused element first (works for native AppKit text views).
         if let Some(rect) = rect_via_selected_range(element) {
             return Some(rect);
         }
-        // Web content (Safari/Chrome and every Electron app — Claude, Notion,
-        // VS Code, Slack, Discord, …) does NOT implement AXBoundsForRange. It
-        // exposes selection geometry through the text-marker API instead.
-        // Without this branch those apps return no rect and we fall back to the
-        // cursor position — which is exactly why the dot floated above the text
-        // or landed mid-screen there.
-        rect_via_text_markers(element)
+        if let Some(rect) = rect_via_text_markers(element) {
+            return Some(rect);
+        }
+
+        // In Chromium / WebKit the geometry APIs (AXBoundsForTextMarkerRange,
+        // AXBoundsForRange) live on the AXWebArea element, which is an ANCESTOR
+        // of the focused element — not the focused element itself. Walk up the
+        // parent chain (up to 8 levels) and retry on each ancestor until we find
+        // one that returns a real rect.
+        let mut current = element;
+        let mut ancestors: Vec<CFTypeRef> = Vec::new();
+        for _ in 0..8 {
+            let Some(parent_ref) = copy_attribute(current, "AXParent") else {
+                break;
+            };
+            let parent = parent_ref as AXUIElementRef;
+            if let Some(rect) = rect_via_selected_range(parent) {
+                ancestors.iter().for_each(|r| CFRelease(*r));
+                CFRelease(parent_ref);
+                return Some(rect);
+            }
+            if let Some(rect) = rect_via_text_markers(parent) {
+                ancestors.iter().for_each(|r| CFRelease(*r));
+                CFRelease(parent_ref);
+                return Some(rect);
+            }
+            ancestors.push(parent_ref);
+            current = parent;
+        }
+        ancestors.iter().for_each(|r| CFRelease(*r));
+        None
     }
 
     /// Pull a CGRect out of an AXValue, returning None if it isn't one.
