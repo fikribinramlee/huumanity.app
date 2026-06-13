@@ -36,6 +36,9 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    },
+    "macOS": {
+      "signingIdentity": "Developer ID Application: Fikri Bin ramlee (JJKZ58P2CL)"
     }
   }
 }

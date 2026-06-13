@@ -217,21 +217,21 @@ export default function SelectorPage() {
   const canReplaceSelection = selection?.canReplace ?? false;
 
   if (!expanded) {
-    // Small floating dot — matches the website demo button exactly
-    // (app/page.tsx): 20px circle, 1px black border, subtle shadow, a compact
-    // bold up-arrow. Roughly the size of the macOS cursor so it sits beside the
-    // selection without getting in the way.
+    // Small floating dot — a clean 20px yellow circle, NO border, with a soft
+    // shadow so it reads on light backgrounds, and a compact bold up-arrow.
+    // Roughly the size of a line of text so it sits beside the selection without
+    // distracting or causing cognitive overload.
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-transparent">
         <button
           type="button"
           onClick={openOptions}
-          className="flex h-5 w-5 items-center justify-center rounded-full border border-black bg-[#fff700] text-black shadow transition hover:brightness-95 active:scale-90"
+          className="flex h-5 w-5 items-center justify-center rounded-full bg-[#fff700] text-black shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition hover:brightness-95 active:scale-90"
           aria-label="Open huu rewrite options"
         >
           <svg
-            width="9"
-            height="9"
+            width="11"
+            height="11"
             viewBox="0 0 24 24"
             fill="none"
             stroke="black"

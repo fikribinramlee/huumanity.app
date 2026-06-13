@@ -305,23 +305,30 @@ fn show_selector_for_selection(
 const SELECTOR_DOT_SIZE: f64 = 30.0;
 
 fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection) -> (i32, i32) {
-    // The button must sit *beside* the selected text, never on top of it and
-    // never under the pointer (which makes it "run away" as the cursor nears).
+    // The dot ALWAYS sits just to the LEFT of the selection, vertically centered
+    // on the first line. One predictable location — never on top of the text,
+    // never on the right, never under the pointer (which made it "run away").
     //
-    // - Real selection rect: place the dot just past the right edge of the
-    //   selection, aligned to its top line.
-    // - Cursor-fallback rect (1x1, used when the app doesn't expose selection
-    //   bounds — most browsers/Electron): offset up-and-right of the pointer so
-    //   the dot is clearly beside where the mouse released, never beneath it.
+    // We're computing the WINDOW's top-left; the 20px button is centered inside
+    // the 30px transparent window, so the visible dot lands ~`gap`+5px left of
+    // the text edge.
+    let gap = 6.0;
     let is_point = selection.width <= 2.0 && selection.height <= 2.0;
 
-    let (mut x, mut y) = if is_point {
-        (selection.x + 16.0, selection.y - SELECTOR_DOT_SIZE - 6.0)
+    // Horizontal: left of the selection's left edge (for both real and fallback
+    // rects — for the cursor fallback we only know the pointer x, so "left of it"
+    // is the best predictable guess).
+    let mut x = selection.x - SELECTOR_DOT_SIZE - gap;
+
+    // Vertical: center the dot on the FIRST line of the selection. Cap the line
+    // height so a tall multi-line selection still anchors the dot to its top line
+    // instead of its vertical middle.
+    let mut y = if is_point {
+        // Pointer fallback: lift the dot a touch above the caret line.
+        selection.y - SELECTOR_DOT_SIZE - gap
     } else {
-        (
-            selection.x + selection.width + 8.0,
-            selection.y - 4.0,
-        )
+        let first_line = selection.height.min(24.0);
+        selection.y + (first_line / 2.0) - (SELECTOR_DOT_SIZE / 2.0)
     };
 
     if let Ok(Some(monitor)) = app.primary_monitor() {
@@ -331,20 +338,16 @@ fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection
 
         let min_x = position.x as f64 / scale;
         let min_y = position.y as f64 / scale;
-        let max_x = min_x + (size.width as f64 / scale) - (SELECTOR_DOT_SIZE + 8.0);
-        let max_y = min_y + (size.height as f64 / scale) - (SELECTOR_DOT_SIZE + 8.0);
+        let max_x = min_x + (size.width as f64 / scale) - (SELECTOR_DOT_SIZE + 4.0);
+        let max_y = min_y + (size.height as f64 / scale) - (SELECTOR_DOT_SIZE + 4.0);
 
-        // If placing it to the right would run off-screen, flip to the left of
-        // the selection instead so it stays beside the text.
-        if !is_point && x > max_x {
-            x = (selection.x - SELECTOR_DOT_SIZE - 8.0).max(min_x + 8.0);
-        }
-
-        x = x.clamp(min_x + 8.0, max_x.max(min_x + 8.0));
-        y = y.clamp(min_y + 8.0, max_y.max(min_y + 8.0));
+        // If the selection hugs the left screen edge there's no room to the left,
+        // so pin to the left margin (a slight overlap with the text is fine).
+        x = x.clamp(min_x + 4.0, max_x.max(min_x + 4.0));
+        y = y.clamp(min_y + 4.0, max_y.max(min_y + 4.0));
     } else {
-        x = x.max(8.0);
-        y = y.max(8.0);
+        x = x.max(4.0);
+        y = y.max(4.0);
     }
 
     (x.round() as i32, y.round() as i32)
