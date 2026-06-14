@@ -5,7 +5,7 @@ import {
   getUserMeta,
   incrementDailyUsage,
   FREE_DAILY_LIMIT,
-  todayUTC,
+  windowedUsage,
 } from "@/app/lib/subscription";
 
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -216,9 +216,7 @@ export async function POST(req: NextRequest) {
         privateMeta.subscriptionStatus === "active";
 
       if (!isPro) {
-        const today = todayUTC();
-        usageCount =
-          publicMeta.usageDate === today ? (publicMeta.usageCount ?? 0) : 0;
+        usageCount = windowedUsage(publicMeta).count;
 
         if (usageCount >= FREE_DAILY_LIMIT) {
           return corsJson(

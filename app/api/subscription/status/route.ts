@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   getUserMeta,
   FREE_DAILY_LIMIT,
-  todayUTC,
+  windowedUsage,
 } from "@/app/lib/subscription";
 
 const CORS = {
@@ -31,9 +31,7 @@ export async function GET() {
     const isPro =
       privateMeta.plan === "pro" && privateMeta.subscriptionStatus === "active";
 
-    const today = todayUTC();
-    const usageCount =
-      publicMeta.usageDate === today ? (publicMeta.usageCount ?? 0) : 0;
+    const { count: usageCount, resetsAt } = windowedUsage(publicMeta);
 
     return NextResponse.json(
       {
@@ -42,6 +40,8 @@ export async function GET() {
         limit: FREE_DAILY_LIMIT,
         unlimited: isPro,
         remaining: isPro ? null : Math.max(0, FREE_DAILY_LIMIT - usageCount),
+        // ISO timestamp when the current 24h window resets (null if no usage yet)
+        resetsAt,
         cancelAtPeriodEnd: privateMeta.cancelAtPeriodEnd ?? false,
         currentPeriodEnd: privateMeta.currentPeriodEnd ?? null,
       },

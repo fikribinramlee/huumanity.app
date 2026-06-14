@@ -22,6 +22,7 @@ type SubscriptionStatus = {
   limit: number;
   unlimited: boolean;
   remaining: number | null;
+  resetsAt?: string | null;
   cancelAtPeriodEnd?: boolean;
   currentPeriodEnd?: string | null;
 };
@@ -112,6 +113,17 @@ const NAV_ITEMS: { label: string; view: View; icon: React.ReactNode }[] = [
 // windows it controls, which is present in the desktop app but not a browser.
 function isTauriRuntime(): boolean {
   return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
+
+// Human-readable "time until the rolling 24h window resets", e.g. "6h 20m".
+function formatResetIn(iso?: string | null): string {
+  if (!iso) return "";
+  const ms = Date.parse(iso) - Date.now();
+  if (!Number.isFinite(ms) || ms <= 0) return "soon";
+  const totalMin = Math.ceil(ms / 60000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return h >= 1 ? `${h}h ${m}m` : `${m}m`;
 }
 
 // ─── Page component ───────────────────────────────────────────────────────────
@@ -913,7 +925,7 @@ useEffect(() => {
             ) : (
               <div className="rounded-2xl bg-[#fff700] p-5">
                 <p className="text-base font-black text-black leading-6">
-                  {subscription.remaining ?? 0} rewrite{subscription.remaining !== 1 ? "s" : ""} left today
+                  {subscription.remaining ?? 0} rewrite{subscription.remaining !== 1 ? "s" : ""} left
                 </p>
                 <p className="mt-2 text-xs text-black/60 leading-5">
                   Upgrade to huumanity Pro to have unlimited rewrites.
@@ -1439,8 +1451,8 @@ useEffect(() => {
                         </div>
                         <p className="mt-2.5 text-xs text-neutral-400">
                           {subscription.remaining === 0
-                            ? "You've used all your rewrites for today. Resets daily."
-                            : `${subscription.remaining} rewrite${subscription.remaining !== 1 ? "s" : ""} remaining today. Resets daily.`}
+                            ? `You've used all ${subscription.limit} rewrites.${subscription.resetsAt ? ` Resets in ${formatResetIn(subscription.resetsAt)}.` : ""}`
+                            : `${subscription.remaining} rewrite${subscription.remaining !== 1 ? "s" : ""} remaining.${subscription.resetsAt ? ` Resets in ${formatResetIn(subscription.resetsAt)}.` : " Resets 24h after your first rewrite."}`}
                         </p>
                       </div>
                     )}
