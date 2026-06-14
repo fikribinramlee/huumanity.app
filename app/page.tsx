@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { SignInButton, SignUpButton, useUser } from "@clerk/nextjs";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { isRephrashable } from "./lib/isRephrashable";
+import { HuuLogo } from "./components/HuuLogo";
 
 // ---------- Constants ----------
 
@@ -32,6 +35,12 @@ The implications of this technological revolution truly cannot be overstated.
 I will be sharing more in-depth insights in the coming days. Stay tuned for what promises to be an exciting thread.`,
 };
 
+// 3-step tutorial visualization — the Twitter post being rewritten.
+const TUT_ORIGINAL =
+  "AI content is flooding every platform. Authenticity is now the key differentiator. Leverage human creativity to craft narratives that truly resonate.";
+const TUT_REWRITTEN =
+  "every platform is drowning in AI slop rn and honestly the only thing that actually cuts through is real human creativity, like stuff that actually sounds like a person wrote it bc they meant it";
+
 const NAV_LINKS = [
   { href: "#benefit", label: "How it Works" },
   { href: "#demo", label: "Demo" },
@@ -56,14 +65,14 @@ const USE_CASES: UseCase[] = [
     label: "Anywhere",
     title: "huu for Anywhere",
     blurb:
-      "Highlight any text you see on your screen. Doesn't matter where it is — a webpage, a doc, a form. Pick a tone and huumanity rewrites it right there for you to clipboard it.",
+      "Highlight any text you see on your screen. Doesn't matter where it is: a webpage, a doc, a form. Pick a tone and huumanity rewrites it right there for you to clipboard it.",
   },
   {
     id: "outreach",
     label: "Outreach",
     title: "huu for Outreach",
     blurb:
-      "Whether it be for cold emails, DMs, follow-ups.Your prospects can smell a ChatGPT template from the subject line. huumanity rewrites your draft so it sounds like it was written by an actual human with emotions, and that you actually gave a damn before hitting send.",
+      "Whether it be for cold emails, DMs, or follow-ups. Your prospects can smell a ChatGPT template from the subject line. huumanity rewrites your draft so it sounds like it was written by an actual human with emotions, and that you actually gave a damn before hitting send.",
   },
   {
     id: "posts",
@@ -77,7 +86,7 @@ const USE_CASES: UseCase[] = [
     label: "Scripts",
     title: "huu for Scripts",
     blurb:
-      "Audiences can still hear that your script is written by AI. Doesn't matter if it's for a whole YouTube video or short-form content — reading AI-written scripts out loud is painful for everyone in the room. huumanity rewrites them so the words actually sound like yours.",
+      "Audiences can still hear that your script is written by AI. Doesn't matter if it's for a whole YouTube video or short-form content. Reading AI-written scripts out loud is painful for everyone in the room. huumanity rewrites them so the words actually sound like yours.",
   },
 ];
 
@@ -129,7 +138,7 @@ const PRICING = [
     features: [
       "10 rewrites per day",
       "All 4 tones",
-      "App that works everywhere — any app, any text field on your computer",
+      "App that works everywhere. Any app, any text field on your computer",
       "No credit card needed",
     ],
     cta: "Download free",
@@ -149,12 +158,6 @@ const PRICING = [
   },
 ];
 
-const FOOTER_LINKS: { title: string; links: string[] }[] = [
-  { title: "Product", links: ["Demo", "Pricing", "Changelog"] },
-  { title: "Use Cases", links: ["Outreach", "Posts", "Scripts"] },
-  { title: "Company", links: ["About", "Blog", "Contact"] },
-  { title: "Legal", links: ["Terms", "Privacy"] },
-];
 
 type DownloadPlatform = "macos" | "windows" | "linux";
 
@@ -197,7 +200,16 @@ function PlatformIcon({ platform }: { platform: DownloadPlatform }) {
   );
 }
 
-function DownloadCtaContent({ platform }: { platform: DownloadPlatform }) {
+function DownloadCtaContent({
+  platform,
+  waitlist,
+}: {
+  platform: DownloadPlatform;
+  waitlist?: boolean;
+}) {
+  if (waitlist) {
+    return <span>Join the Waitlist</span>;
+  }
   return (
     <>
       <PlatformIcon platform={platform} />
@@ -219,7 +231,7 @@ type PopupStage = "select" | "loading" | "result" | "limit";
 const POPUP_MAX_WIDTH = 480;
 const POPUP_MIN_WIDTH = 280;
 const FREE_LIMIT = 8;
-const ANON_LIMIT = 5;
+const ANON_LIMIT = 7;
 const ANON_RESET_MS = 24 * 60 * 60 * 1000;
 const ANON_USAGE_KEY = "huu_anon_usage";
 
@@ -251,11 +263,244 @@ function writeAnonUsage(next: AnonUsage) {
 }
 const BRAND = "#fff700";
 
+// ---------- Scroll-scrub helper ----------
+
+/**
+ * Drives an animation timeline from scroll position instead of timers.
+ *
+ * `apply` is called with a virtual time T in [0, duration] derived from how
+ * far `el` has been scrolled into view: T=0 when the element's top enters the
+ * bottom of the viewport, T=duration once the element's midpoint crosses the
+ * viewport's midpoint ("halfway past the section"). Scrolling back up runs
+ * the same timeline in reverse — the animation un-plays itself.
+ *
+ * The raw progress is eased toward its target with a small per-frame lerp
+ * (requestAnimationFrame) so fast scroll flicks still play out smoothly
+ * instead of jumping straight to the end state.
+ */
+function attachScrollScrub(
+  el: HTMLElement,
+  duration: number,
+  apply: (t: number) => void,
+  gain = 1
+): () => void {
+  let target = 0;
+  let current = -1; // forces the first apply
+  let raf = 0;
+  let running = false;
+
+  const computeTarget = () => {
+    const rect = el.getBoundingClientRect();
+    const vh = window.innerHeight;
+    const total = vh / 2 + rect.height / 2;
+    if (total <= 0) return 0;
+    // `gain` > 1 makes the timeline reach 1 before the element hits the dead
+    // center of the viewport, then hold complete — useful when the animation
+    // should be fully played "by the halfway point" rather than exactly at it.
+    return Math.min(1, Math.max(0, ((vh - rect.top) / total) * gain));
+  };
+
+  const tick = () => {
+    const next = current < 0 ? target : current + (target - current) * 0.2;
+    current = Math.abs(target - next) < 0.0005 ? target : next;
+    apply(current * duration);
+    if (current !== target) {
+      raf = requestAnimationFrame(tick);
+    } else {
+      running = false;
+    }
+  };
+
+  const onScroll = () => {
+    target = computeTarget();
+    if (!running) {
+      running = true;
+      raf = requestAnimationFrame(tick);
+    }
+  };
+
+  onScroll();
+  window.addEventListener("scroll", onScroll, { passive: true });
+  window.addEventListener("resize", onScroll);
+  return () => {
+    window.removeEventListener("scroll", onScroll);
+    window.removeEventListener("resize", onScroll);
+    cancelAnimationFrame(raf);
+  };
+}
+
+// ---------- 3-step tutorial: mini tweet card ----------
+
+/**
+ * Tiny Twitter-post mockup used by the 3-step "how it works" visualization.
+ * `selCount` highlights that many words counting from the END of the text, so
+ * the selection can be animated word-by-word like a real cursor drag (rather
+ * than flashing on as one solid blue block). `huuButton` pops the little
+ * yellow selector button in beside the first words.
+ */
+function TutTweet({
+  text,
+  selCount = 0,
+  huuButton = false,
+}: {
+  text: string;
+  selCount?: number;
+  huuButton?: boolean;
+}) {
+  const words = text.split(" ");
+  const firstSelected = words.length - Math.max(0, Math.min(selCount, words.length));
+  return (
+    <div className="flex gap-2.5">
+      <span className="w-8 h-8 rounded-full bg-neutral-200 shrink-0" aria-hidden="true" />
+      <div className="relative min-w-0 flex-1">
+        {huuButton && (
+          <span
+            className="absolute -left-5 top-4 z-10 w-5 h-5 rounded-full bg-[#fff700] border border-black shadow flex items-center justify-center"
+            style={{ animation: "huu-btn-fadein 0.3s cubic-bezier(0.34,1.56,0.64,1) forwards" }}
+            aria-hidden="true"
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
+          </span>
+        )}
+        <p className="text-[11px] leading-tight">
+          <span className="font-bold text-black">Alex Johnson</span>{" "}
+          <span className="text-neutral-400">@alexjohnson · 2h</span>
+        </p>
+        {/* Reserved height fits the longest variant (the rewrite), so swapping
+            text never changes the card height — keeps all 3 columns aligned. */}
+        <p className="mt-1 text-[11px] leading-[1.6] min-h-[4.6rem]">
+          {words.map((w, i) => {
+            const on = i >= firstSelected;
+            return (
+              <span
+                key={i}
+                className={`transition-colors duration-200 ${
+                  on ? "bg-[#cfe1ff] text-[#1d4ed8]" : "text-neutral-800"
+                }`}
+              >
+                {w}
+                {i < words.length - 1 ? " " : ""}
+              </span>
+            );
+          })}
+        </p>
+        <div className="mt-2.5 flex items-center gap-5 text-neutral-400">
+            <span className="flex items-center gap-1 text-[9px]">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
+              </svg>
+              24
+            </span>
+            <span className="flex items-center gap-1 text-[9px]">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="17 1 21 5 17 9" />
+                <path d="M3 11V9a4 4 0 0 1 4-4h14" />
+                <polyline points="7 23 3 19 7 15" />
+                <path d="M21 13v2a4 4 0 0 1-4 4H3" />
+              </svg>
+              81
+            </span>
+            <span className="flex items-center gap-1 text-[9px]">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+              </svg>
+              142
+            </span>
+            <span className="flex items-center text-[9px]">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            </span>
+          </div>
+      </div>
+    </div>
+  );
+}
+
+/** The floating tone bar shown in the tutorial (its own little box). */
+function ToneBar({
+  unpolished = false,
+  direct = false,
+  enter = false,
+}: {
+  unpolished?: boolean;
+  direct?: boolean;
+  enter?: boolean;
+}) {
+  const tones = [
+    { label: "Humanize", on: false },
+    { label: "Unpolished", on: unpolished },
+    { label: "Controversial", on: false },
+    { label: "Direct", on: direct },
+  ];
+  return (
+    <div className="inline-flex items-center gap-1" aria-hidden="true">
+      {tones.map(({ label, on }) => (
+        <span
+          key={label}
+          className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-full whitespace-nowrap transition-colors duration-300 ${
+            on ? "bg-[#fff700] text-black" : "text-neutral-500"
+          }`}
+        >
+          {label}
+        </span>
+      ))}
+      <span
+        className={`ml-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors duration-300 ${
+          enter ? "bg-[#fff700] border-[#fff700] text-black" : "border-neutral-300 text-neutral-400"
+        }`}
+      >
+        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12" />
+          <polyline points="12 5 19 12 12 19" />
+        </svg>
+      </span>
+    </div>
+  );
+}
+
+/** Mini macOS arrow cursor used by the tutorial; position via `style`. */
+function TutCursor({ visible, style }: { visible: boolean; style: CSSProperties }) {
+  return (
+    <div
+      className="absolute z-20 pointer-events-none"
+      style={{
+        opacity: visible ? 1 : 0,
+        transition:
+          "left 0.8s cubic-bezier(0.33,1,0.68,1), top 0.8s cubic-bezier(0.33,1,0.68,1), right 0.8s cubic-bezier(0.33,1,0.68,1), bottom 0.8s cubic-bezier(0.33,1,0.68,1), opacity 0.35s ease",
+        ...style,
+      }}
+      aria-hidden="true"
+    >
+      <svg width="13" height="18" viewBox="0 0 22 30" fill="none">
+        <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="rgba(0,0,0,0.22)" transform="translate(1.5,1.5)" />
+        <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="white" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
+        <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="black" />
+      </svg>
+    </div>
+  );
+}
+
 // ---------- Component ----------
 
 export default function LandingPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const downloadPlatform = detectDownloadPlatform();
+  // Waitlist mode — when this page is rendered at /waitlist, every
+  // download/sign-up CTA becomes "Join the Waitlist" and links to /sign-up
+  // (which renders Clerk's waitlist form when waitlist mode is enabled in
+  // the Clerk Dashboard). Same code, two routes, zero duplication.
+  const pathname = usePathname();
+  const isWaitlist = pathname?.startsWith("/waitlist") ?? false;
+  // Waitlist CTAs go to our custom /join page (inline email capture) rather
+  // than Clerk's multi-step /sign-up form, so visitors can submit in one step.
+  const primaryCtaHref = isWaitlist ? "/join" : "/download";
+  const waitlistLabel = "Join the Waitlist";
   const [usageCount, setUsageCount] = useState<number>(0);
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("Email");
@@ -271,7 +516,6 @@ export default function LandingPage() {
   const [activeUseCase, setActiveUseCase] = useState<UseCase>(USE_CASES[0]);
   const [animStep, setAnimStep] = useState(0);
   const [arrowFlash, setArrowFlash] = useState(false);
-  const [animStarted, setAnimStarted] = useState(false);
   const [cursorPos, setCursorPos] = useState(0);      // 0=email, 1=Unpolished, 2=Controversial, 3=Enter
   const [cursorVisible, setCursorVisible] = useState(false);
   const [cursorExiting, setCursorExiting] = useState(false);
@@ -279,27 +523,52 @@ export default function LandingPage() {
   // Feature section animation state
   const [featAnimStep, setFeatAnimStep] = useState(0);
   const [featArrowFlash, setFeatArrowFlash] = useState(false);
-  const [featAnimStarted, setFeatAnimStarted] = useState(false);
   const [featCursorPos, setFeatCursorPos] = useState(0); // 0=text, 1=Humanize, 2=Unpolished, 3=Enter
   const [featCursorVisible, setFeatCursorVisible] = useState(false);
   const [featCursorExiting, setFeatCursorExiting] = useState(false);
   const [featBtnLefts, setFeatBtnLefts] = useState<{ h: string; u: string; e: string; top: string }>({ h: "15%", u: "33%", e: "75%", top: "54%" });
   const [isCustomMode, setIsCustomMode] = useState(false);
-  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("monthly");
+  // 3-step tutorial state. The animation plays col 1 → 2 → 3 in sequence.
+  // `currentStep` tracks which column is "live" so the others dim back.
+  const tutRef = useRef<HTMLDivElement>(null);
+  const [currentStep, setCurrentStep] = useState<0 | 1 | 2 | 3>(1);
+  // Column 1 — select text. Cursor position and visibility are decoupled so
+  // we never animate the position while invisible. Without this the cursor
+  // would teleport between cycles (and between right/left anchored states).
+  const [c1Sel, setC1Sel] = useState(0); // # of words highlighted, counting from the END
+  const [c1CursorPos, setC1CursorPos] = useState<"start" | "end" | "button" | "after">("start");
+  const [c1CursorOn, setC1CursorOn] = useState(false);
+  const [c1Button, setC1Button] = useState(false); // yellow selector button
+  const [c1Bar, setC1Bar] = useState(false); // tone-bar box faded in
+  // Column 2 — pick tone(s)
+  const [c2Tone, setC2Tone] = useState(0); // 0 none · 1 Unpolished · 2 +Direct · 3 Enter clicked
+  const [c2Cursor, setC2Cursor] = useState<"hidden" | "unpolished" | "direct" | "enter" | "away">("hidden");
+  // Column 3 — accept the rewrite
+  const [c3, setC3] = useState(0); // 0 idle · 1 shimmer · 2 result · 3 cursor→accept · 4 clicked · 5 replaced
+  const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
   const savedRangeRef = useRef<Range | null>(null);
+  const activeSelTextRef = useRef<string>("");
   const editorRef = useRef<HTMLDivElement>(null);
   const demoSectionRef = useRef<HTMLDivElement>(null);
   const benefitSectionRef = useRef<HTMLElement>(null);
   const rightColumnRef = useRef<HTMLDivElement>(null);
   const featSectionRef = useRef<HTMLElement>(null);
   const featVizRef = useRef<HTMLDivElement>(null);
+  const tryUnderlineWrapRef = useRef<HTMLSpanElement>(null);
+  const tryUnderlinePathRef = useRef<SVGPathElement>(null);
+  const demoBoxWrapRef = useRef<HTMLDivElement>(null);
+  const demoArrowsRef = useRef<HTMLDivElement>(null);
+  const leftShaftRef = useRef<SVGPathElement>(null);
+  const leftHeadRef = useRef<SVGPathElement>(null);
+  const rightShaftRef = useRef<SVGPathElement>(null);
+  const rightHeadRef = useRef<SVGPathElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
-  const popupStageRef = useRef<PopupStage>("select");
+  const expandedRef      = useRef(false);
+  const showTimerRef     = useRef<number | null>(null);
 
-  // Keep the ref in sync so the global selectionchange listener can read the latest value.
-  useEffect(() => {
-    popupStageRef.current = popupStage;
-  }, [popupStage]);
+  // Keep the ref in sync so the global selectionchange listener can read the
+  // latest "is the popup open?" value without re-subscribing the listener.
+  useEffect(() => { expandedRef.current = expanded; }, [expanded]);
 
   useEffect(() => {
     if (user?.publicMetadata?.usageCount !== undefined) {
@@ -317,22 +586,32 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Start animation only when the benefit section scrolls into view.
+  // Benefit-section demo animation — scrubbed by scroll. The timeline keeps
+  // the same beats as the old timer version (cursor in → select → tone bar →
+  // hover tones → enter → result), but progress is tied to how far the
+  // section has scrolled into view: it completes once the section is halfway
+  // past the viewport center, and scrolling back up reverses it.
   useEffect(() => {
     const el = benefitSectionRef.current;
-    if (!el || animStarted) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setAnimStarted(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.25 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [animStarted]);
+    if (!el) return;
+    return attachScrollScrub(el, 10000, (T) => {
+      // Cursor stays parked on the Enter button after the click; Enter keeps
+      // its yellow "clicked" state for the rest of the timeline.
+      setCursorVisible(T >= 600);
+      setCursorExiting(false);
+      setCursorPos(T >= 6500 ? 3 : T >= 5000 ? 2 : T >= 3400 ? 1 : 0);
+      setArrowFlash(T >= 7300);
+      setAnimStep(
+        T >= 9500 ? 7
+        : T >= 8500 ? 6
+        : T >= 5900 ? 5
+        : T >= 4400 ? 4
+        : T >= 3300 ? 3
+        : T >= 1800 ? 2
+        : 0
+      );
+    });
+  }, []);
 
   // Compute cursor target positions from real DOM layout (updates on resize too).
   useEffect(() => {
@@ -356,60 +635,30 @@ export default function LandingPage() {
     return () => window.removeEventListener("resize", compute);
   }, []);
 
-  // Benefit-section demo animation — runs once after animStarted flips true.
-  useEffect(() => {
-    if (!animStarted) return;
-    // ── Fade in at email ──
-    const t1  = window.setTimeout(() => { setCursorPos(0); setCursorVisible(true); }, 600);
-    // Selection highlight
-    const t2  = window.setTimeout(() => setAnimStep(2), 1800);
-
-    // ── Tone picker appears, cursor moves up to Unpolished (visible, smooth) ──
-    const t3a = window.setTimeout(() => setAnimStep(3), 3300);
-    const t3b = window.setTimeout(() => setCursorPos(1), 3400); // move while visible
-    // Unpolished turns yellow once cursor has arrived (~800ms travel)
-    const t4  = window.setTimeout(() => setAnimStep(4), 4400);
-
-    // ── Cursor moves to Controversial (visible, smooth) ──
-    const t5a = window.setTimeout(() => setCursorPos(2), 5000);
-    // Controversial turns yellow
-    const t5b = window.setTimeout(() => setAnimStep(5), 5900);
-
-    // ── Cursor moves to Enter (visible, smooth) ──
-    const t6a = window.setTimeout(() => setCursorPos(3), 6500);
-    // Enter button flashes (click!)
-    const t6b = window.setTimeout(() => {
-      setArrowFlash(true);
-      window.setTimeout(() => setArrowFlash(false), 600);
-    }, 7300);
-
-    // ── Cursor exits: slides right and fades out ──
-    const t7a = window.setTimeout(() => { setCursorExiting(true); setCursorVisible(false); }, 7900);
-    const t7b = window.setTimeout(() => setCursorExiting(false), 8600); // reset
-
-    // ── Result ──
-    const t8 = window.setTimeout(() => setAnimStep(6), 8500);
-    const t9 = window.setTimeout(() => setAnimStep(7), 9500);
-
-    return () => {
-      [t1,t2,t3a,t3b,t4,t5a,t5b,t6a,t6b,t7a,t7b,t8,t9]
-        .forEach((t) => window.clearTimeout(t));
-    };
-  }, [animStarted]);
-
-  // Feature section: trigger animation when scrolled into view.
+  // Feature-section animation — scrubbed by scroll, same approach as the
+  // benefit section above.
   useEffect(() => {
     const el = featSectionRef.current;
-    if (!el || featAnimStarted) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) { setFeatAnimStarted(true); observer.disconnect(); }
-      },
-      { threshold: 0.25 }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [featAnimStarted]);
+    if (!el) return;
+    return attachScrollScrub(el, 9700, (T) => {
+      // Cursor fades in and then STAYS on the Enter button (pos 3) — it no
+      // longer slides away after the click. Enter keeps its clicked/yellow
+      // state so the cursor reads as resting on the active button.
+      setFeatCursorVisible(T >= 600);
+      setFeatCursorExiting(false);
+      setFeatCursorPos(T >= 6200 ? 3 : T >= 4700 ? 2 : T >= 3200 ? 1 : 0);
+      setFeatArrowFlash(T >= 7000);
+      setFeatAnimStep(
+        T >= 9200 ? 7
+        : T >= 7900 ? 6
+        : T >= 5600 ? 5
+        : T >= 4100 ? 4
+        : T >= 3000 ? 3
+        : T >= 1800 ? 2
+        : 0
+      );
+    });
+  }, []);
 
   // Feature section: compute tone-button DOM positions for cursor targeting.
   useEffect(() => {
@@ -436,29 +685,211 @@ export default function LandingPage() {
     return () => window.removeEventListener("resize", compute);
   }, []);
 
-  // Feature section: animation sequence (runs once after featAnimStarted).
+  // Hand-drawn underline beneath "Try huumanity Here" — the stroke sketches
+  // itself in sync with the scroll (drawing on the way down, erasing in
+  // reverse on the way up). Writes stroke-dashoffset straight to the DOM so
+  // it stays smooth without re-rendering React every frame.
   useEffect(() => {
-    if (!featAnimStarted) return;
-    const f1  = window.setTimeout(() => { setFeatCursorPos(0); setFeatCursorVisible(true); }, 600);
-    const f2  = window.setTimeout(() => setFeatAnimStep(2), 1800);   // text selected
-    const f3a = window.setTimeout(() => setFeatAnimStep(3), 3000);   // tone bar appears
-    const f3b = window.setTimeout(() => setFeatCursorPos(1), 3200);  // cursor → Humanize
-    const f4  = window.setTimeout(() => setFeatAnimStep(4), 4100);   // Humanize yellow
-    const f5a = window.setTimeout(() => setFeatCursorPos(2), 4700);  // cursor → Unpolished
-    const f5b = window.setTimeout(() => setFeatAnimStep(5), 5600);   // Unpolished yellow
-    const f6a = window.setTimeout(() => setFeatCursorPos(3), 6200);  // cursor → Enter
-    const f6b = window.setTimeout(() => {
-      setFeatArrowFlash(true);
-      window.setTimeout(() => setFeatArrowFlash(false), 600);
-    }, 7000);
-    const f7a = window.setTimeout(() => { setFeatCursorExiting(true); setFeatCursorVisible(false); }, 7600);
-    const f7b = window.setTimeout(() => setFeatCursorExiting(false), 8300);
-    const f8  = window.setTimeout(() => setFeatAnimStep(6), 7900);   // loading
-    const f9  = window.setTimeout(() => setFeatAnimStep(7), 9200);   // result
-    return () => {
-      [f1,f2,f3a,f3b,f4,f5a,f5b,f6a,f6b,f7a,f7b,f8,f9].forEach((t) => window.clearTimeout(t));
+    const el = tryUnderlineWrapRef.current;
+    const path = tryUnderlinePathRef.current;
+    if (!el || !path) return;
+    const len = path.getTotalLength();
+    path.style.strokeDasharray = `${len}`;
+    path.style.strokeDashoffset = `${len}`;
+    // gain 2 → fully underlined by the time the headline is roughly halfway
+    // up the screen, then holds. Scrolling back up erases it.
+    return attachScrollScrub(
+      el,
+      1,
+      (t) => {
+        path.style.strokeDashoffset = `${len * (1 - t)}`;
+      },
+      2
+    );
+  }, []);
+
+  // Two hand-drawn arrows that curve from beside the "Try huumanity Here"
+  // headline down to the demo box, drawing/erasing with the scroll. Tied to
+  // the box position: the arrows finish landing on the box as it comes fully
+  // onto the screen, and retract as you scroll back up past the demo.
+  useEffect(() => {
+    const el = demoBoxWrapRef.current;
+    const ls = leftShaftRef.current;
+    const lh = leftHeadRef.current;
+    const rs = rightShaftRef.current;
+    const rh = rightHeadRef.current;
+    if (!el || !ls || !lh || !rs || !rh) return;
+
+    const lsLen = ls.getTotalLength();
+    const lhLen = lh.getTotalLength();
+    const rsLen = rs.getTotalLength();
+    const rhLen = rh.getTotalLength();
+    for (const [p, len] of [
+      [ls, lsLen],
+      [lh, lhLen],
+      [rs, rsLen],
+      [rh, rhLen],
+    ] as [SVGPathElement, number][]) {
+      p.style.strokeDasharray = `${len}`;
+      p.style.strokeDashoffset = `${len}`;
+    }
+
+    // The shaft draws over the first 82% of the timeline; the arrowHEAD only
+    // starts once the shaft is fully connected (t ≥ 0.82) and finishes by t=1.
+    // This guarantees the head never floats ahead of an unfinished line.
+    const HEAD_START = 0.82;
+    return attachScrollScrub(
+      el,
+      1,
+      (t) => {
+        const shaftT = Math.min(1, t / HEAD_START);
+        const headT = Math.max(0, (t - HEAD_START) / (1 - HEAD_START));
+        ls.style.strokeDashoffset = `${lsLen * (1 - shaftT)}`;
+        rs.style.strokeDashoffset = `${rsLen * (1 - shaftT)}`;
+        lh.style.strokeDashoffset = `${lhLen * (1 - headT)}`;
+        rh.style.strokeDashoffset = `${rhLen * (1 - headT)}`;
+      },
+      1.25
+    );
+  }, []);
+
+  // 3-step tutorial sequence. All three columns stay visible; the animation
+  // plays col 1 → 2 → 3 then holds 2s and repeats, but only while the block is
+  // on screen. Driven by an awaitable, cancellable timeline so each beat is
+  // explicit and the whole thing stays smooth (opacity / transform only).
+  useEffect(() => {
+    const el = tutRef.current;
+    if (!el) return;
+
+    const totalWords = TUT_ORIGINAL.split(" ").length;
+    let token = { cancelled: true };
+    let timeoutId: number | undefined;
+
+    const sleep = (ms: number) =>
+      new Promise<void>((res) => {
+        timeoutId = window.setTimeout(res, ms);
+      });
+
+    const reset = () => {
+      setC1Sel(0);
+      // Silently move the cursor back to the start position while invisible —
+      // the next loop will fade it in there with no slide.
+      setC1CursorPos("start");
+      setC1CursorOn(false);
+      setC1Button(false);
+      setC1Bar(false);
+      setC2Tone(0);
+      setC2Cursor("hidden");
+      setC3(0);
+      setCurrentStep(1); // step 1 starts fully lit; cols 2 & 3 dim
     };
-  }, [featAnimStarted]);
+
+    const loop = async (tok: { cancelled: boolean }) => {
+      while (!tok.cancelled) {
+        reset();
+        await sleep(1100);
+        if (tok.cancelled) return;
+
+        // ── COLUMN 1 — cursor selects the text, then clicks the huu button ──
+        // Cursor fades IN at the "start" position (set by reset). Position
+        // changes only happen while it's visible, so it always glides — never
+        // teleports. Sequence:
+        //   appear at start → glide up-left while words highlight backward →
+        //   pause → yellow button pops in → cursor glides ONTO the button →
+        //   click → tone bar fades in above + cursor walks left and fades.
+        setC1CursorOn(true);
+        await sleep(800); // let the fade-in finish + read the start pose
+        if (tok.cancelled) return;
+        setC1CursorPos("end"); // begin gliding to the start-of-text area
+        for (let i = 1; i <= totalWords; i++) {
+          setC1Sel(i); // highlight words from the last back to the first
+          await sleep(2200 / totalWords);
+          if (tok.cancelled) return;
+        }
+        await sleep(550);
+        if (tok.cancelled) return;
+        setC1Button(true); // yellow huu button pops in beside "AI content"
+        await sleep(600); // wait out the pop-in before "clicking" it
+        if (tok.cancelled) return;
+        setC1CursorPos("button"); // cursor glides onto the button
+        await sleep(1000); // hold on the click so it reads as a press
+        if (tok.cancelled) return;
+        setC1Bar(true); // click → tone bar starts fading in above
+        setC1CursorPos("after"); // cursor glides slightly left of the button
+        await sleep(600);
+        if (tok.cancelled) return;
+        setC1CursorOn(false); // …then fades away softly at the "after" pose
+        await sleep(900);
+        if (tok.cancelled) return;
+
+        // ── COLUMN 2 — pick Unpolished + Direct, click Enter, glide away ──
+        setCurrentStep(2); // attention moves to step 2; col 1 dims back
+        setC2Cursor("unpolished");
+        await sleep(950);
+        if (tok.cancelled) return;
+        setC2Tone(1);
+        await sleep(750);
+        if (tok.cancelled) return;
+        setC2Cursor("direct");
+        await sleep(950);
+        if (tok.cancelled) return;
+        setC2Tone(2);
+        await sleep(750);
+        if (tok.cancelled) return;
+        setC2Cursor("enter");
+        await sleep(950);
+        if (tok.cancelled) return;
+        setC2Tone(3); // Enter clicked — stays yellow
+        await sleep(700);
+        if (tok.cancelled) return;
+        setC2Cursor("away"); // slide sideways to the right, then step 3 begins
+        await sleep(1100);
+        if (tok.cancelled) return;
+
+        // ── COLUMN 3 — shimmer 1.5s → result → accept → swap the tweet ──
+        setCurrentStep(3); // step 3 "pops" — everything lights up at full opacity
+        setC3(1); // rewriting shimmer
+        await sleep(1500);
+        if (tok.cancelled) return;
+        setC3(2); // rewritten text + Back / Copy / Accept
+        await sleep(1200);
+        if (tok.cancelled) return;
+        setC3(3); // cursor glides onto Accept
+        await sleep(1200);
+        if (tok.cancelled) return;
+        setC3(4); // Accept clicked
+        await sleep(1200); // wait ~1s …
+        if (tok.cancelled) return;
+        setC3(5); // … then the tweet holds the huumanity rewrite; popup fades
+        await sleep(2600); // hold, then loop
+        if (tok.cancelled) return;
+      }
+    };
+
+    const start = () => {
+      if (!token.cancelled) return; // already running
+      token = { cancelled: false };
+      loop(token);
+    };
+    const stop = () => {
+      token.cancelled = true;
+      if (timeoutId) window.clearTimeout(timeoutId);
+      reset();
+    };
+
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) start();
+        else stop();
+      },
+      { threshold: 0.2 }
+    );
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      stop();
+    };
+  }, []);
 
   // Track which section is in view for crossed-out nav effect.
   // Uses a shared Set so that when ALL sections leave the viewport (i.e. hero is showing)
@@ -496,21 +927,32 @@ export default function LandingPage() {
   }, []);
 
   useEffect(() => {
-    const handleSelectionChange = () => {
-      // Don't dismiss popup while loading or showing result.
-      if (popupStageRef.current !== "select") return;
-
-      const selection = window.getSelection();
-      const editor = editorRef.current;
-      const section = demoSectionRef.current;
-
-      if (!selection || !editor || !section || selection.rangeCount === 0) {
-        setAnchor(null);
-        setExpanded(false);
-        return;
+    const clearShowTimer = () => {
+      if (showTimerRef.current !== null) {
+        window.clearTimeout(showTimerRef.current);
+        showTimerRef.current = null;
       }
+    };
 
-      const range = selection.getRangeAt(0);
+    // Read the CURRENT selection, validate it against the rephrase rules, and
+    // return the floating-button geometry + a cloned range — or null when
+    // nothing rephrasable is selected.
+    //
+    // This is fully self-contained (does NOT rely on a value pre-populated by
+    // `selectionchange`). That matters cross-platform: Chrome/Edge/Firefox on
+    // Windows fire `selectionchange` AFTER `mouseup`, whereas WebKit/Chrome on
+    // macOS fire it before. Computing from the live selection at mouseup time
+    // works identically on every OS/browser.
+    const computeAnchorFromSelection = ():
+      | { anchor: NonNullable<SelectionAnchor>; range: Range }
+      | null => {
+      const selection = window.getSelection();
+      const editor    = editorRef.current;
+      const section   = demoSectionRef.current;
+
+      if (!selection || !editor || !section || selection.rangeCount === 0) return null;
+
+      const range        = selection.getRangeAt(0);
       const selectedText = selection.toString();
 
       if (
@@ -518,46 +960,102 @@ export default function LandingPage() {
         selectedText.trim().length === 0 ||
         !editor.contains(range.commonAncestorContainer)
       ) {
+        return null;
+      }
+
+      // Smart gate — same ground rules as everywhere else
+      if (!isRephrashable(selectedText)) return null;
+
+      const sectionRect  = section.getBoundingClientRect();
+      const sectionWidth  = section.offsetWidth;
+
+      const rects = range.getClientRects();
+      if (rects.length === 0) return null;
+      const firstRect    = rects[0];
+      const rangeRect    = range.getBoundingClientRect();
+      const relLeft      = rangeRect.left  - sectionRect.left;
+      const relRight     = rangeRect.right - sectionRect.left;
+      const relFirstTop  = firstRect.top   - sectionRect.top;
+      const relFirstLeft = firstRect.left  - sectionRect.left;
+      const tabTop       = relFirstTop + firstRect.height / 2 - 18;
+      // Anchor the floating yellow button just LEFT of the first selected
+      // character (same UX as the Mac app), instead of pinning it to the
+      // section edge. Button is 36px wide; offset by 44px + clamp to 4px.
+      const BUTTON_OFFSET = 44;
+      const tabLeft      = Math.max(4, relFirstLeft - BUTTON_OFFSET);
+
+      const popupWidth  = Math.max(POPUP_MIN_WIDTH, Math.min(POPUP_MAX_WIDTH, sectionWidth - 16));
+      const rangeCenter = (relLeft + relRight) / 2;
+      const desiredLeft = rangeCenter - popupWidth / 2;
+      const popupLeft   = Math.min(Math.max(8, desiredLeft), Math.max(8, sectionWidth - popupWidth - 8));
+
+      return {
+        anchor: { tabTop, tabLeft, popupTop: relFirstTop, popupLeft, popupWidth },
+        range: range.cloneRange(),
+      };
+    };
+
+    // Show / hide the floating button purely off `selectionchange`.
+    //
+    // Why selectionchange (and NOT mouseup): `mouseup` only fires for MOUSE
+    // selections on the desktop. It does NOT fire when a visitor selects text
+    // on a touch device (phone/tablet) using the native selection handles, so
+    // the button — and therefore the entire tone bar — never appeared for
+    // mobile users even though it worked on the developer's desktop. That was
+    // the "works for me, not for other people" bug.
+    //
+    // `selectionchange` fires for mouse, touch, AND keyboard selection on
+    // every modern browser, and is independent of event ordering (Windows
+    // fires it after mouseup, macOS before), so this single path behaves
+    // identically on every device.
+    const handleSelectionChange = () => {
+      const result = computeAnchorFromSelection();
+
+      // Popup already open → a brand-new selection resets it back to the tone
+      // picker; an unchanged or cleared selection is left alone (the popup is
+      // closed by the outside-tap handler instead).
+      if (expandedRef.current) {
+        if (result && result.range.toString() !== activeSelTextRef.current) {
+          // Update the ref synchronously so logic below can proceed to show
+          // the button for the new selection without waiting for a re-render.
+          expandedRef.current = false;
+          setExpanded(false);
+          setPopupStage("select");
+          setSelectedTones([]);
+          setResultText("");
+          setGeneratedSignature("");
+        } else {
+          return;
+        }
+      }
+
+      // Selection cleared / not rephrasable → retract the pending button.
+      if (!result) {
+        clearShowTimer();
         setAnchor(null);
-        setExpanded(false);
+        activeSelTextRef.current = "";
         return;
       }
 
-      const rangeRect = range.getBoundingClientRect();
-      const sectionRect = section.getBoundingClientRect();
-      const sectionWidth = section.offsetWidth;
-
-      const relRight = rangeRect.right - sectionRect.left;
-      const relLeft = rangeRect.left - sectionRect.left;
-      const relTop = rangeRect.top - sectionRect.top;
-      const relHeight = rangeRect.height;
-
-      const tabLeft = Math.min(relRight + 10, sectionWidth - 40);
-      const tabTop = relTop + relHeight / 2 - 14;
-
-      // Popup width adapts to section so it never causes horizontal page overflow.
-      const popupWidth = Math.max(
-        POPUP_MIN_WIDTH,
-        Math.min(POPUP_MAX_WIDTH, sectionWidth - 16)
-      );
-
-      // Always centered horizontally above the selection, translated upward
-      // via CSS transform so its bottom edge sits 12px above the selection top.
-      const rangeCenter = (relLeft + relRight) / 2;
-      const desiredLeft = rangeCenter - popupWidth / 2;
-      const popupLeft = Math.min(
-        Math.max(8, desiredLeft),
-        Math.max(8, sectionWidth - popupWidth - 8)
-      );
-      const popupTop = relTop;
-
-      setAnchor({ tabTop, tabLeft, popupTop, popupLeft, popupWidth });
-      savedRangeRef.current = range.cloneRange();
+      // Valid selection — remember it, save the range, and (re)schedule the
+      // button. The short debounce means the rapid selectionchange events
+      // fired during a drag keep resetting the timer, so the button only
+      // appears ~250ms after the selection settles (no mid-drag flicker).
+      activeSelTextRef.current = result.range.toString();
+      savedRangeRef.current = result.range;
+      clearShowTimer();
+      const snapshot = result.anchor;
+      showTimerRef.current = window.setTimeout(() => {
+        setAnchor(snapshot);
+        showTimerRef.current = null;
+      }, 250) as unknown as number;
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
-    return () =>
+    return () => {
       document.removeEventListener("selectionchange", handleSelectionChange);
+      clearShowTimer();
+    };
   }, []);
 
   useEffect(() => {
@@ -578,20 +1076,20 @@ export default function LandingPage() {
   useEffect(() => {
     if (!expanded) return;
 
-    const handleMouseDown = (e: MouseEvent) => {
+    const handlePointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
       if (popupRef.current?.contains(target)) return;
       if (editorRef.current?.contains(target)) return;
       closePopup();
     };
 
-    // Defer one tick so the click that opened the popup doesn't immediately close it.
+    // Defer one tick so the press that opened the popup doesn't immediately close it.
     const id = window.setTimeout(() => {
-      document.addEventListener("mousedown", handleMouseDown);
+      document.addEventListener("pointerdown", handlePointerDown);
     }, 0);
     return () => {
       window.clearTimeout(id);
-      document.removeEventListener("mousedown", handleMouseDown);
+      document.removeEventListener("pointerdown", handlePointerDown);
     };
   }, [expanded]);
 
@@ -788,11 +1286,11 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-col gap-3">
               <a
-                href="/download"
+                href={primaryCtaHref}
                 onClick={handleDismissLimitModal}
                 className="w-full px-6 py-3.5 text-base font-bold text-black bg-[#fff700] rounded-full hover:brightness-95 transition"
               >
-                Download the app
+                {isWaitlist ? waitlistLabel : "Download the app"}
               </a>
               <button
                 onClick={handleDismissLimitModal}
@@ -815,11 +1313,8 @@ export default function LandingPage() {
           }`}
         >
           {/* Logo — left */}
-          <a
-            href="#top"
-            className="font-display text-3xl text-black leading-none shrink-0 mr-8"
-          >
-            huu
+          <a href="#top" className="shrink-0 mr-8">
+            <HuuLogo className="text-3xl" />
           </a>
 
           {/* Nav links — center, flex-1 */}
@@ -852,9 +1347,19 @@ export default function LandingPage() {
           {/* Divider */}
           <div className="hidden md:block w-px h-5 bg-black/15 mx-6 shrink-0" />
 
-          {/* Auth controls — right */}
+          {/* Auth controls — right.
+              Waitlist site → /join (inline email capture).
+              Main site + signed in → straight to /download.
+              Main site + signed out → Clerk sign-up, then /download. */}
           <div className="shrink-0 flex items-center gap-3">
-            {isLoaded && isSignedIn ? (
+            {isWaitlist ? (
+              <a
+                href={primaryCtaHref}
+                className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+              >
+                <DownloadCtaContent platform={downloadPlatform} waitlist />
+              </a>
+            ) : isLoaded && isSignedIn ? (
               <a
                 href="/download"
                 className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
@@ -862,13 +1367,11 @@ export default function LandingPage() {
                 <DownloadCtaContent platform={downloadPlatform} />
               </a>
             ) : (
-              <>
-               <SignUpButton mode="redirect" forceRedirectUrl="/download">
+              <SignUpButton mode="redirect" forceRedirectUrl="/download">
                 <button className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-5 py-2.5 text-sm font-black text-black shadow-[0_2px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
                   <DownloadCtaContent platform={downloadPlatform} />
                 </button>
               </SignUpButton>
-              </>
             )}
           </div>
         </div>
@@ -883,15 +1386,22 @@ export default function LandingPage() {
         <div className="huu-hero-card w-full min-h-[78vh] rounded-3xl border border-black/[0.08] shadow-[0_4px_32px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center px-8 py-16 sm:py-20">
 
           <h1 className="font-display text-6xl sm:text-7xl md:text-8xl leading-[1.02] text-black max-w-4xl">
-            &ldquo;Stop writing like a f*cking robot.&rdquo;
+            Stop writing like a f*cking robot.
           </h1>
 
           <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-lg">
             the text selection tool that rephrases AI copy into unpolished-human sounding words across every app.
           </p>
 
-          {/* Download CTA */}
-          {isLoaded && isSignedIn ? (
+          {/* Download CTA — same routing as the header. */}
+          {isWaitlist ? (
+            <a
+              href={primaryCtaHref}
+              className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+            >
+              <DownloadCtaContent platform={downloadPlatform} waitlist />
+            </a>
+          ) : isLoaded && isSignedIn ? (
             <a
               href="/download"
               className="inline-flex items-center gap-2.5 rounded-2xl border-2 border-black bg-[#fff700] px-10 py-4 text-lg font-black text-black shadow-[0_4px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
@@ -923,7 +1433,7 @@ export default function LandingPage() {
       <section
         id="benefit"
         ref={benefitSectionRef}
-        className="bg-white px-4 sm:px-6 pt-24 sm:pt-28 pb-4 sm:pb-6"
+        className="bg-white px-4 sm:px-6 pt-24 sm:pt-28 pb-3"
       >
         {/* Everything lives inside the black box */}
         <div className="bg-black rounded-[2.5rem] w-full overflow-hidden">
@@ -949,22 +1459,36 @@ export default function LandingPage() {
               </div>
 
               <h2 className="font-display text-4xl sm:text-5xl text-white leading-[1.05]">
-                Rephrase anything to sound human.{" "}
-                In under 2 seconds.
+                Select any text and pick any of the four tones
               </h2>
 
               <p className="font-sans text-white/55 text-base leading-7">
-                Select any text in your draft, a cold email, a LinkedIn DM, a post.
-                Pick a tone. huumanity rewrites it so it sounds like a real person wrote it.
+                Rephrase your AI copy right inside whatever you&apos;re working
+                in without opening another AI chat to do it
               </p>
 
               <div>
-                <Link
-                  href="/sign-up"
-                  className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
-                >
-                  Try it free
-                </Link>
+                {isWaitlist ? (
+                  <Link
+                    href={primaryCtaHref}
+                    className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+                  >
+                    {waitlistLabel}
+                  </Link>
+                ) : isLoaded && isSignedIn ? (
+                  <Link
+                    href="/download"
+                    className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+                  >
+                    Try it free
+                  </Link>
+                ) : (
+                  <SignUpButton mode="redirect" forceRedirectUrl="/download">
+                    <button className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95">
+                      Try it free
+                    </button>
+                  </SignUpButton>
+                )}
               </div>
             </div>
 
@@ -1107,22 +1631,34 @@ export default function LandingPage() {
                 <div className="flex items-center gap-1.5 mb-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-[#fff700]" aria-hidden="true" />
                   <span className="font-sans text-[10px] uppercase tracking-wider font-semibold text-neutral-400">
-                    Rewritten by huu
+                    Rewritten by huumanity
                   </span>
                 </div>
                 <p className="font-sans text-[12px] leading-[1.75] text-neutral-800 whitespace-pre-line">
-                  {`Dimitri, we haven't met but I'm gonna skip the networking bullshit and just say it.\n\nI'm Andrea from Acme. We run Meta ads for people across Asia who actually know what they're doing. If your calendar isn't full, that's a problem we fix. I can get you 10 extra booked calls, not leads that ghost you but the kind who actually show up in call.`}
+                  {`Dimitri, we haven't met but I'm gonna skip the networking bullshit and just say it.\n\nI'm Andrea from Acme. We run Meta ads for people across Asia who actually know what they're doing. If your calendar isn't full, that's a problem we fix. 10 extra booked calls, not leads that ghost you, actual calls with people who show up.`}
                 </p>
+                {/* Back on the left; Copy (icon) + Accept grouped on the right. */}
                 <div
-                  className="flex gap-2 mt-3"
+                  className="flex items-center justify-between gap-2 mt-3"
                   style={{
                     opacity: animStep >= 7 ? 1 : 0,
                     transition: "opacity 0.5s ease-out",
                   }}
                 >
                   <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Back</button>
-                  <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Copy</button>
-                  <button className="bg-[#fff700] text-black font-sans text-xs font-bold rounded-full px-4 py-1.5 border border-black">Accept</button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      aria-label="Copy"
+                      className="flex items-center gap-1 bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-3 py-1.5"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      Copy
+                    </button>
+                    <button className="bg-[#fff700] text-black font-sans text-xs font-bold rounded-full px-4 py-1.5 border border-black">Accept</button>
+                  </div>
                 </div>
               </div>
 
@@ -1135,34 +1671,236 @@ export default function LandingPage() {
       <section
         id="demo"
         ref={demoSectionRef}
-        className="relative bg-white px-6 pt-6 pb-10 sm:pt-8 sm:pb-12"
+        className="relative bg-white px-4 sm:px-6 pt-3 pb-10 sm:pb-12"
       >
-        {/* Headline block — wider container so text stays on one line on desktop */}
-        <div className="max-w-5xl mx-auto text-center mb-20">
-          <h2
-            className="font-display text-black leading-[1.02] tracking-tight mb-5 md:whitespace-nowrap"
-            style={{ fontSize: "clamp(2rem, 4.8vw, 3.75rem)" }}
-          >
-            People know it&apos;s written by AI
-          </h2>
-          <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7 max-w-xl mx-auto mb-10">
-            huumanity turns your AI copy into writing that sounds like you.
-            Select any text, pick a tone, and accept.
-          </p>
-          <div className="flex justify-center">
-            <Link
-              href="/download"
-              className="inline-flex items-center gap-2.5 rounded-xl border-2 border-black bg-[#fff700] px-7 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
+        {/* Headline — yellow rounded box, visually attached to the black benefit box above */}
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-[#fff700] rounded-[2.5rem] px-8 sm:px-14 py-14 sm:py-20 text-center">
+            <h2
+              className="font-display text-black leading-[1.02] tracking-tight mb-5"
+              style={{ fontSize: "clamp(2rem, 4.8vw, 3.75rem)" }}
             >
-              <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-              </svg>
-              Download for macOS
-            </Link>
+              People know it&apos;s written by AI
+            </h2>
+            <p className="font-sans text-black/60 text-base sm:text-lg leading-7 max-w-xl mx-auto">
+              The way AI writes is instantly recognizable. And it&apos;s quietly killing your replies, your engagement, and your credibility.
+            </p>
           </div>
         </div>
 
-        <div className="max-w-3xl mx-auto">
+        {/* 3-step "how the selection tool works" visualization. All three
+            columns stay visible; the animation plays through them in sequence
+            (1 → 2 → 3), holds, and repeats while on screen. Spans the same
+            max-w-6xl width as the feature section's black box, so column 1 sits
+            at the far left and column 3 at the far right. Each column stacks a
+            separate tone-bar / result box above a separate tweet box. */}
+        <div
+          ref={tutRef}
+          className="max-w-6xl mx-auto mt-20 sm:mt-28 grid grid-cols-1 md:grid-cols-3 gap-10 lg:gap-14 text-left"
+        >
+
+          {/* ── STEP 1 — Select a text ──
+              Lit from step 1 onward (stays at 100% once it has played). */}
+          <div
+            className={`flex flex-col transition-opacity duration-700 ${
+              currentStep >= 1 ? "opacity-100" : "opacity-30"
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-7">
+              <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">1</span>
+              <span className="font-display text-xl text-black">Select a text</span>
+            </div>
+            {/* fixed-height top slot keeps the tone-bar / result boxes on one
+                line across all three columns and the tweet boxes parallel */}
+            <div className="h-[96px] mb-5">
+              {/* tone-bar box — its own card; fades in only after the huu click */}
+              <div
+                className="rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit transition-all duration-700 ease-out"
+                style={{ opacity: c1Bar ? 1 : 0, transform: c1Bar ? "translateY(0)" : "translateY(8px)" }}
+              >
+                <ToneBar />
+              </div>
+            </div>
+            {/* tweet box — its own card; cursor selects the text then clicks huu */}
+            <div className="relative rounded-xl border border-black/10 bg-white shadow-sm p-4">
+              <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} huuButton={c1Button} />
+              {/* All step-1 positions use LEFT/TOP only (never right/bottom) —
+                  mixing the two snaps the un-set anchor to `auto`, which is
+                  not transitionable and was making the cursor teleport. */}
+              <TutCursor
+                visible={c1CursorOn}
+                style={
+                  c1CursorPos === "start"
+                    ? // end of the last line of text ("…truly resonate.")
+                      { left: "52%", top: "58%" }
+                    : c1CursorPos === "end"
+                      ? // just left of "AI" at the start of the tweet text
+                        { left: "16%", top: "22%" }
+                      : c1CursorPos === "button"
+                        ? // tip directly on the yellow huu button (sits at
+                          // -left-5 top-4 over the avatar gap)
+                          { left: "13%", top: "27%" }
+                        : // "after" — slight left/down of the button as the
+                          // cursor walks away
+                          { left: "4%", top: "36%" }
+                }
+              />
+            </div>
+          </div>
+
+          {/* ── STEP 2 — Pick a tone(s) ──
+              Lit from step 2 onward (stays at 100% once it has played). */}
+          <div
+            className={`flex flex-col transition-opacity duration-700 ${
+              currentStep >= 2 ? "opacity-100" : "opacity-30"
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-7">
+              <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">2</span>
+              <span className="font-display text-xl text-black">Pick a tone(s)</span>
+            </div>
+            <div className="h-[96px] mb-5">
+              {/* tone-bar box — Unpolished → Direct light up, Enter clicks; cursor lives here */}
+              <div className="relative rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit">
+                <ToneBar unpolished={c2Tone >= 1} direct={c2Tone >= 2} enter={c2Tone >= 3} />
+                <TutCursor
+                  visible={c2Cursor !== "hidden" && c2Cursor !== "away"}
+                  style={
+                    c2Cursor === "unpolished"
+                      ? { left: "30%", top: "52%" }
+                      : c2Cursor === "direct"
+                        ? { left: "72%", top: "52%" }
+                        : c2Cursor === "enter"
+                          ? { left: "90%", top: "52%" }
+                          : { left: "120%", top: "52%" }
+                  }
+                />
+              </div>
+            </div>
+            {/* tweet box — fully selected, waiting for the rewrite */}
+            <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
+              <TutTweet text={TUT_ORIGINAL} selCount={TUT_ORIGINAL.split(" ").length} />
+            </div>
+          </div>
+
+          {/* ── STEP 3 — Accept the rewrite ──
+              Lit only during step 3 — the final reveal pops everything. */}
+          <div
+            className={`flex flex-col transition-opacity duration-700 ${
+              currentStep === 3 ? "opacity-100" : "opacity-30"
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-7">
+              <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">3</span>
+              <span className="font-display text-xl text-black">Accept the rewrite</span>
+            </div>
+            <div className="h-[96px] mb-5">
+              {/* result box — its own card, sized to its content (no stretch, so
+                  no dead white space inside); shimmer → rewrite → cursor clicks
+                  Accept → fades. Top-aligned in the slot, so it lines up with
+                  the tone bars in columns 1 & 2. */}
+              <div
+                className="relative rounded-xl border-2 border-[#fff700] bg-white p-3 shadow-[0_3px_14px_rgba(255,247,0,0.22)] transition-all duration-700 ease-out"
+                style={{
+                  opacity: c3 >= 1 && c3 < 5 ? 1 : 0,
+                  transform: c3 >= 1 && c3 < 5 ? "translateY(0)" : "translateY(8px)",
+                }}
+              >
+                <div>
+                  {c3 >= 2 ? (
+                    <>
+                      <p className="text-[9px] leading-[1.6] text-neutral-800">{TUT_REWRITTEN}</p>
+                      <div className="mt-2.5 flex items-center justify-between">
+                        <span className="text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">Back</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-0.5 text-[8px] font-semibold px-2 py-0.5 rounded-full bg-neutral-100 text-black">
+                            <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                            </svg>
+                            Copy
+                          </span>
+                          <span
+                            className={`text-[8px] font-bold px-2 py-0.5 rounded-full bg-[#fff700] border border-black text-black transition-transform duration-200 ${
+                              c3 >= 4 ? "scale-90" : ""
+                            }`}
+                          >
+                            Accept
+                          </span>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="space-y-2 py-0.5">
+                      <div className="h-1.5 rounded-full huu-shimmer w-full" />
+                      <div className="h-1.5 rounded-full huu-shimmer w-11/12" />
+                      <div className="h-1.5 rounded-full huu-shimmer w-4/5" />
+                      <div className="h-1.5 rounded-full huu-shimmer w-2/3" />
+                    </div>
+                  )}
+                </div>
+                <TutCursor
+                  visible={c3 >= 2 && c3 < 5}
+                  style={
+                    c3 >= 3
+                      ? // tip sits on the Accept button at the box's bottom-right
+                        { right: "8%", bottom: "10%" }
+                      : // resting just below the box before gliding onto Accept
+                        { right: "45%", bottom: "-26px" }
+                  }
+                />
+              </div>
+            </div>
+            {/* tweet box — holds the original until Accept, then the rewrite */}
+            <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
+              <TutTweet
+                text={c3 >= 5 ? TUT_REWRITTEN : TUT_ORIGINAL}
+                selCount={c3 >= 5 ? 0 : TUT_ORIGINAL.split(" ").length}
+              />
+            </div>
+          </div>
+
+        </div>
+
+        <div className="max-w-3xl mx-auto mt-24 sm:mt-32">
+
+          {/* Funnel region: headline + tabs + box, with two hand-drawn arrows
+              overlaid that curve from beside the headline down onto the box. */}
+          <div ref={demoArrowsRef} className="relative">
+
+          {/* "Try huumanity Here" sub-headline with a bold hand-drawn underline
+              that sketches itself beneath the words as you scroll down (and
+              erases scrolling back up). Same handwritten pen as the hero
+              annotation (neutral-400), but thicker. */}
+          <p className="text-center mb-10 mt-2">
+            <span ref={tryUnderlineWrapRef} className="relative inline-block px-2 pb-3">
+              <span
+                className="relative z-10 font-display text-black leading-tight"
+                style={{ fontSize: "clamp(1.75rem, 4vw, 3rem)" }}
+              >
+                Try huumanity Here
+              </span>
+              <svg
+                className="absolute pointer-events-none"
+                style={{ left: "-2%", bottom: "-6%", width: "104%", height: "42%" }}
+                viewBox="0 0 600 48"
+                preserveAspectRatio="none"
+                aria-hidden="true"
+              >
+                {/* Loose, slightly wavy underline — one stroke, drawn via
+                    stroke-dashoffset scrubbing. */}
+                <path
+                  ref={tryUnderlinePathRef}
+                  d="M 10 30 C 130 16, 250 40, 370 26 C 470 15, 545 36, 592 24"
+                  fill="none"
+                  stroke="#9ca3af"
+                  strokeWidth="11"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </span>
+          </p>
 
           {/* Yellow tab bar + Paste yours button */}
           <div className="flex items-center justify-center gap-10 mb-6 flex-wrap">
@@ -1200,38 +1938,111 @@ export default function LandingPage() {
             Select any text below and choose a style.
           </p>
           <p className="text-center text-sm text-neutral-500 mb-8">
-            Just like the example illustration further down ↓
+            Paste your own texts to test the demo ↓
           </p>
 
           {/* Editable demo box */}
-          <div className="relative rounded-3xl bg-white border-2 border-black shadow-[0_8px_0_rgba(0,0,0,0.08)]">
+          <div ref={demoBoxWrapRef} className="relative rounded-3xl bg-white border-2 border-black shadow-[0_8px_0_rgba(0,0,0,0.08)] z-10">
             <div className="absolute top-4 left-5 flex gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
               <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
               <span className="w-2.5 h-2.5 rounded-full bg-black/10" />
             </div>
             <div
-              key={activeTab}
+              // key includes isCustomMode so toggling "Paste yours" remounts
+              // the editor (which is how we swap between sample text and a
+              // blank box without React fighting contentEditable).
+              key={`${activeTab}-${isCustomMode ? "custom" : "sample"}`}
               ref={editorRef}
               contentEditable
               suppressContentEditableWarning
               spellCheck={false}
+              data-placeholder="Paste your text here to humanize it…"
               className="min-h-[380px] p-8 pt-12 sm:p-10 sm:pt-12 text-[15px] sm:text-base leading-7 text-neutral-700 whitespace-pre-wrap focus:outline-none font-sans"
               style={{ caretColor: BRAND }}
             >
-              {SAMPLES[activeTab]}
+              {isCustomMode ? "" : SAMPLES[activeTab]}
             </div>
+          </div>
+
+          {/* Two hand-drawn arrows: tails start at the ends of the headline's
+              underline, swoop outward into the page margins, and the tips land
+              beside the demo box pointing down-into it. Single path per arrow
+              with the head as trailing subpaths, so the dash-offset scrub
+              draws the LINE first and THEN the arrowhead. Fixed-size SVGs (no
+              preserveAspectRatio stretching) keep the strokes undistorted.
+              Hidden below lg where there's no margin space for them. */}
+          <svg
+            className="absolute hidden lg:block pointer-events-none z-0"
+            style={{ left: "-150px", top: "44px" }}
+            width="240"
+            height="300"
+            viewBox="0 0 240 300"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              ref={leftShaftRef}
+              d="M 235 4 C 130 24, 60 90, 68 185 C 72 232, 84 258, 100 272"
+              stroke="#9ca3af"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              ref={leftHeadRef}
+              d="M 100 272 L 76 264 M 100 272 L 92 248"
+              stroke="#9ca3af"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <svg
+            className="absolute hidden lg:block pointer-events-none z-0"
+            style={{ right: "-150px", top: "44px" }}
+            width="240"
+            height="300"
+            viewBox="0 0 240 300"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              ref={rightShaftRef}
+              d="M 5 4 C 110 24, 180 90, 172 185 C 168 232, 156 258, 140 272"
+              stroke="#9ca3af"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <path
+              ref={rightHeadRef}
+              d="M 140 272 L 164 264 M 140 272 L 148 248"
+              stroke="#9ca3af"
+              strokeWidth="5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+
           </div>
 
           {anchor && !expanded && (
             <button
               type="button"
-              onMouseDown={(e) => {
+              // pointerDown (not mouseDown) so a finger tap on touch devices
+              // opens the popup too — and preventDefault keeps the text
+              // selection intact when the button steals the press.
+              onPointerDown={(e) => {
                 e.preventDefault();
                 openPopup();
               }}
-              className="absolute z-20 w-9 h-9 rounded-full bg-[#fff700] hover:brightness-95 border-2 border-black shadow-md flex items-center justify-center text-black transition"
-              style={{ top: anchor.tabTop, left: anchor.tabLeft }}
+              className="absolute z-20 w-9 h-9 rounded-full bg-[#fff700] hover:brightness-95 border-2 border-black shadow-md flex items-center justify-center text-black"
+              style={{
+                top: anchor.tabTop,
+                left: anchor.tabLeft,
+                animation: "huu-btn-fadein 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards",
+              }}
               aria-label="Open rephrase options"
             >
               <svg
@@ -1260,7 +2071,9 @@ export default function LandingPage() {
                 width: anchor.popupWidth,
                 transform: "translateY(calc(-100% - 12px))",
               }}
-              onMouseDown={(e) => e.preventDefault()}
+              // Keep the underlying selection alive when interacting with the
+              // popup on both mouse and touch.
+              onPointerDown={(e) => e.preventDefault()}
             >
               <div className="relative bg-white rounded-2xl border-2 border-[#fff700] shadow-xl overflow-hidden transition-all">
                 {/* STAGE: LIMIT — Grammarly-style "out of rewrites" header bar */}
@@ -1273,10 +2086,10 @@ export default function LandingPage() {
                       </span>
                     </span>
                     <a
-                      href="/download"
+                      href={primaryCtaHref}
                       className="shrink-0 px-3.5 py-1.5 text-[11px] font-bold text-black bg-[#fff700] rounded-full hover:brightness-95 transition whitespace-nowrap"
                     >
-                      Download the app
+                      {isWaitlist ? waitlistLabel : "Download the app"}
                     </a>
                   </div>
                 )}
@@ -1478,19 +2291,28 @@ export default function LandingPage() {
                 huumanity handles it.
               </p>
               <div className="flex flex-wrap gap-2 mt-10">
-                {USE_CASES.map((uc) => (
-                  <button
-                    key={uc.id}
-                    onClick={() => setActiveUseCase(uc)}
-                    className={`px-5 py-2.5 text-sm font-bold rounded-full border-2 transition-all duration-200 ${
-                      activeUseCase.id === uc.id
-                        ? "bg-[#fff700] text-black border-[#fff700]"
-                        : "bg-transparent text-white border-white/20 hover:border-white/60"
-                    }`}
-                  >
-                    {uc.label}
-                  </button>
-                ))}
+                {USE_CASES.map((uc, i) => {
+                  const isActive = activeUseCase.id === uc.id;
+                  const tiltDir = i % 2 === 0 ? -7 : 7; // even = lean left, odd = lean right
+                  return (
+                    <button
+                      key={uc.id}
+                      onClick={() => setActiveUseCase(uc)}
+                      style={{
+                        transform: isActive ? `rotate(${tiltDir}deg) translateY(-2px)` : "rotate(0deg) translateY(0)",
+                        boxShadow: isActive ? "4px 4px 0 rgba(0,0,0,0.85)" : "none",
+                        transition: "transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s ease",
+                      }}
+                      className={`px-5 py-2.5 text-sm font-bold rounded-full border-2 ${
+                        isActive
+                          ? "bg-[#fff700] text-black border-[#fff700]"
+                          : "bg-transparent text-white border-white/20 hover:border-white/60"
+                      }`}
+                    >
+                      {uc.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1504,13 +2326,19 @@ export default function LandingPage() {
               </p>
               <div className="flex gap-3 mt-8 flex-wrap">
                 <Link
-                  href="/download"
+                  href={primaryCtaHref}
                   className="inline-flex items-center gap-2.5 rounded-xl border-2 border-white bg-white px-6 py-3 text-sm font-black text-black transition hover:brightness-95"
                 >
-                  <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                    <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-                  </svg>
-                  Download for macOS
+                  {isWaitlist ? (
+                    <>{waitlistLabel}</>
+                  ) : (
+                    <>
+                      <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                        <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                      </svg>
+                      Download for macOS
+                    </>
+                  )}
                 </Link>
                 <a
                   href="#pricing"
@@ -1586,7 +2414,7 @@ export default function LandingPage() {
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">they fail bc they have no clue how to find products that actually sell</p>
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">im in china rn and ive been talking to suppliers, manufacturers, ppl who are actually moving volume. and got all the info on whats working</p>
                   <p className="text-white text-[15px] font-semibold leading-[1.35]">this weekend im doing a free mastermind on how to find winning products before everyone else catches on</p>
-                  <p className="text-white text-[15px] font-semibold leading-[1.35]">comment &ldquo;FREE&rdquo; and i'll send u the invite</p>
+                  <p className="text-white text-[15px] font-semibold leading-[1.35]">comment &ldquo;FREE&rdquo; and i&apos;ll send u the invite</p>
                 </div>
               )}
             </div>
@@ -1665,144 +2493,37 @@ export default function LandingPage() {
           {/* RIGHT: Copy */}
           <div className="flex flex-col gap-6">
             <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">
-              Rephrase anything without leaving your work
+              Stop switching tabs to fix your AI copy
             </h2>
             <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7">
-              Stop copying text into ChatGPT to fix it. Select whatever you want to change; a sentence, a paragraph, a whole email. huumanity rewrites it right where it sits without switching tabs.
+              Why switch between your AI chat and your work space when you can
+              select the text right where it is and rephrase it in seconds.
             </p>
             <div className="flex items-center gap-3 flex-wrap">
               <Link
-                href="/sign-up"
+                href="#demo"
                 className="inline-flex items-center gap-2 rounded-xl border-2 border-black bg-white px-6 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
               >
                 Try free
               </Link>
               <Link
-                href="/download"
+                href={primaryCtaHref}
                 className="inline-flex items-center gap-2.5 rounded-xl border-2 border-black bg-[#fff700] px-6 py-3.5 text-sm font-black text-black shadow-[0_3px_0_rgba(0,0,0,0.18)] transition hover:brightness-95"
               >
-                <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                  <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-                </svg>
-                Download for macOS
+                {isWaitlist ? (
+                  <>{waitlistLabel}</>
+                ) : (
+                  <>
+                    <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                      <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                    </svg>
+                    Download for macOS
+                  </>
+                )}
               </Link>
             </div>
           </div>
 
-        </div>
-      </section>
-
-      {/* TONE BLOCKS */}
-
-      {/* Humanize */}
-      <section className="bg-white px-6 py-24 sm:py-32 border-t border-neutral-100">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* LEFT: card */}
-          <div className="rounded-2xl bg-neutral-950 overflow-hidden p-8 space-y-4">
-            <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Before</p>
-            <p className="text-neutral-400 text-[13px] leading-[1.7]">
-              I am pleased to inform you that following extensive deliberation, our team has successfully executed the strategic initiative and is now well-positioned to leverage synergies going forward.
-            </p>
-            <div className="border-t border-white/10 pt-4">
-              <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Humanize</p>
-              <p className="text-white text-[13px] leading-[1.7] font-medium">
-                After a lot of back-and-forth, we finally got it done. Here&apos;s where we&apos;re at and what&apos;s coming next.
-              </p>
-            </div>
-          </div>
-          {/* RIGHT: copy */}
-          <div className="flex flex-col gap-5">
-            <span className="inline-flex w-fit px-3 py-1 rounded-full bg-neutral-100 text-xs font-bold text-neutral-600 uppercase tracking-widest">Tone</span>
-            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">Humanize</h2>
-            <p className="text-neutral-500 text-base sm:text-lg leading-7">
-              For when your text sounds like a press release wrote itself. Humanize strips the corporate gloss and rewrites it in plain, natural language that sounds like an actual person wrote it. The AI smell? Gone.
-            </p>
-            <p className="text-sm text-neutral-400 font-medium">Best for: emails, LinkedIn posts, bios, product copy.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Unpolished */}
-      <section className="bg-neutral-950 px-6 py-24 sm:py-32">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* LEFT: copy */}
-          <div className="flex flex-col gap-5">
-            <span className="inline-flex w-fit px-3 py-1 rounded-full bg-white/10 text-xs font-bold text-neutral-400 uppercase tracking-widest">Tone</span>
-            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-white">Unpolished</h2>
-            <p className="text-neutral-400 text-base sm:text-lg leading-7">
-              Less grammar, more voice. Like a text message or a quick voice note — the kind of writing that builds trust because it doesn&apos;t try too hard. Raw and real wins every time over polished and forgettable.
-            </p>
-            <p className="text-sm text-neutral-600 font-medium">Best for: DMs, casual outreach, X threads, Discord messages.</p>
-          </div>
-          {/* RIGHT: card */}
-          <div className="rounded-2xl bg-black border border-white/10 overflow-hidden p-8 space-y-4">
-            <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Before</p>
-            <p className="text-neutral-400 text-[13px] leading-[1.7]">
-              I wanted to follow up to see if you had a chance to review the proposal I sent over last week. Please let me know if you have any questions.
-            </p>
-            <div className="border-t border-white/10 pt-4">
-              <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Unpolished</p>
-              <p className="text-white text-[13px] leading-[1.7] font-medium">
-                hey — did you get a chance to look at that? lmk if you have questions
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Controversial */}
-      <section className="bg-white px-6 py-24 sm:py-32 border-t border-neutral-100">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* LEFT: card */}
-          <div className="rounded-2xl bg-neutral-950 overflow-hidden p-8 space-y-4">
-            <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Before</p>
-            <p className="text-neutral-400 text-[13px] leading-[1.7]">
-              I think AI is going to significantly change the way we work over the coming years and presents interesting opportunities for professionals who adapt.
-            </p>
-            <div className="border-t border-white/10 pt-4">
-              <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Controversial</p>
-              <p className="text-white text-[13px] leading-[1.7] font-medium">
-                Most people at your company will be replaceable by AI in 3 years. The ones who won&apos;t be are already adapting. Are you one of them?
-              </p>
-            </div>
-          </div>
-          {/* RIGHT: copy */}
-          <div className="flex flex-col gap-5">
-            <span className="inline-flex w-fit px-3 py-1 rounded-full bg-neutral-100 text-xs font-bold text-neutral-600 uppercase tracking-widest">Tone</span>
-            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">Controversial</h2>
-            <p className="text-neutral-500 text-base sm:text-lg leading-7">
-              For when you want to stop the scroll. Controversial takes a strong stance, flips the conventional take, or says the thing most people are thinking but won&apos;t say out loud. Built for posts and threads that spark real conversation — not polite applause.
-            </p>
-            <p className="text-sm text-neutral-400 font-medium">Best for: X threads, LinkedIn posts, YouTube hooks, newsletters.</p>
-          </div>
-        </div>
-      </section>
-
-      {/* Direct */}
-      <section className="bg-neutral-950 px-6 py-24 sm:py-32">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-          {/* LEFT: copy */}
-          <div className="flex flex-col gap-5">
-            <span className="inline-flex w-fit px-3 py-1 rounded-full bg-white/10 text-xs font-bold text-neutral-400 uppercase tracking-widest">Tone</span>
-            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-white">Direct</h2>
-            <p className="text-neutral-400 text-base sm:text-lg leading-7">
-              No fluff. No setup. No &ldquo;I hope this finds you well.&rdquo; Direct gets straight to the point in as few words as possible. The tone for cold outreach, follow-ups, and any time someone&apos;s attention is precious.
-            </p>
-            <p className="text-sm text-neutral-600 font-medium">Best for: cold emails, follow-ups, Slack messages, pitches.</p>
-          </div>
-          {/* RIGHT: card */}
-          <div className="rounded-2xl bg-black border border-white/10 overflow-hidden p-8 space-y-4">
-            <p className="text-[11px] uppercase tracking-widest text-neutral-500 font-semibold">Before</p>
-            <p className="text-neutral-400 text-[13px] leading-[1.7]">
-              I hope this message finds you well. I wanted to reach out because I believe there might be some interesting synergies between our companies that could be worth exploring together.
-            </p>
-            <div className="border-t border-white/10 pt-4">
-              <p className="text-[11px] uppercase tracking-widest text-[#fff700] font-semibold mb-3">Direct</p>
-              <p className="text-white text-[13px] leading-[1.7] font-medium">
-                We help companies like yours cut reply time by 40%. Worth 15 minutes this week?
-              </p>
-            </div>
-          </div>
         </div>
       </section>
 
@@ -1899,14 +2620,14 @@ export default function LandingPage() {
                   </ul>
 
                   <Link
-                    href="/download"
+                    href={primaryCtaHref}
                     className={`block text-center px-4 py-3 text-sm font-bold rounded-full transition-colors ${
                       tier.accent
                         ? "bg-black text-[#fff700] hover:brightness-110"
                         : "bg-[#fff700] text-black hover:brightness-95"
                     }`}
                   >
-                    {tier.cta}
+                    {isWaitlist ? waitlistLabel : tier.cta}
                   </Link>
                 </div>
               );
@@ -1918,50 +2639,79 @@ export default function LandingPage() {
       {/* 8. FINAL CTA (yellow) */}
       <section className="bg-[#fff700] px-6 py-24 sm:py-32 border-y-2 border-black">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-black leading-[1.02]">
+          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-black leading-[1.02] whitespace-nowrap">
             Start sounding human.
           </h2>
-          <p className="text-black/80 text-base sm:text-lg mt-6 mb-10 max-w-md mx-auto">
-            10 free rewrites. No card.
+          <p className="text-black/80 text-base sm:text-lg mt-6 mb-10 max-w-xl mx-auto leading-7">
+            Every cold email, DM, and post you send deserves to sound like you and not some AI slop. Free to start now.
           </p>
-          <Link
-            href="/sign-up"
-            className="inline-block px-8 py-3 text-sm font-bold text-[#fff700] bg-black rounded-full hover:bg-neutral-900 transition-colors"
-          >
-            Try it free
-          </Link>
+          <div className="flex items-center justify-center gap-4 flex-wrap">
+            <Link
+              href="#demo"
+              className="inline-block px-8 py-3.5 text-sm font-black text-[#fff700] bg-black border-2 border-black rounded-xl shadow-[0_3px_0_rgba(0,0,0,0.25)] hover:bg-neutral-900 transition-colors"
+            >
+              Try it for free
+            </Link>
+            <Link
+              href={primaryCtaHref}
+              className="inline-flex items-center gap-2.5 px-8 py-3.5 text-sm font-black text-black bg-transparent border-2 border-black rounded-xl shadow-[0_3px_0_rgba(0,0,0,0.18)] hover:bg-black/5 transition-colors"
+            >
+              {isWaitlist ? (
+                <>{waitlistLabel}</>
+              ) : (
+                <>
+                  <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
+                    <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
+                  </svg>
+                  Download
+                </>
+              )}
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* 9. FOOTER (black) */}
       <footer className="bg-black text-white">
-        <div className="w-full max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 sm:grid-cols-5 gap-8">
+        <div className="w-full max-w-6xl mx-auto px-6 py-14 grid grid-cols-2 sm:grid-cols-3 gap-10">
+          {/* Brand */}
           <div className="col-span-2 sm:col-span-1">
-            <span className="font-display text-3xl text-[#fff700]">huu</span>
+            <HuuLogo className="text-3xl" />
             <p className="text-sm text-neutral-400 mt-3 max-w-[14rem]">
               Make your AI copy sound like you wrote it.
             </p>
           </div>
 
-          {FOOTER_LINKS.map((col) => (
-            <div key={col.title}>
-              <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
-                {col.title}
-              </h4>
-              <ul className="space-y-2">
-                {col.links.map((link) => (
-                  <li key={link}>
-                    <a
-                      href="#"
-                      className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors"
-                    >
-                      {link}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ))}
+          {/* Use Cases */}
+          <div>
+            <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
+              Use Cases
+            </h4>
+            <ul className="space-y-2">
+              {[
+                { label: "Anywhere", href: "#use-cases" },
+                { label: "Outreach", href: "#use-cases" },
+                { label: "Posts", href: "#use-cases" },
+                { label: "Scripts", href: "#use-cases" },
+              ].map(({ label, href }) => (
+                <li key={label}>
+                  <a href={href} className="text-sm text-neutral-300 hover:text-[#fff700] transition-colors">
+                    {label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* How it works */}
+          <div>
+            <h4 className="text-xs uppercase tracking-widest text-neutral-500 mb-3 font-bold">
+              How it works
+            </h4>
+            <p className="text-sm text-neutral-400 leading-[1.7]">
+              Select any text anywhere on your screen. Pick from four tones: Humanize, Unpolished, Controversial, or Direct. huumanity rewrites it instantly. Accept, copy, or try again.
+            </p>
+          </div>
         </div>
 
         <div className="border-t border-white/10">
