@@ -509,6 +509,16 @@ useEffect(() => {
     }
   };
 
+  const openInputMonitoringSettings = async () => {
+    try {
+      await invoke("open_input_monitoring_settings");
+    } catch (err) {
+      setCaptureError(
+        `Could not open Input Monitoring settings — ${String(err)}. Open System Settings → Privacy & Security → Input Monitoring and enable huu.`
+      );
+    }
+  };
+
   const captureSelectedText = async () => {
     setIsCapturing(true);
     setCaptureError("");
@@ -1086,9 +1096,30 @@ useEffect(() => {
                   </p>
                 </div>
 
-                {/* Step 2 — Test selection */}
+                {/* Step 2 — Input Monitoring */}
                 <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                  <p className="font-black text-base mb-1">2. Test selection</p>
+                  <p className="font-black text-base mb-1">
+                    2. Allow input monitoring
+                  </p>
+                  <p className="text-sm text-neutral-500 leading-6 mb-4">
+                    huu also needs macOS Input Monitoring so it can detect the
+                    exact moment you finish highlighting text and place the yellow
+                    button in the right spot. Without this, the button never
+                    appears.
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      onClick={openInputMonitoringSettings}
+                      className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
+                    >
+                      Open Input Monitoring settings
+                    </button>
+                  </div>
+                </div>
+
+                {/* Step 3 — Test selection */}
+                <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
+                  <p className="font-black text-base mb-1">3. Test selection</p>
                   <p className="text-sm text-neutral-500 leading-6 mb-4">
                     Select text in another app, then click Test selection. This
                     is the fallback path while the automatic yellow selector runs
@@ -1107,9 +1138,9 @@ useEffect(() => {
                   )}
                 </div>
 
-                {/* Step 3 — Finish */}
+                {/* Step 4 — Finish */}
                 <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                  <p className="font-black text-base mb-1">3. Start using huu</p>
+                  <p className="font-black text-base mb-1">4. Start using huu</p>
                   <p className="text-sm text-neutral-500 leading-6 mb-4">
                     Once Accessibility is allowed, huu will watch for
                     highlighted text and show the yellow button when the focused

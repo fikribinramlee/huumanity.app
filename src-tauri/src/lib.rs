@@ -79,6 +79,7 @@ pub fn run() {
             check_accessibility_permission,
             request_accessibility_permission,
             open_accessibility_settings,
+            open_input_monitoring_settings,
             get_current_selection,
             get_selector_payload,
             get_selector_health,
@@ -229,6 +230,24 @@ fn open_accessibility_settings() -> Result<(), String> {
     #[cfg(not(target_os = "macos"))]
     {
         return Err("Accessibility setup is only available on macOS right now.".to_string());
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+fn open_input_monitoring_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent")
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        return Err("Input Monitoring setup is only available on macOS right now.".to_string());
     }
 
     Ok(())
@@ -1038,10 +1057,18 @@ fn start_selection_watcher(app: tauri::AppHandle) {
             }
             debug_log("mouse-driven selector worker started");
 
+            // Where the most recent left-press landed — the drag ANCHOR. The
+            // selection's text body grows from here toward the release point, so
+            // the anchor is what tells us the gesture's DIRECTION (and therefore
+            // which side the dot belongs on) in every app, even ones that report
+            // no usable selection geometry.
+            let mut last_down = (0.0_f64, 0.0_f64);
+
             while let Ok(sig) = rx.recv() {
                 let popup_open = state.popup_open.lock().map(|o| *o).unwrap_or(false);
                 match sig {
                     MouseSignal::Down(x, y) => {
+                        last_down = (x, y);
                         // While the expanded panel is open, hands off completely.
                         if popup_open {
                             continue;
@@ -1096,49 +1123,53 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                         }
 
                         let mut sel = probe.selection.expect("rephrashable implies Some");
-                        // ── Anchor on WHERE THE HIGHLIGHTED TEXT ENDS ──────────────
-                        // We follow the END OF THE SELECTION, not the mouse. The mouse
-                        // only tells us WHICH end the user finished on.
                         let gap = 8.0;
                         let half = SELECTOR_DOT_SIZE / 2.0;
+
+                        // ── THE ONE RULE ───────────────────────────────────────────
+                        // The dot appears at the END of the highlight — where the drag
+                        // was RELEASED — nudged just outside the text. The gesture's
+                        // DIRECTION (press → release), read straight off the mouse,
+                        // decides which side "outside" is: the selected text body grows
+                        // back toward the press anchor, so the dot sits on the side of
+                        // the release AWAY from the anchor. We use the dominant drag
+                        // axis, so it is correct for every direction — L→R, R→L, up,
+                        // down, and all four diagonals — and needs zero app cooperation,
+                        // making it identical in every app.
+                        let dx = up_x - last_down.0;
+                        let dy = up_y - last_down.1;
+                        let ends_at_end = if dx.abs() >= dy.abs() {
+                            dx >= 0.0 // horizontal drag: rightward ends at the right end
+                        } else {
+                            dy >= 0.0 // vertical drag: downward ends at the bottom end
+                        };
+                        debug_log(&format!(
+                            "  gesture down=({:.0},{:.0}) up=({:.0},{:.0}) dx={:.0} dy={:.0} ends_at_end={}",
+                            last_down.0, last_down.1, up_x, up_y, dx, dy, ends_at_end
+                        ));
+
                         let (center_x, center_y) =
-                            if let Some((cx, cy, ends_on_right)) =
-                                platform_selection_endpoint(up_x, up_y)
+                            if let Some((cx, cy)) =
+                                platform_selection_endpoint(ends_at_end)
                             {
-                                // BEST: exact caret at the selection's endpoint, on its
-                                // OWN line. Correct even for multi-line / diagonal
-                                // selections (the caret is per-line, not a bounding
-                                // box). Dot goes just outside that caret: to the right
-                                // if the highlight ended on its right end, to the left
-                                // if it ended on its left/start.
-                                if ends_on_right {
+                                // BEST: the exact text endpoint on its OWN line (per
+                                // character / per line — never a bounding-box middle).
+                                // The endpoint matching the gesture was already chosen;
+                                // we only nudge the dot just outside that edge.
+                                if ends_at_end {
                                     (cx + gap + half, cy)
                                 } else {
                                     (cx - gap - half, cy)
                                 }
                             } else {
-                                // FALLBACK (web areas without a char range): use the
-                                // selection's bounding box ONLY if it's a single line
-                                // (its edges are then the true text ends). For a
-                                // MULTI-line box we must NOT use it — its center is the
-                                // middle line, which is the "dot shows up in the middle"
-                                // bug — so we use the release point, which is at least
-                                // on the correct line.
-                                let has_line_bounds =
-                                    sel.width > 4.0 && sel.height > 4.0 && sel.height < 22.0;
-                                if has_line_bounds {
-                                    let left_edge = sel.x;
-                                    let right_edge = sel.x + sel.width;
-                                    let line_mid = sel.y + sel.height / 2.0;
-                                    let ends_on_right =
-                                        (up_x - right_edge).abs() <= (up_x - left_edge).abs();
-                                    if ends_on_right {
-                                        (right_edge + gap + half, line_mid)
-                                    } else {
-                                        (left_edge - gap - half, line_mid)
-                                    }
-                                } else {
+                                // FALLBACK: the app exposes no usable text geometry
+                                // (many report a 1×1 selection rect). The RELEASE POINT
+                                // is the highlight's end; offset it to the gesture's
+                                // outer side. Pure gesture — consistent everywhere.
+                                if ends_at_end {
                                     (up_x + gap + half, up_y)
+                                } else {
+                                    (up_x - gap - half, up_y)
                                 }
                             };
                         // Hand the positioner the exact desired DOT CENTER as a point
@@ -1429,18 +1460,19 @@ fn platform_current_selection_probe() -> SelectionProbe {
     }
 }
 
-/// The caret center at the selection's endpoint (the end the user finished
-/// dragging on, decided by nearness to the mouse-release point), plus whether it
-/// was the END caret (true → dot goes to the right of it) or the START caret
-/// (false → dot goes to the left). None when the focused element doesn't expose a
-/// character range, so the caller falls back to the bounding box / release point.
+/// The exact text-edge coordinate at the chosen end of the selection. `ends_at_end`
+/// (decided by the caller from the mouse drag direction) selects WHICH end: true →
+/// the right/bottom edge of the last glyph; false → the left/top edge of the first
+/// glyph. Returns the edge on its own visual line (per-character, never a bounding
+/// box middle). None when the focused element exposes no character range or markers,
+/// so the caller falls back to the mouse-release point.
 #[cfg(target_os = "macos")]
-fn platform_selection_endpoint(up_x: f64, up_y: f64) -> Option<(f64, f64, bool)> {
-    macos_accessibility::selection_endpoint(up_x, up_y)
+fn platform_selection_endpoint(ends_at_end: bool) -> Option<(f64, f64)> {
+    macos_accessibility::selection_endpoint(ends_at_end)
 }
 
 #[cfg(not(target_os = "macos"))]
-fn platform_selection_endpoint(_up_x: f64, _up_y: f64) -> Option<(f64, f64, bool)> {
+fn platform_selection_endpoint(_ends_at_end: bool) -> Option<(f64, f64)> {
     None
 }
 
@@ -2119,19 +2151,15 @@ mod macos_accessibility {
         }
     }
 
-    /// Find the position at the ENDPOINT of the current selection — the end the
-    /// user actually finished dragging on. Walks the focused element + its
-    /// ancestors looking for one that exposes AXSelectedTextRange, measures the
-    /// FIRST and LAST selected characters' boxes (each reliably on its own visual
-    /// line), and returns whichever endpoint is nearer the mouse-release point
-    /// (that's where the user stopped), plus whether it was the END (text to its
-    /// left → dot goes right) or the START (text to its right → dot goes left).
-    ///
-    /// Works per-line, so a multi-line selection anchors beside the exact word the
-    /// highlight ends on — not the middle of the bounding box. Returns None for
-    /// elements that don't expose a character range (e.g. some web areas), letting
-    /// the caller fall back to the bounding box / release point.
-    pub fn selection_endpoint(up_x: f64, up_y: f64) -> Option<(f64, f64, bool)> {
+    /// The exact text-edge coordinate at the chosen end of the selection. The
+    /// caller decides WHICH end from the mouse drag direction and passes it as
+    /// `ends_at_end`: true → the RIGHT edge of the last glyph (dot goes right);
+    /// false → the LEFT edge of the first glyph (dot goes left). Measures the
+    /// first and last selected glyphs individually so the edge is always on its
+    /// own visual line — correct for multi-line / diagonal selections, never the
+    /// bounding-box middle. None when the focused element exposes no character
+    /// range or markers.
+    pub fn selection_endpoint(ends_at_end: bool) -> Option<(f64, f64)> {
         if !is_trusted(false) {
             return None;
         }
@@ -2204,21 +2232,20 @@ mod macos_accessibility {
                     k += 1;
                 }
                 if let (Some(f), Some(l)) = (first, last) {
+                    // `first`/`last` come from the character range, which is already
+                    // in document order, so `first` is the left/top edge and `last`
+                    // the right/bottom edge. The gesture decided which one we want.
                     let start_pt = (f.origin.x, f.origin.y + f.size.height / 2.0);
                     let end_pt = (
                         l.origin.x + l.size.width,
                         l.origin.y + l.size.height / 2.0,
                     );
-                    let ds = (up_x - start_pt.0).powi(2) + (up_y - start_pt.1).powi(2);
-                    let de = (up_x - end_pt.0).powi(2) + (up_y - end_pt.1).powi(2);
-                    let picked_end = de <= ds;
-                    let c = if picked_end { end_pt } else { start_pt };
+                    let c = if ends_at_end { end_pt } else { start_pt };
                     super::debug_log(&format!(
-                        "  caret_endpoint start=({:.0},{:.0}) end=({:.0},{:.0}) picked={} center=({:.0},{:.0})",
-                        start_pt.0, start_pt.1, end_pt.0, end_pt.1,
-                        if picked_end { "end" } else { "start" }, c.0, c.1
+                        "  caret_endpoint start=({:.0},{:.0}) end=({:.0},{:.0}) ends_at_end={} center=({:.0},{:.0})",
+                        start_pt.0, start_pt.1, end_pt.0, end_pt.1, ends_at_end, c.0, c.1
                     ));
-                    result = Some((c.0, c.1, picked_end));
+                    result = Some((c.0, c.1));
                     break;
                 }
             }
@@ -2228,24 +2255,42 @@ mod macos_accessibility {
             // Resolve the per-line endpoint through text markers instead.
             if result.is_none() {
                 for el in chain.iter() {
-                    let Some((f, l)) = marker_endpoint_boxes(*el) else {
+                    let Some((b0, b1)) = marker_endpoint_boxes(*el) else {
                         continue;
                     };
-                    let start_pt = (f.origin.x, f.origin.y + f.size.height / 2.0);
-                    let end_pt = (
-                        l.origin.x + l.size.width,
-                        l.origin.y + l.size.height / 2.0,
+                    // Web apps hand back the start/end markers in ANCHOR→FOCUS
+                    // order (where the drag began → where it ended), NOT document
+                    // order. So for a right-to-left or bottom-to-top selection the
+                    // "start" box is actually the visual END. Re-derive true
+                    // document order from geometry: the earlier endpoint is the one
+                    // on the higher line (smaller y), or — on the same line — the
+                    // one further left (smaller x). Without this, an R→L selection
+                    // anchors the dot to the wrong edge and lands ON the word.
+                    let line_eps = 6.0;
+                    let (doc_start, doc_end) = if (b0.origin.y - b1.origin.y).abs() > line_eps {
+                        if b0.origin.y < b1.origin.y { (b0, b1) } else { (b1, b0) }
+                    } else if b0.origin.x <= b1.origin.x {
+                        (b0, b1)
+                    } else {
+                        (b1, b0)
+                    };
+                    // start_pt = LEFT edge of the first selected glyph (dot goes to
+                    // its left); end_pt = RIGHT edge of the last (dot goes to its
+                    // right). The gesture decided which one we want.
+                    let start_pt = (
+                        doc_start.origin.x,
+                        doc_start.origin.y + doc_start.size.height / 2.0,
                     );
-                    let ds = (up_x - start_pt.0).powi(2) + (up_y - start_pt.1).powi(2);
-                    let de = (up_x - end_pt.0).powi(2) + (up_y - end_pt.1).powi(2);
-                    let picked_end = de <= ds;
-                    let c = if picked_end { end_pt } else { start_pt };
+                    let end_pt = (
+                        doc_end.origin.x + doc_end.size.width,
+                        doc_end.origin.y + doc_end.size.height / 2.0,
+                    );
+                    let c = if ends_at_end { end_pt } else { start_pt };
                     super::debug_log(&format!(
-                        "  marker_endpoint start=({:.0},{:.0}) end=({:.0},{:.0}) picked={} center=({:.0},{:.0})",
-                        start_pt.0, start_pt.1, end_pt.0, end_pt.1,
-                        if picked_end { "end" } else { "start" }, c.0, c.1
+                        "  marker_endpoint start=({:.0},{:.0}) end=({:.0},{:.0}) ends_at_end={} center=({:.0},{:.0})",
+                        start_pt.0, start_pt.1, end_pt.0, end_pt.1, ends_at_end, c.0, c.1
                     ));
-                    result = Some((c.0, c.1, picked_end));
+                    result = Some((c.0, c.1));
                     break;
                 }
             }
