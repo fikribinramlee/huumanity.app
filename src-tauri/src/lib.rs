@@ -37,6 +37,10 @@ struct SelectorState {
     // window into view. We suppress `Reopen`-driven window surfacing for a short
     // window after any selector activity. `None` until the first interaction.
     last_selector_activity: Mutex<Option<Instant>>,
+    // The on-screen frame of the floating dot while it's shown, in logical
+    // points: (x, y, w, h). The mouse-event tap uses this to tell a click ON the
+    // dot apart from a click elsewhere (which dismisses it). None while hidden.
+    dot_frame: Mutex<Option<(f64, f64, f64, f64)>>,
     // The latest short-lived Clerk session token, pushed by the authenticated
     // editor window. The selector overlay runs on `tauri://localhost` and cannot
     // send the Clerk cookie cross-origin to huumanity.app, so it attaches this
@@ -282,7 +286,33 @@ fn show_selector_window(
     state: State<'_, SelectorState>,
     selection: DesktopSelection,
 ) -> Result<(), String> {
-    show_selector_for_selection(&app, &state, selection)
+    // On macOS the native mouse-up event tap (`start_selection_watcher`) is the
+    // SOLE authority on when and where the dot appears. The web editor — which
+    // in release loads the LIVE huumanity.app — historically also ran a 500ms JS
+    // polling loop that called this command with the selection's raw top-left
+    // bounds, which fought the native watcher and made the dot chase the cursor /
+    // sit off the text line. Ignore those calls here so the native watcher wins
+    // even before the deployed site drops that loop. (The internal
+    // `show_selector_for_selection` the watcher uses is unaffected.)
+    #[cfg(target_os = "macos")]
+    {
+        let _ = (&app, &state, &selection);
+        return Ok(());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        show_selector_for_selection(&app, &state, selection)
+    }
+}
+
+/// Fade the selector out, then hide its window — so it never just blinks out of
+/// existence. We add a CSS class the frontend animates (opacity → 0 over ~130ms),
+/// wait for that to finish, then hide. The next show removes the class and plays
+/// the pop-in (see `show_selector_for_selection`).
+fn fade_and_hide_selector(window: &tauri::WebviewWindow) {
+    let _ = window.eval("document.documentElement.classList.add('huu-hiding')");
+    std::thread::sleep(Duration::from_millis(150));
+    let _ = window.hide();
 }
 
 fn show_selector_for_selection(
@@ -301,7 +331,10 @@ fn show_selector_for_selection(
 
     let window = ensure_selector_window(app)?;
     let (x, y) = selector_button_position(app, &selection);
-    let _ = window.eval("window.dispatchEvent(new CustomEvent('huu-selector-collapse'))");
+    let _ = window.eval(
+        "document.documentElement.classList.remove('huu-hiding'); \
+         window.dispatchEvent(new CustomEvent('huu-selector-collapse'))",
+    );
     debug_log(&format!(
         "show selector text_len={} rect=({}, {}, {}, {}) pos=({}, {})",
         selection.text.len(),
@@ -320,6 +353,12 @@ fn show_selector_for_selection(
         .set_position(LogicalPosition::new(x as f64, y as f64))
         .map_err(|e| e.to_string())?;
     window.show().map_err(|e| e.to_string())?;
+
+    // Remember where the dot is so the mouse tap can tell a click ON it apart
+    // from a click elsewhere.
+    if let Ok(mut frame) = state.dot_frame.lock() {
+        *frame = Some((x as f64, y as f64, SELECTOR_DOT_SIZE, SELECTOR_DOT_SIZE));
+    }
     Ok(())
 }
 
@@ -329,16 +368,16 @@ fn show_selector_for_selection(
 const SELECTOR_DOT_SIZE: f64 = 30.0;
 
 fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection) -> (i32, i32) {
-    // Exactly two allowed placements:
-    //   PLAN A (default): just to the LEFT of the selection, vertically centered
-    //                     on the first line of the selected text.
-    //   PLAN B (fallback): if there isn't room on the left — the text hugs the
-    //                     screen's left edge — sit ON TOP of the first word
-    //                     (above the selection's start), never jammed over the
-    //                     text against the margin.
-    // We compute the WINDOW's top-left; the 20px button is centered inside the
-    // 30px transparent window.
-    let gap = 6.0;
+    // Two anchor conventions:
+    //   • POINT anchor (width/height ≈ 0, used on macOS): selection.x/y is already
+    //     the exact desired CENTER of the dot — the macOS watcher computed it from
+    //     the text endpoint, gap, and side. We just center the 30px window on it.
+    //   • RECT anchor (width/height > 0, the non-macOS path): selection is the
+    //     selection's bounding box; place the dot just past its END, on its first
+    //     line.
+    // We compute the WINDOW's top-left; the 20px button is centered in the 30px
+    // transparent window.
+    let half = SELECTOR_DOT_SIZE / 2.0;
     let is_point = selection.width <= 2.0 && selection.height <= 2.0;
 
     // Screen bounds in logical points.
@@ -358,28 +397,18 @@ fn selector_button_position(app: &tauri::AppHandle, selection: &DesktopSelection
         (0.0, 0.0, f64::MAX, f64::MAX)
     };
 
-    // First-line height, capped so a tall multi-line selection still anchors the
-    // dot to its TOP line rather than its vertical middle.
-    let first_line = if is_point {
-        SELECTOR_DOT_SIZE
+    let (mut x, mut y) = if is_point {
+        // Center the window on the supplied dot-center point.
+        (selection.x - half, selection.y - half)
     } else {
-        selection.height.min(24.0)
-    };
-    let line_center_y = selection.y + (first_line / 2.0) - (SELECTOR_DOT_SIZE / 2.0);
-
-    // Does the dot fit to the LEFT of the selection without running off-screen?
-    let left_x = selection.x - SELECTOR_DOT_SIZE - gap;
-    let room_on_left = left_x >= min_x + 4.0;
-
-    let (mut x, mut y) = if room_on_left {
-        // PLAN A — beside the words.
-        (left_x, line_center_y)
-    } else {
-        // PLAN B — on top of the first word. Align to the selection's left edge
-        // and lift above the first line. If that pushes off the top of the
-        // screen, the clamp below tucks it to the top edge, still over the first
-        // word.
-        (selection.x, selection.y - SELECTOR_DOT_SIZE - gap)
+        // Bounds anchor: just past the END of the selection, centered on its first
+        // line.
+        let gap = 8.0;
+        let line = selection.height.min(24.0);
+        (
+            selection.x + selection.width + gap,
+            selection.y + (line / 2.0) - half,
+        )
     };
 
     // Final safety clamp so the window is always fully on-screen.
@@ -826,9 +855,12 @@ fn hide_selector_window(
     if let Ok(mut open) = state.popup_open.lock() {
         *open = false;
     }
+    if let Ok(mut frame) = state.dot_frame.lock() {
+        *frame = None;
+    }
     mark_selector_activity(&state);
     if let Some(window) = app.get_webview_window("selector") {
-        window.hide().map_err(|e| e.to_string())?;
+        fade_and_hide_selector(&window);
     }
     Ok(())
 }
@@ -921,30 +953,261 @@ fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow
     builder.build().map_err(|e| e.to_string())
 }
 
+/// Does this probe hold a selection worth offering to rephrase?
+fn is_probe_rephrashable(probe: &SelectionProbe) -> bool {
+    probe
+        .selection
+        .as_ref()
+        .map(|s| {
+            let t = s.text.trim();
+            !t.is_empty() && is_rephrashable(t)
+        })
+        .unwrap_or(false)
+}
+
+/// Hide the floating dot (with the CSS fade) and forget its frame.
+#[cfg(target_os = "macos")]
+fn hide_selector_dot(app: &tauri::AppHandle, state: &SelectorState) {
+    if let Ok(mut frame) = state.dot_frame.lock() {
+        *frame = None;
+    }
+    if let Some(window) = app.get_webview_window("selector") {
+        if window.is_visible().unwrap_or(false) {
+            fade_and_hide_selector(&window);
+        }
+    }
+}
+
+/// Is the point (global display points) on top of the currently-shown dot? Used
+/// to keep a click on the dot from being treated as a "click elsewhere" dismiss.
+#[cfg(target_os = "macos")]
+fn point_in_dot_frame(state: &SelectorState, x: f64, y: f64) -> bool {
+    if let Ok(frame) = state.dot_frame.lock() {
+        if let Some((fx, fy, fw, fh)) = *frame {
+            let pad = 6.0;
+            return x >= fx - pad && x <= fx + fw + pad && y >= fy - pad && y <= fy + fh + pad;
+        }
+    }
+    false
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// macOS: event-driven selector (the anti-chase design)
+//
+// The old approach POLLED the accessibility tree 5×/second and showed the dot
+// "while a selection exists, hide when it's gone." Web/Electron apps report the
+// selection flickering on and off between polls, so the dot hid then re-appeared
+// at the new cursor spot — that hide/reshow loop *was* the chasing.
+//
+// Instead we react to the discrete mouse gesture that ENDS a selection: a left
+// mouse-up. At that one instant we probe the selection ONCE, place the dot, and
+// never re-read or move it again until the next gesture. Chasing is therefore
+// structurally impossible — nothing re-positions the dot after it's shown.
+//
+// A system event tap (listen-only, needs the Accessibility permission we already
+// hold) delivers the up/down events on its own CFRunLoop thread; the heavy work
+// (sleep + probe + window ops) runs on a separate worker so the tap callback
+// stays instant (a slow callback gets the tap disabled by the OS).
+// ─────────────────────────────────────────────────────────────────────────────
+#[cfg(target_os = "macos")]
+fn start_selection_watcher(app: tauri::AppHandle) {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{mpsc, Arc};
+
+    enum MouseSignal {
+        Down(f64, f64),
+        // up_x/up_y plus the gesture sequence number at release time.
+        Up(f64, f64, u64),
+    }
+
+    let (tx, rx) = mpsc::channel::<MouseSignal>();
+    // Bumped on EVERY mouse event. A pending mouse-up that finds a newer value
+    // when its 1s timer expires has been superseded (the user clicked or started
+    // a new selection in the meantime) and bails out — this is what stops a stale
+    // dot from appearing and keeps rapid gestures from stacking up.
+    let seq = Arc::new(AtomicU64::new(0));
+
+    // Worker thread: owns all logic, sleeps, and Tauri window calls.
+    {
+        let app = app.clone();
+        let seq = seq.clone();
+        std::thread::spawn(move || {
+            let state = app.state::<SelectorState>();
+            if let Ok(mut running) = state.watcher_running.lock() {
+                *running = true;
+            }
+            debug_log("mouse-driven selector worker started");
+
+            while let Ok(sig) = rx.recv() {
+                let popup_open = state.popup_open.lock().map(|o| *o).unwrap_or(false);
+                match sig {
+                    MouseSignal::Down(x, y) => {
+                        // While the expanded panel is open, hands off completely.
+                        if popup_open {
+                            continue;
+                        }
+                        // A click on the dot itself opens the panel — don't dismiss.
+                        if point_in_dot_frame(&state, x, y) {
+                            continue;
+                        }
+                        // Any other click dismisses the dot immediately (snappy).
+                        hide_selector_dot(&app, &state);
+                    }
+                    MouseSignal::Up(up_x, up_y, up_seq) => {
+                        if popup_open {
+                            continue;
+                        }
+                        // DELIBERATE 1s pause: give the selection time to settle and
+                        // don't pop up the instant someone idly highlights something
+                        // they may not want to rephrase. If anything else happened
+                        // during that second, this gesture was superseded — bail.
+                        std::thread::sleep(Duration::from_millis(1000));
+                        if seq.load(Ordering::Relaxed) != up_seq {
+                            continue;
+                        }
+
+                        let mut probe = platform_current_selection_probe();
+                        if probe.status != "huu-self-focused" && !is_probe_rephrashable(&probe) {
+                            // One retry for apps slow to publish the selection.
+                            std::thread::sleep(Duration::from_millis(150));
+                            if seq.load(Ordering::Relaxed) != up_seq {
+                                continue;
+                            }
+                            probe = platform_current_selection_probe();
+                        }
+
+                        if let Ok(mut last_status) = state.last_status.lock() {
+                            *last_status = probe.status.clone();
+                        }
+
+                        // Clicking our own dot/panel: leave the window untouched.
+                        if probe.status == "huu-self-focused" {
+                            continue;
+                        }
+                        // The panel may have opened during our wait — re-check.
+                        if state.popup_open.lock().map(|o| *o).unwrap_or(false) {
+                            continue;
+                        }
+
+                        if !is_probe_rephrashable(&probe) {
+                            // No selection — a plain click / deselect. Ensure hidden.
+                            hide_selector_dot(&app, &state);
+                            continue;
+                        }
+
+                        let mut sel = probe.selection.expect("rephrashable implies Some");
+                        // ── Anchor on WHERE THE HIGHLIGHTED TEXT ENDS ──────────────
+                        // We follow the END OF THE SELECTION, not the mouse. The mouse
+                        // only tells us WHICH end the user finished on.
+                        let gap = 8.0;
+                        let half = SELECTOR_DOT_SIZE / 2.0;
+                        let (center_x, center_y) =
+                            if let Some((cx, cy, ends_on_right)) =
+                                platform_selection_endpoint(up_x, up_y)
+                            {
+                                // BEST: exact caret at the selection's endpoint, on its
+                                // OWN line. Correct even for multi-line / diagonal
+                                // selections (the caret is per-line, not a bounding
+                                // box). Dot goes just outside that caret: to the right
+                                // if the highlight ended on its right end, to the left
+                                // if it ended on its left/start.
+                                if ends_on_right {
+                                    (cx + gap + half, cy)
+                                } else {
+                                    (cx - gap - half, cy)
+                                }
+                            } else {
+                                // FALLBACK (web areas without a char range): use the
+                                // selection's bounding box ONLY if it's a single line
+                                // (its edges are then the true text ends). For a
+                                // MULTI-line box we must NOT use it — its center is the
+                                // middle line, which is the "dot shows up in the middle"
+                                // bug — so we use the release point, which is at least
+                                // on the correct line.
+                                let has_line_bounds =
+                                    sel.width > 4.0 && sel.height > 4.0 && sel.height < 22.0;
+                                if has_line_bounds {
+                                    let left_edge = sel.x;
+                                    let right_edge = sel.x + sel.width;
+                                    let line_mid = sel.y + sel.height / 2.0;
+                                    let ends_on_right =
+                                        (up_x - right_edge).abs() <= (up_x - left_edge).abs();
+                                    if ends_on_right {
+                                        (right_edge + gap + half, line_mid)
+                                    } else {
+                                        (left_edge - gap - half, line_mid)
+                                    }
+                                } else {
+                                    (up_x + gap + half, up_y)
+                                }
+                            };
+                        // Hand the positioner the exact desired DOT CENTER as a point
+                        // anchor (zero size).
+                        sel.x = center_x;
+                        sel.y = center_y;
+                        sel.width = 0.0;
+                        sel.height = 0.0;
+                        if let Err(err) = show_selector_for_selection(&app, &state, sel) {
+                            debug_log(&format!("show selector failed: {err}"));
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Event-tap thread: a dedicated CFRunLoop forwarding left mouse up/down.
+    std::thread::spawn(move || {
+        use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
+        use core_graphics::event::{
+            CGEventTap, CGEventTapLocation, CGEventTapOptions, CGEventTapPlacement, CGEventType,
+        };
+
+        let tap = CGEventTap::new(
+            CGEventTapLocation::HID,
+            CGEventTapPlacement::HeadInsertEventTap,
+            CGEventTapOptions::ListenOnly,
+            vec![CGEventType::LeftMouseDown, CGEventType::LeftMouseUp],
+            move |_proxy, etype, event| {
+                let p = event.location();
+                let v = seq.fetch_add(1, Ordering::Relaxed) + 1;
+                let _ = match etype {
+                    CGEventType::LeftMouseDown => tx.send(MouseSignal::Down(p.x, p.y)),
+                    CGEventType::LeftMouseUp => tx.send(MouseSignal::Up(p.x, p.y, v)),
+                    _ => Ok(()),
+                };
+                None
+            },
+        );
+
+        match tap {
+            Ok(tap) => unsafe {
+                match tap.mach_port.create_runloop_source(0) {
+                    Ok(source) => {
+                        CFRunLoop::get_current().add_source(&source, kCFRunLoopCommonModes);
+                        tap.enable();
+                        debug_log("mouse event tap installed");
+                        CFRunLoop::run_current();
+                    }
+                    Err(_) => debug_log("event tap: failed to create runloop source"),
+                }
+            },
+            Err(_) => debug_log("event tap: creation failed (accessibility not granted?)"),
+        }
+    });
+}
+
+// Non-macOS (Windows, …): keep the polling watcher. Windows UI Automation gives
+// real, stable selection bounds, so the chase bug never manifested there and the
+// simpler poll loop is fine.
+#[cfg(not(target_os = "macos"))]
 fn start_selection_watcher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
-        // The selection is keyed by its TEXT (+ source app), never by screen
-        // coordinates. This is the fix for the "button plays tag with the
-        // cursor" bug: when an app doesn't expose selection bounds we fall back
-        // to the pointer location, and if the key included coordinates every
-        // mouse twitch would look like a brand-new selection and re-show / move
-        // the button. Keying on text means the same highlighted phrase is the
-        // same selection no matter where the mouse goes.
-        let mut last_selection_key = String::new();
         let mut last_probe_status = String::new();
-        // Consecutive polls the same text must persist before we show the dot.
-        // At 200 ms/poll this is ~400 ms — long enough that we don't pop up
-        // mid-drag, short enough to feel instant once the mouse is released.
-        const STABLE_POLLS_REQUIRED: u32 = 2;
+        let mut last_text = String::new();
+        const STABLE_POLLS_REQUIRED: u32 = 3;
         let mut stable_count: u32 = 0;
-        // Once the dot is shown for a selection we freeze it — no further
-        // repositioning until the selection text actually changes.
-        let mut shown_for_key = false;
-        // The web/Electron accessibility tree FLICKERS: a poll mid-interaction
-        // frequently returns "no selection" for a beat even though the text is
-        // still highlighted. Hiding on the first miss is what made the dot
-        // vanish/reappear and "play tag" (each recovery re-showed it at the new
-        // cursor). So we only hide after several CONSECUTIVE misses.
+        let mut shown = false;
         const MISSES_BEFORE_HIDE: u32 = 4;
         let mut miss_count: u32 = 0;
 
@@ -958,8 +1221,6 @@ fn start_selection_watcher(app: tauri::AppHandle) {
         loop {
             std::thread::sleep(Duration::from_millis(200));
 
-            // Hands off entirely while the expanded panel is open — never hide
-            // or move a panel the user is interacting with.
             if state.popup_open.lock().map(|open| *open).unwrap_or(false) {
                 continue;
             }
@@ -973,74 +1234,49 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 last_probe_status = probe.status.clone();
             }
 
-            // SELF-FOCUS: the user is interacting with our own dot/panel. Leave
-            // the window EXACTLY as-is — don't hide, don't move, don't reset.
-            // This is what lets the click actually land on the button instead of
-            // the watcher yanking the window away.
             if probe.status == "huu-self-focused" {
                 continue;
             }
 
-            // Decide whether this poll yielded a rephrashable selection.
-            let rephrashable = probe
-                .selection
-                .as_ref()
-                .map(|s| {
-                    let t = s.text.trim();
-                    !t.is_empty() && is_rephrashable(t)
-                })
-                .unwrap_or(false);
+            let rephrashable = is_probe_rephrashable(&probe);
 
             if !rephrashable {
-                // A miss. Could be a genuine deselection OR just the web a11y
-                // tree flickering. Only hide once we've missed several polls in
-                // a row — a single dropout must NOT disturb the frozen dot.
-                if shown_for_key || !last_selection_key.is_empty() {
+                if shown || stable_count > 0 {
                     miss_count += 1;
                     if miss_count >= MISSES_BEFORE_HIDE {
-                        last_selection_key.clear();
+                        last_text.clear();
                         stable_count = 0;
-                        shown_for_key = false;
+                        shown = false;
                         miss_count = 0;
                         if let Some(window) = app.get_webview_window("selector") {
-                            let _ = window.hide();
+                            fade_and_hide_selector(&window);
                         }
                     }
                 }
                 continue;
             }
 
-            // A hit — reset the miss debounce.
             miss_count = 0;
 
+            if shown {
+                continue;
+            }
+
             let selection = probe.selection.expect("rephrashable implies Some");
-            let trimmed = selection.text.trim().to_string();
+            let text = selection.text.trim().to_string();
 
-            // Key on TEXT ONLY — deliberately NOT coordinates or pid. The same
-            // highlighted phrase is the same selection no matter where the mouse
-            // goes, so the dot never chases the cursor.
-            let selection_key = trimmed.clone();
-
-            if selection_key != last_selection_key {
-                // A genuinely different selection — restart stability tracking.
-                last_selection_key = selection_key;
+            if text != last_text {
+                last_text = text;
                 stable_count = 1;
-                shown_for_key = false;
-            } else if !shown_for_key {
-                // Same text as last poll and not shown yet — count toward the
-                // stability threshold, then show using the freshest coordinates
-                // (the mouse has usually settled by now).
+            } else {
                 stable_count += 1;
-
                 if stable_count >= STABLE_POLLS_REQUIRED {
                     if let Err(err) = show_selector_for_selection(&app, &state, selection) {
                         debug_log(&format!("show selector failed: {err}"));
                     }
-                    shown_for_key = true;
+                    shown = true;
                 }
             }
-            // Same text and already shown → do nothing. The dot stays frozen in
-            // place, so moving the cursor toward it can never make it flee.
         }
     });
 }
@@ -1193,6 +1429,21 @@ fn platform_current_selection_probe() -> SelectionProbe {
     }
 }
 
+/// The caret center at the selection's endpoint (the end the user finished
+/// dragging on, decided by nearness to the mouse-release point), plus whether it
+/// was the END caret (true → dot goes to the right of it) or the START caret
+/// (false → dot goes to the left). None when the focused element doesn't expose a
+/// character range, so the caller falls back to the bounding box / release point.
+#[cfg(target_os = "macos")]
+fn platform_selection_endpoint(up_x: f64, up_y: f64) -> Option<(f64, f64, bool)> {
+    macos_accessibility::selection_endpoint(up_x, up_y)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn platform_selection_endpoint(_up_x: f64, _up_y: f64) -> Option<(f64, f64, bool)> {
+    None
+}
+
 #[cfg(target_os = "macos")]
 mod macos_accessibility {
     use std::sync::atomic::{AtomicI32, Ordering};
@@ -1253,6 +1504,28 @@ mod macos_accessibility {
             value: CFTypeRef,
         ) -> AXError;
         fn AXValueGetValue(value: AXValueRef, value_type: i32, value_ptr: *mut c_void) -> Boolean;
+        fn AXValueCreate(value_type: i32, value_ptr: *const c_void) -> AXValueRef;
+        // Text-marker primitives (HIServices, exported but header-private — the
+        // same ones VoiceOver uses). Web content (Chromium/WebKit) exposes its
+        // selection ONLY through markers, never AXSelectedTextRange, so these are
+        // how we reach per-line endpoint geometry in browsers/Electron apps.
+        fn AXTextMarkerRangeCopyStartMarker(range: CFTypeRef) -> CFTypeRef;
+        fn AXTextMarkerRangeCopyEndMarker(range: CFTypeRef) -> CFTypeRef;
+        fn AXTextMarkerRangeCreate(
+            allocator: CFTypeRef,
+            start_marker: CFTypeRef,
+            end_marker: CFTypeRef,
+        ) -> CFTypeRef;
+    }
+
+    // AXValueType for a CFRange ({location, length}); 3 is the CGRect type used
+    // elsewhere. CFIndex is a pointer-sized signed int.
+    const AX_VALUE_CF_RANGE: i32 = 4;
+
+    #[repr(C)]
+    struct CFRangeRaw {
+        location: isize,
+        length: isize,
     }
 
     // Last app PID we flipped AXManualAccessibility on, so we only do it once per
@@ -1667,6 +1940,320 @@ mod macos_accessibility {
 
         owned.iter().for_each(|r| CFRelease(*r));
         found
+    }
+
+    /// The selection's {location, length} as character indices, if this is a
+    /// native text element that exposes AXSelectedTextRange.
+    unsafe fn selected_char_range(element: AXUIElementRef) -> Option<(isize, isize)> {
+        let attr = CFString::new("AXSelectedTextRange");
+        let mut range_ref: CFTypeRef = ptr::null();
+        let err =
+            AXUIElementCopyAttributeValue(element, attr.as_concrete_TypeRef(), &mut range_ref);
+        if err != AX_ERROR_SUCCESS || range_ref.is_null() {
+            return None;
+        }
+        let mut range = CFRangeRaw { location: 0, length: 0 };
+        let ok = AXValueGetValue(
+            range_ref as AXValueRef,
+            AX_VALUE_CF_RANGE,
+            &mut range as *mut CFRangeRaw as *mut c_void,
+        );
+        CFRelease(range_ref);
+        if ok == 0 {
+            return None;
+        }
+        Some((range.location, range.length))
+    }
+
+    /// Bounding rect of the `length`-character range starting at `index`. We use a
+    /// 1-char range (not a zero-length caret): a zero-length `AXBoundsForRange`
+    /// reports a Y that can be a full line too high in some text views, whereas a
+    /// real character's box reliably lands on its own visual line.
+    unsafe fn range_rect(element: AXUIElementRef, index: isize, length: isize) -> Option<CGRect> {
+        if index < 0 || length <= 0 {
+            return None;
+        }
+        let range = CFRangeRaw {
+            location: index,
+            length,
+        };
+        let range_value = AXValueCreate(
+            AX_VALUE_CF_RANGE,
+            &range as *const CFRangeRaw as *const c_void,
+        );
+        if range_value.is_null() {
+            return None;
+        }
+
+        let attr = CFString::new("AXBoundsForRange");
+        let mut bounds_ref: CFTypeRef = ptr::null();
+        let err = AXUIElementCopyParameterizedAttributeValue(
+            element,
+            attr.as_concrete_TypeRef(),
+            range_value as CFTypeRef,
+            &mut bounds_ref,
+        );
+        CFRelease(range_value as CFTypeRef);
+        if err != AX_ERROR_SUCCESS || bounds_ref.is_null() {
+            return None;
+        }
+
+        let rect = cg_rect_from_ax_value(bounds_ref);
+        CFRelease(bounds_ref);
+        let r = rect?;
+        // Reject anything that isn't a plausible single text line.
+        if !r.origin.x.is_finite()
+            || !r.origin.y.is_finite()
+            || r.size.height <= 4.0
+            || r.size.height >= 80.0
+        {
+            return None;
+        }
+        Some(r)
+    }
+
+    /// Parameterized-attribute call that takes a single text marker and returns
+    /// another marker (e.g. AXNextTextMarkerForTextMarker /
+    /// AXPreviousTextMarkerForTextMarker). Caller owns the result.
+    unsafe fn param_marker(
+        element: AXUIElementRef,
+        attr_name: &str,
+        marker: CFTypeRef,
+    ) -> Option<CFTypeRef> {
+        let attr = CFString::new(attr_name);
+        let mut out: CFTypeRef = ptr::null();
+        let err = AXUIElementCopyParameterizedAttributeValue(
+            element,
+            attr.as_concrete_TypeRef(),
+            marker,
+            &mut out,
+        );
+        if err != AX_ERROR_SUCCESS || out.is_null() {
+            return None;
+        }
+        Some(out)
+    }
+
+    /// Bounds of a text-marker range, validated to a plausible single text line.
+    unsafe fn bounds_for_marker_range(
+        element: AXUIElementRef,
+        range: CFTypeRef,
+    ) -> Option<CGRect> {
+        let attr = CFString::new("AXBoundsForTextMarkerRange");
+        let mut out: CFTypeRef = ptr::null();
+        let err = AXUIElementCopyParameterizedAttributeValue(
+            element,
+            attr.as_concrete_TypeRef(),
+            range,
+            &mut out,
+        );
+        if err != AX_ERROR_SUCCESS || out.is_null() {
+            return None;
+        }
+        let rect = cg_rect_from_ax_value(out);
+        CFRelease(out);
+        let r = rect?;
+        if !r.origin.x.is_finite()
+            || !r.origin.y.is_finite()
+            || r.size.height <= 4.0
+            || r.size.height >= 80.0
+        {
+            return None;
+        }
+        Some(r)
+    }
+
+    /// Web-content endpoint detection via text markers — the marker-world twin of
+    /// the native per-character path. Given an element that exposes a selected
+    /// text-marker range, builds a ONE-CHARACTER marker range at each end of the
+    /// selection (start..next(start) and prev(end)..end) and measures each box.
+    /// Because each box is a single glyph, it sits on its OWN visual line — so a
+    /// diagonal/multi-line selection in Chrome/Twitter/Electron resolves to the
+    /// real first/last character, exactly like TextEdit, instead of the union
+    /// box's middle. Returns (first_char_box, last_char_box).
+    unsafe fn marker_endpoint_boxes(element: AXUIElementRef) -> Option<(CGRect, CGRect)> {
+        let sel_range = copy_attribute(element, "AXSelectedTextMarkerRange")?;
+        let start_marker = AXTextMarkerRangeCopyStartMarker(sel_range);
+        let end_marker = AXTextMarkerRangeCopyEndMarker(sel_range);
+        CFRelease(sel_range);
+        if start_marker.is_null() || end_marker.is_null() {
+            if !start_marker.is_null() {
+                CFRelease(start_marker);
+            }
+            if !end_marker.is_null() {
+                CFRelease(end_marker);
+            }
+            return None;
+        }
+
+        // First glyph: [start, next(start)].
+        let first = param_marker(element, "AXNextTextMarkerForTextMarker", start_marker)
+            .and_then(|next| {
+                let r = AXTextMarkerRangeCreate(ptr::null(), start_marker, next);
+                CFRelease(next);
+                if r.is_null() {
+                    return None;
+                }
+                let b = bounds_for_marker_range(element, r);
+                CFRelease(r);
+                b
+            });
+        // Last glyph: [prev(end), end].
+        let last = param_marker(element, "AXPreviousTextMarkerForTextMarker", end_marker)
+            .and_then(|prev| {
+                let r = AXTextMarkerRangeCreate(ptr::null(), prev, end_marker);
+                CFRelease(prev);
+                if r.is_null() {
+                    return None;
+                }
+                let b = bounds_for_marker_range(element, r);
+                CFRelease(r);
+                b
+            });
+
+        CFRelease(start_marker);
+        CFRelease(end_marker);
+        match (first, last) {
+            (Some(f), Some(l)) => Some((f, l)),
+            _ => None,
+        }
+    }
+
+    /// Find the position at the ENDPOINT of the current selection — the end the
+    /// user actually finished dragging on. Walks the focused element + its
+    /// ancestors looking for one that exposes AXSelectedTextRange, measures the
+    /// FIRST and LAST selected characters' boxes (each reliably on its own visual
+    /// line), and returns whichever endpoint is nearer the mouse-release point
+    /// (that's where the user stopped), plus whether it was the END (text to its
+    /// left → dot goes right) or the START (text to its right → dot goes left).
+    ///
+    /// Works per-line, so a multi-line selection anchors beside the exact word the
+    /// highlight ends on — not the middle of the bounding box. Returns None for
+    /// elements that don't expose a character range (e.g. some web areas), letting
+    /// the caller fall back to the bounding box / release point.
+    pub fn selection_endpoint(up_x: f64, up_y: f64) -> Option<(f64, f64, bool)> {
+        if !is_trusted(false) {
+            return None;
+        }
+        unsafe {
+            let system = AXUIElementCreateSystemWide();
+            if system.is_null() {
+                return None;
+            }
+            AXUIElementSetMessagingTimeout(system, 0.25);
+            let focused = copy_focused_element(system);
+            CFRelease(system as CFTypeRef);
+            let focused = focused?;
+
+            let mut chain: Vec<AXUIElementRef> = vec![focused as AXUIElementRef];
+            let mut owned: Vec<CFTypeRef> = Vec::new();
+            let mut current = focused as AXUIElementRef;
+            for _ in 0..8 {
+                let Some(parent_ref) = copy_attribute(current, "AXParent") else {
+                    break;
+                };
+                owned.push(parent_ref);
+                current = parent_ref as AXUIElementRef;
+                chain.push(current);
+            }
+
+            let mut result = None;
+            for el in chain.iter() {
+                let Some((loc, len)) = selected_char_range(*el) else {
+                    continue;
+                };
+                if len <= 0 {
+                    continue;
+                }
+                // First selected char (its LEFT edge = where the highlight starts)
+                // and last selected char (its RIGHT edge = where the highlight ends),
+                // each on its own visual line. We SCAN past degenerate boxes —
+                // newlines and empty glyphs report a zero-width rect (often parked at
+                // the next line's start), which would otherwise throw the endpoint
+                // onto the wrong line or fail entirely. Skipping them lands us on the
+                // last/first VISIBLE character, which is what "where the text ends"
+                // actually means.
+                let mut first: Option<CGRect> = None;
+                let mut k = 0;
+                while k < 8 {
+                    let idx = loc + k;
+                    if idx >= loc + len {
+                        break;
+                    }
+                    if let Some(r) = range_rect(*el, idx, 1) {
+                        if r.size.width >= 1.0 {
+                            first = Some(r);
+                            break;
+                        }
+                    }
+                    k += 1;
+                }
+                let mut last: Option<CGRect> = None;
+                let mut k = 0;
+                while k < 8 {
+                    let idx = loc + len - 1 - k;
+                    if idx < loc {
+                        break;
+                    }
+                    if let Some(r) = range_rect(*el, idx, 1) {
+                        if r.size.width >= 1.0 {
+                            last = Some(r);
+                            break;
+                        }
+                    }
+                    k += 1;
+                }
+                if let (Some(f), Some(l)) = (first, last) {
+                    let start_pt = (f.origin.x, f.origin.y + f.size.height / 2.0);
+                    let end_pt = (
+                        l.origin.x + l.size.width,
+                        l.origin.y + l.size.height / 2.0,
+                    );
+                    let ds = (up_x - start_pt.0).powi(2) + (up_y - start_pt.1).powi(2);
+                    let de = (up_x - end_pt.0).powi(2) + (up_y - end_pt.1).powi(2);
+                    let picked_end = de <= ds;
+                    let c = if picked_end { end_pt } else { start_pt };
+                    super::debug_log(&format!(
+                        "  caret_endpoint start=({:.0},{:.0}) end=({:.0},{:.0}) picked={} center=({:.0},{:.0})",
+                        start_pt.0, start_pt.1, end_pt.0, end_pt.1,
+                        if picked_end { "end" } else { "start" }, c.0, c.1
+                    ));
+                    result = Some((c.0, c.1, picked_end));
+                    break;
+                }
+            }
+
+            // WEB-CONTENT PASS: native AXSelectedTextRange path found nothing
+            // (Chrome, Twitter, Claude web, Electron — they don't expose it).
+            // Resolve the per-line endpoint through text markers instead.
+            if result.is_none() {
+                for el in chain.iter() {
+                    let Some((f, l)) = marker_endpoint_boxes(*el) else {
+                        continue;
+                    };
+                    let start_pt = (f.origin.x, f.origin.y + f.size.height / 2.0);
+                    let end_pt = (
+                        l.origin.x + l.size.width,
+                        l.origin.y + l.size.height / 2.0,
+                    );
+                    let ds = (up_x - start_pt.0).powi(2) + (up_y - start_pt.1).powi(2);
+                    let de = (up_x - end_pt.0).powi(2) + (up_y - end_pt.1).powi(2);
+                    let picked_end = de <= ds;
+                    let c = if picked_end { end_pt } else { start_pt };
+                    super::debug_log(&format!(
+                        "  marker_endpoint start=({:.0},{:.0}) end=({:.0},{:.0}) picked={} center=({:.0},{:.0})",
+                        start_pt.0, start_pt.1, end_pt.0, end_pt.1,
+                        if picked_end { "end" } else { "start" }, c.0, c.1
+                    ));
+                    result = Some((c.0, c.1, picked_end));
+                    break;
+                }
+            }
+
+            owned.iter().for_each(|r| CFRelease(*r));
+            CFRelease(focused);
+            result
+        }
     }
 
     /// Pull a CGRect out of an AXValue, returning None if it isn't one.

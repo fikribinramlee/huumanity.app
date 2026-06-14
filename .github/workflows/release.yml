@@ -66,5 +66,6 @@ jobs:
           draft: false
           prerelease: false
           files: ${{ steps.installer.outputs.path }}
+          repository: fikribinramlee/huumanity-releases
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}

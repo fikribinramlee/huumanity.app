@@ -1,12 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useUser, useClerk, useAuth } from "@clerk/nextjs";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalRewritePanel } from "../components/ExternalRewritePanel";
 import { ScratchpadEditor } from "../components/ScratchpadEditor";
-import { isRephrashable } from "../lib/isRephrashable";
 import { HuuLogo } from "../components/HuuLogo";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -25,15 +24,6 @@ type SubscriptionStatus = {
   resetsAt?: string | null;
   cancelAtPeriodEnd?: boolean;
   currentPeriodEnd?: string | null;
-};
-
-type DesktopSelection = {
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  canReplace: boolean;
 };
 
 type SelectorHealth = {
@@ -187,7 +177,6 @@ export default function EditorPage() {
   const [captureError, setCaptureError] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
   const [showRewritePanel, setShowRewritePanel] = useState(false);
-  const lastSelectionKeyRef = useRef("");
 
   // ── Callbacks ──────────────────────────────────────────────────────────────
 
@@ -498,36 +487,14 @@ useEffect(() => {
     return () => window.clearInterval(id);
   }, [authState, refreshSelectorHealth]);
 
-  useEffect(() => {
-    if (!hasCompletedSetup || !accessibilityAllowed || authState !== "app")
-      return;
-    let isMounted = true;
-    const id = window.setInterval(async () => {
-      try {
-        const selection = await invoke<DesktopSelection | null>(
-          "get_current_selection"
-        );
-        if (!isMounted || !selection?.text.trim()) return;
-        // Ground rule: only show the huu button for rephrashable text
-        if (!isRephrashable(selection.text)) return;
-        const selectionKey = `${selection.text}:${Math.round(
-          selection.x
-        )}:${Math.round(selection.y)}`;
-        if (selectionKey === lastSelectionKeyRef.current) return;
-        lastSelectionKeyRef.current = selectionKey;
-        setDetectorStatus("Selection detected.");
-        await invoke("show_selector_window", { selection });
-      } catch {
-        setDetectorStatus(
-          "Selector is running. Use Try it out if detection fails."
-        );
-      }
-    }, 500);
-    return () => {
-      isMounted = false;
-      window.clearInterval(id);
-    };
-  }, [accessibilityAllowed, hasCompletedSetup, authState]);
+  // NOTE: the automatic "show the dot when text is selected" behavior lives
+  // entirely in Rust now (a native mouse-up event tap — see
+  // `start_selection_watcher` in src-tauri/src/lib.rs). A JS polling loop used
+  // to ALSO call `show_selector_window` here every 500ms, which fought the Rust
+  // watcher: it re-positioned the dot at the selection's raw top-left bounds on
+  // every poll, causing the button to "chase" the cursor and land off the text
+  // line. That loop has been removed so Rust is the single source of truth for
+  // when and where the dot appears.
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 

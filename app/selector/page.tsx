@@ -29,6 +29,11 @@ export default function SelectorPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  // Bumped every time the native window re-shows the collapsed dot, so we can
+  // re-key the dot element and replay its pop-in animation on each appearance
+  // (the React tree stays mounted across window hide/show, so without this the
+  // CSS animation would only ever run once).
+  const [showNonce, setShowNonce] = useState(0);
   // The visible panel box — measured so the native window can sit exactly on top
   // of the selected text for whatever stage is showing.
   const panelRef = useRef<HTMLElement>(null);
@@ -67,7 +72,11 @@ export default function SelectorPage() {
     document.documentElement.style.background = "transparent";
     document.body.style.background = "transparent";
 
-    const reset = () => resetPopup();
+    const reset = () => {
+      resetPopup();
+      // New appearance → replay the dot pop-in.
+      setShowNonce((n) => n + 1);
+    };
     window.addEventListener("huu-selector-collapse", reset);
 
     const id = window.setTimeout(() => {
@@ -302,9 +311,10 @@ export default function SelectorPage() {
     return (
       <main className="flex h-screen w-screen items-center justify-center bg-transparent">
         <button
+          key={showNonce}
           type="button"
           onClick={openOptions}
-          className="flex h-5 w-5 items-center justify-center rounded-full bg-[#fff700] text-black shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition hover:brightness-95 active:scale-90"
+          className="huu-pop-in flex h-5 w-5 items-center justify-center rounded-full bg-[#fff700] text-black shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition hover:brightness-95 active:scale-90"
           aria-label="Open huu rewrite options"
         >
           <svg
@@ -341,7 +351,7 @@ export default function SelectorPage() {
           so it sits directly above the selected text. */}
       <section
         ref={panelRef}
-        className="relative w-fit max-w-full rounded-2xl border-2 border-[#fff700] bg-white shadow-[0_6px_20px_rgba(0,0,0,0.12)]"
+        className="huu-pop-in-panel relative w-fit max-w-full rounded-2xl border-2 border-[#fff700] bg-white shadow-[0_6px_20px_rgba(0,0,0,0.12)]"
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="p-2">
