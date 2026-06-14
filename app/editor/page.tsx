@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useUser, useClerk } from "@clerk/nextjs";
+import { useUser, useClerk, useAuth } from "@clerk/nextjs";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalRewritePanel } from "../components/ExternalRewritePanel";
 import { ScratchpadEditor } from "../components/ScratchpadEditor";
@@ -123,6 +123,7 @@ export default function EditorPage() {
   // Clerk user (available once authState === "app")
   const { user, isLoaded: clerkLoaded } = useUser();
   const { signOut } = useClerk();
+  const { getToken } = useAuth();
 
   // True while redeeming a sign-in ticket from a `huu://open?ticket=…` deep link.
   const [redeeming, setRedeeming] = useState(false);
@@ -410,6 +411,32 @@ export default function EditorPage() {
     return () => window.clearInterval(id);
   }, [authState, fetchSubscription]);
 
+  // Session-token pump for the native selector. The selector overlay runs on
+  // tauri://localhost and CANNOT send the Clerk cookie cross-origin to the
+  // rewrite API, so without a token its rewrites look anonymous and never count
+  // against the daily limit. This authenticated editor window mints a fresh
+  // short-lived Clerk token (~60s lifetime) and hands it to the Rust layer every
+  // 30s; the selector attaches it as a Bearer header so every rewrite is
+  // correctly attributed and counted. Only runs inside the desktop app.
+  useEffect(() => {
+    if (authState !== "app" || !isTauriRuntime()) return;
+    let cancelled = false;
+    const pump = async () => {
+      try {
+        const token = await getToken();
+        if (!cancelled) await invoke("set_session_token", { token: token ?? null });
+      } catch {
+        /* transient; next tick retries */
+      }
+    };
+    void pump();
+    const id = window.setInterval(pump, 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [authState, getToken]);
+
   // After a successful Stripe checkout, Stripe redirects to /editor?upgraded=true.
   // Immediately show the Pro UI optimistically, then do a real fetch to confirm.
   // Clean the query param from the URL so refreshing doesn't re-trigger.
@@ -438,6 +465,20 @@ export default function EditorPage() {
       if (tries >= 10) window.clearInterval(confirm); // give up after ~30s
     }, 3000);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Deep link into Plans & Billing. The desktop selector's "Upgrade to Pro"
+  // button (shown when the daily rewrite limit is reached) navigates the editor
+  // window to /editor?settings=billing; open the settings modal on the billing
+  // tab, then clean the param so a refresh doesn't re-open it.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("settings") !== "billing") return;
+    setSettingsTab("billing");
+    setSettingsOpen(true);
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, "", cleanUrl);
+  }, []);
 
 useEffect(() => {
     if (authState !== "app") return;

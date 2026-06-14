@@ -30,6 +30,13 @@ struct SelectorState {
     // checks this and leaves the window completely alone so it never hides or
     // repositions the panel out from under the user.
     popup_open: Mutex<bool>,
+    // The latest short-lived Clerk session token, pushed by the authenticated
+    // editor window. The selector overlay runs on `tauri://localhost` and cannot
+    // send the Clerk cookie cross-origin to huumanity.app, so it attaches this
+    // token as a `Bearer` header on its rewrite requests — without it, the API
+    // sees an anonymous caller and never counts the rewrite against the user's
+    // daily limit (the "rewrites never count / users abuse it" bug).
+    session_token: Mutex<Option<String>>,
 }
 
 struct SelectionProbe {
@@ -66,7 +73,11 @@ pub fn run() {
             get_selector_health,
             show_selector_window,
             expand_selector_window,
-            hide_selector_window
+            position_selector_panel,
+            hide_selector_window,
+            open_billing,
+            set_session_token,
+            get_session_token
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {
@@ -657,16 +668,57 @@ fn expand_selector_window(
     }
 
     let window = ensure_selector_window(&app)?;
-    // The window is a transparent canvas; the panel is anchored to its BOTTOM
-    // edge (CSS justify-end). So we place the window's bottom just above the
-    // selection and let the panel grow upward — that keeps it directly above
-    // the text instead of floating hundreds of px overhead.
-    let width = 460.0;
-    let height = 260.0;
-    let gap = 8.0;
+    // Provisional placement using a select-stage height estimate so the first
+    // paint lands in roughly the right spot. The frontend measures the panel's
+    // real rendered height the instant it renders (and again on every stage
+    // change) and calls `position_selector_panel`, which places it exactly.
+    place_selector_panel(&app, &window, &selection, SELECT_BAR_HEIGHT_EST)?;
+    window.show().map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+}
 
+/// Rough height of the collapsed select-stage tone bar (one row of pills). Used
+/// only for the provisional first paint before the frontend reports the real
+/// measured height.
+const SELECT_BAR_HEIGHT_EST: f64 = 44.0;
+
+/// Place the transparent selector window so its visible panel sits DIRECTLY ON
+/// TOP of the selected text — the panel's bottom edge `gap` above the
+/// selection's top edge — and never below it.
+///
+/// The window is sized to the panel's actual height (`panel_height`, measured by
+/// the frontend) plus margins, instead of a fixed tall canvas. That is what lets
+/// the bar fit above the selection even when the selection is high on screen:
+/// a small window has room above almost anywhere, whereas a fixed 300px window
+/// got shoved down by macOS and ended up covering or sitting below the text.
+fn place_selector_panel(
+    app: &tauri::AppHandle,
+    window: &tauri::WebviewWindow,
+    selection: &DesktopSelection,
+    panel_height: f64,
+) -> Result<(), String> {
+    let width = 460.0;
+    let gap = 8.0;
+    // The panel is bottom-anchored in the window (CSS `justify-end`). `p-3` gives
+    // 12px below it; we add 12px of empty window space above it so the drop
+    // shadow isn't clipped.
+    let bottom_pad = 12.0;
+    let top_margin = 12.0;
+    // Floor the height so the window is ALWAYS tall enough for the tallest stage
+    // (the result view, ~230px). This guarantees the panel is never clipped at
+    // the top — even if a stage-transition resize hasn't landed yet, which was
+    // the "tone bar / result preview cut in half" bug. The panel is
+    // bottom-anchored, so the extra height is just invisible transparent space
+    // ABOVE the bar; the bar still hugs the selection.
+    let panel_height = panel_height.clamp(MIN_PANEL_HEIGHT, 700.0);
+    let window_height = panel_height + bottom_pad + top_margin;
+
+    // Horizontally centered over the selection.
     let mut x = selection.x + (selection.width / 2.0) - (width / 2.0);
-    let mut y = selection.y - gap - height;
+    // window_top so that: panel_bottom (= window_top + window_height - bottom_pad)
+    // == selection.y - gap.
+    let mut y = (selection.y - gap) - (window_height - bottom_pad);
 
     if let Ok(Some(monitor)) = app.primary_monitor() {
         let scale = monitor.scale_factor();
@@ -676,24 +728,58 @@ fn expand_selector_window(
         let min_y = position.y as f64 / scale;
         let max_x = min_x + (size.width as f64 / scale) - width;
         x = x.clamp(min_x, max_x.max(min_x));
-        // If there isn't room above (selection near the top), drop below it.
+        // If the selection is so near the top that the bar can't fully fit above
+        // it, pin to the top edge (slight overlap) — we NEVER drop it below.
         if y < min_y {
-            y = selection.y + selection.height.max(1.0) + gap;
+            y = min_y;
         }
     } else {
         x = x.max(0.0);
         y = y.max(0.0);
     }
 
+    debug_log(&format!(
+        "place_panel panel_h={:.0} -> window={:.0}x{:.0} at ({:.0},{:.0}) sel.y={:.0}",
+        panel_height,
+        width,
+        window_height,
+        x.round(),
+        y.round(),
+        selection.y
+    ));
+
     window
-        .set_size(LogicalSize::new(width, height))
+        .set_size(LogicalSize::new(width, window_height))
         .map_err(|e| e.to_string())?;
     window
         .set_position(LogicalPosition::new(x.round(), y.round()))
         .map_err(|e| e.to_string())?;
-    window.show().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// Minimum panel height we reserve window space for — large enough that the
+/// tallest stage (the result preview) is never clipped at the top.
+const MIN_PANEL_HEIGHT: f64 = 236.0;
+
+/// Called by the frontend with the panel's real measured pixel height so we can
+/// place it precisely above the selection for the current stage (select bar vs.
+/// the taller result view).
+#[tauri::command]
+fn position_selector_panel(
+    app: tauri::AppHandle,
+    state: State<'_, SelectorState>,
+    panel_height: f64,
+) -> Result<(), String> {
+    let selection = state
+        .selection
+        .lock()
+        .map_err(|e| e.to_string())?
+        .clone()
+        .ok_or_else(|| "No selected text available.".to_string())?;
+    let Some(window) = app.get_webview_window("selector") else {
+        return Ok(());
+    };
+    place_selector_panel(&app, &window, &selection, panel_height)
 }
 
 #[tauri::command]
@@ -710,6 +796,62 @@ fn hide_selector_window(
     Ok(())
 }
 
+/// Open the editor's Plans & Billing screen from the selector. Called when the
+/// user hits the daily rewrite limit and clicks "Upgrade to Pro" in the limit
+/// panel. Brings the main editor window forward and navigates it to
+/// `/editor?settings=billing`, which the editor reads to open the settings modal
+/// on the billing tab — the same place the in-app upgrade buttons land. The
+/// selector overlay is hidden so it doesn't linger over the editor.
+#[tauri::command]
+fn open_billing(
+    app: tauri::AppHandle,
+    state: State<'_, SelectorState>,
+) -> Result<(), String> {
+    if let Ok(mut open) = state.popup_open.lock() {
+        *open = false;
+    }
+    if let Some(selector) = app.get_webview_window("selector") {
+        let _ = selector.hide();
+    }
+
+    show_main_window(&app)?;
+
+    let target = if cfg!(debug_assertions) {
+        "http://localhost:3000/editor?settings=billing".to_string()
+    } else {
+        "https://huumanity.app/editor?settings=billing".to_string()
+    };
+    if let Some(window) = app.get_webview_window("main") {
+        match target.parse::<tauri::Url>() {
+            Ok(parsed) => window.navigate(parsed).map_err(|e| e.to_string())?,
+            Err(err) => return Err(format!("bad billing url: {err}")),
+        }
+    }
+    Ok(())
+}
+
+/// Store the latest Clerk session token. Called repeatedly by the authenticated
+/// editor window (which can mint fresh tokens via Clerk's `getToken()`). The
+/// selector reads it via `get_session_token` to authenticate its rewrite calls.
+#[tauri::command]
+fn set_session_token(
+    state: State<'_, SelectorState>,
+    token: Option<String>,
+) -> Result<(), String> {
+    let mut slot = state.session_token.lock().map_err(|e| e.to_string())?;
+    *slot = token.filter(|t| !t.is_empty());
+    Ok(())
+}
+
+/// Return the latest stored Clerk session token (or null if none/expired). The
+/// selector attaches it as a `Bearer` header so the rewrite API can identify the
+/// user and count the rewrite against their daily limit.
+#[tauri::command]
+fn get_session_token(state: State<'_, SelectorState>) -> Result<Option<String>, String> {
+    let slot = state.session_token.lock().map_err(|e| e.to_string())?;
+    Ok(slot.clone())
+}
+
 fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     if let Some(window) = app.get_webview_window("selector") {
         let _ = window.set_visible_on_all_workspaces(true);
@@ -717,7 +859,14 @@ fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow
         return Ok(window);
     }
 
-    WebviewWindowBuilder::new(app, "selector", webview_url("/selector"))
+    // The selector is a NATIVE OVERLAY and must ALWAYS load from the bundled
+    // local frontend (`/selector`) — never the remote site. This is the fix for
+    // "none of my changes ever appear": in a release build `webview_url` returns
+    // `External("https://huumanity.app/selector")`, so the packaged app fetched
+    // the OLD deployed page over the internet and ignored every local edit. The
+    // main editor window stays remote (it needs first-party Clerk cookies for
+    // Pro/auth); the selector has no such need and MUST track local builds.
+    WebviewWindowBuilder::new(app, "selector", WebviewUrl::App("/selector".into()))
         .title("huu selector")
         .inner_size(SELECTOR_DOT_SIZE, SELECTOR_DOT_SIZE)
         .decorations(false)
@@ -730,6 +879,11 @@ fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow
         .visible_on_all_workspaces(true)
         .visible(false)
         .skip_taskbar(true)
+        // The overlay is never the key window (the user's app keeps focus). On
+        // macOS a click on a non-key window is normally swallowed just to focus
+        // it — that was the "I have to click the yellow dot twice" bug. Accepting
+        // first mouse delivers that first click straight to the button.
+        .accept_first_mouse(true)
         .build()
         .map_err(|e| e.to_string())
 }
@@ -916,16 +1070,33 @@ fn activate_source_process(_pid: i32) -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn send_shortcut(key: &str) -> Result<(), String> {
-    use enigo::{Direction, Enigo, Key, Keyboard, Settings};
+    // Send a real ⌘-chord through System Events using the physical KEY CODE.
+    //
+    // Both enigo paths we tried before failed: `enigo.text("v")` posts a Unicode
+    // INSERTION (ignores modifiers entirely), and `enigo.key(Key::Unicode('v'))`
+    // with Meta held still didn't set the Command flag on the key event — so the
+    // app received a plain "v" keystroke, which the field auto-capitalized to
+    // "V". That was the "Accept replaces my text with V" bug.
+    //
+    // `key code N using command down` sets the modifier on the event at the OS
+    // level, so the frontmost app interprets it as ⌘V (paste) / ⌘C (copy).
+    // macOS ANSI key codes: V = 9, C = 8.
+    let key_code = match key {
+        "v" => 9,
+        "c" => 8,
+        other => return Err(format!("unsupported shortcut key: {other}")),
+    };
 
-    let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
-    enigo
-        .key(Key::Meta, Direction::Press)
+    let script =
+        format!("tell application \"System Events\" to key code {key_code} using command down");
+    let status = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&script)
+        .status()
         .map_err(|e| e.to_string())?;
-    enigo.text(key).map_err(|e| e.to_string())?;
-    enigo
-        .key(Key::Meta, Direction::Release)
-        .map_err(|e| e.to_string())?;
+    if !status.success() {
+        return Err(format!("paste shortcut osascript exited with {status}"));
+    }
     Ok(())
 }
 

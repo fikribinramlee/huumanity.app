@@ -13,7 +13,7 @@ const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Huu-Client",
 };
 
 function corsJson(
@@ -192,6 +192,17 @@ Return only the rewritten text. No explanation, or quotes or intro lines around 
 export async function POST(req: NextRequest) {
   try {
     const { userId } = await auth();
+
+    // The desktop selector calls cross-origin and authenticates with a Bearer
+    // session token (never a cookie). If that token is missing/expired, `userId`
+    // is null — and we must NOT fall through to the free anonymous path, or
+    // desktop users would get unlimited uncounted rewrites. Reject so the app
+    // can prompt them to re-open huumanity and mint a fresh token.
+    const isDesktopSelector =
+      req.headers.get("x-huu-client") === "desktop-selector";
+    if (isDesktopSelector && !userId) {
+      return corsJson({ error: "auth_required" }, { status: 401 });
+    }
 
     let usageCount = 0;
 

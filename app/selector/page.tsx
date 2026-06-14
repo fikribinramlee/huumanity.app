@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { isRephrashable } from "../lib/isRephrashable";
 
 const TONES = ["Humanize", "Unpolished", "Controversial", "Direct"] as const;
 const PRODUCTION_API = "https://huumanity.app/api/humanize";
 
-type PopupStage = "select" | "loading" | "result";
+type PopupStage = "select" | "loading" | "result" | "limit";
 
 type DesktopSelection = {
   text: string;
@@ -29,6 +29,9 @@ export default function SelectorPage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  // The visible panel box — measured so the native window can sit exactly on top
+  // of the selected text for whatever stage is showing.
+  const panelRef = useRef<HTMLElement>(null);
 
   const refreshSelection = useCallback(async () => {
     try {
@@ -89,12 +92,39 @@ export default function SelectorPage() {
     return () => window.removeEventListener("blur", handleBlur);
   }, [closeSelector, expanded]);
 
+  // Keep the native window sized to the panel's REAL height at all times, so it
+  // sits exactly above the selection and is never clipped. A ResizeObserver
+  // catches every height change — select bar → "Rewriting…" → result — including
+  // mid-animation reflow, which discrete state-based measuring missed (that was
+  // the "tone bar cut in half while rewriting" bug).
+  useEffect(() => {
+    if (!expanded) return;
+    const el = panelRef.current;
+    if (!el) return;
+    const report = () => {
+      const panelHeight = Math.ceil(el.getBoundingClientRect().height);
+      if (panelHeight > 0) {
+        void invoke("position_selector_panel", { panelHeight }).catch(() => {});
+      }
+    };
+    report();
+    const observer = new ResizeObserver(report);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [expanded]);
+
   const openOptions = async () => {
-    await refreshSelection();
+    // Single payload fetch — set the current selection and gate on
+    // rephrasability in one pass (the old double-invoke added needless latency
+    // to the very click we want to feel instant).
+    let payload: DesktopSelection | null = null;
+    try {
+      payload = await invoke<DesktopSelection | null>("get_selector_payload");
+    } catch {
+      payload = null;
+    }
+    setSelection(payload);
     // Ground rule: only expand tone panel for rephrashable text
-    const payload = await (async () => {
-      try { return await invoke<{ text: string } | null>("get_selector_payload"); } catch { return null; }
-    })();
     if (payload?.text && !isRephrashable(payload.text)) return;
     setExpanded(true);
     setPopupStage("select");
@@ -151,13 +181,46 @@ export default function SelectorPage() {
     setCopied(false);
 
     try {
+      // The selector runs on tauri://localhost and calls the rewrite API
+      // cross-origin, so the Clerk cookie is never sent. Authenticate instead
+      // with the short-lived session token the editor window pumps into Rust;
+      // without it the API can't identify the user and the rewrite wouldn't
+      // count against their daily limit. The X-Huu-Client marker lets the API
+      // refuse uncounted anonymous rewrites from the desktop (see route.ts).
+      let token: string | null = null;
+      try {
+        token = await invoke<string | null>("get_session_token");
+      } catch {
+        token = null;
+      }
+
       const res = await fetch(humanizeEndpoint(), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Huu-Client": "desktop-selector",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ text: selection.text, tones: selectedTones }),
       });
 
       const data = await res.json();
+
+      // Daily free limit hit — show the upgrade panel instead of a raw error.
+      if (res.status === 429 || data.error === "usage_limit_reached") {
+        setPopupStage("limit");
+        return;
+      }
+
+      // No valid session token reached the API (editor signed out or token
+      // expired). Don't silently hand out a free, uncounted rewrite — prompt
+      // the user to open huumanity so a fresh token can be minted.
+      if (res.status === 401 || data.error === "auth_required") {
+        setError("Open huumanity and sign in to keep rewriting.");
+        setPopupStage("select");
+        return;
+      }
+
       if (!res.ok || !data.result) {
         throw new Error(data.error ?? "Could not rewrite this text.");
       }
@@ -214,6 +277,21 @@ export default function SelectorPage() {
     setError("");
   };
 
+  // "Upgrade to Pro" from the limit panel — open the editor's Plans & Billing
+  // screen (handled natively: brings the main window forward and navigates it to
+  // /editor?settings=billing) and close the selector overlay.
+  const handleUpgrade = async () => {
+    try {
+      await invoke("open_billing");
+    } catch (err) {
+      setError(
+        typeof err === "string" ? err : "Could not open Plans & Billing."
+      );
+      return;
+    }
+    resetPopup();
+  };
+
   const canReplaceSelection = selection?.canReplace ?? false;
 
   if (!expanded) {
@@ -249,52 +327,33 @@ export default function SelectorPage() {
 
   return (
     <main
-      className="flex h-screen w-screen flex-col items-center justify-end bg-transparent p-2"
+      className="flex h-screen w-screen flex-col items-center justify-end bg-transparent p-3"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           void closeSelector();
         }
       }}
     >
-      {/* Minimal pill bar — mirrors the website demo: white box, bright yellow
-          border, no black header, no drop shadow, single row, Jost font. A
-          subtle gray X sits in the top-right corner. Anchored to the bottom of
-          the (transparent) window so it appears directly above the selection. */}
+      {/* Mirrors the website's tone bar EXACTLY: white box, bright yellow
+          border, single row of tone pills + a round arrow button. No black
+          header, no always-on close — the X appears only in the result stage,
+          just like the site. Anchored to the bottom of the transparent window
+          so it sits directly above the selected text. */}
       <section
-        className="relative w-fit max-w-full overflow-hidden rounded-2xl border-2 border-[#fff700] bg-white"
+        ref={panelRef}
+        className="relative w-fit max-w-full rounded-2xl border-2 border-[#fff700] bg-white shadow-[0_6px_20px_rgba(0,0,0,0.12)]"
         onMouseDown={(event) => event.stopPropagation()}
       >
-        {/* Subtle, always-available close. Smaller than the dot's arrow. */}
-        <button
-          onClick={closeSelector}
-          aria-label="Close"
-          className="absolute right-1.5 top-1.5 z-10 flex h-4 w-4 items-center justify-center rounded-full text-neutral-300 transition hover:bg-neutral-100 hover:text-neutral-600"
-        >
-          <svg
-            width="10"
-            height="10"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="3"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-
-        <div className="p-3">
+        <div className="p-2">
           {popupStage === "select" && (
-            <div className="flex items-center gap-1.5 pr-5">
+            <div className="flex items-center gap-1.5">
               {TONES.map((tone) => {
                 const isOn = selectedTones.includes(tone);
                 return (
                   <button
                     key={tone}
                     onClick={() => toggleTone(tone)}
-                    className={`whitespace-nowrap rounded-full px-3 py-1.5 text-[12px] font-semibold transition-colors ${
+                    className={`whitespace-nowrap rounded-full px-3 py-1 text-[12px] font-semibold transition-colors ${
                       isOn
                         ? "bg-[#fff700] text-black ring-2 ring-black"
                         : "bg-neutral-100 text-black hover:bg-neutral-200"
@@ -308,11 +367,11 @@ export default function SelectorPage() {
                 onClick={handleGenerate}
                 disabled={selectedTones.length === 0}
                 aria-label="Generate"
-                className="ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 border-[#fff700] text-black transition hover:bg-[#fff700] disabled:cursor-not-allowed disabled:opacity-40"
+                className="ml-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 border-[#fff700] text-black transition hover:bg-[#fff700] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <svg
-                  width="14"
-                  height="14"
+                  width="13"
+                  height="13"
                   viewBox="0 0 24 24"
                   fill="none"
                   stroke="currentColor"
@@ -328,7 +387,7 @@ export default function SelectorPage() {
           )}
 
           {popupStage === "loading" || isGenerating ? (
-            <div className="w-[380px] max-w-full space-y-2.5 py-1 pr-5">
+            <div className="w-[360px] max-w-full space-y-2.5 px-1 py-1">
               <div className="huu-shimmer h-2.5 w-full rounded-full" />
               <div className="huu-shimmer h-2.5 w-11/12 rounded-full" />
               <div className="huu-shimmer h-2.5 w-4/5 rounded-full" />
@@ -337,8 +396,28 @@ export default function SelectorPage() {
               </p>
             </div>
           ) : popupStage === "result" && resultText ? (
-            <div className="w-[380px] max-w-full">
-              <p className="mb-3 max-h-40 overflow-auto whitespace-pre-wrap pr-5 text-[13px] leading-6 text-neutral-800">
+            <div className="w-[360px] max-w-full px-1">
+              {/* Close — result stage only, matching the website. */}
+              <button
+                onClick={closeSelector}
+                aria-label="Close"
+                className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full text-neutral-400 transition hover:bg-neutral-100 hover:text-black"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+              <p className="mb-3 mt-1 max-h-40 overflow-auto whitespace-pre-wrap pr-6 text-[13px] leading-6 text-neutral-800">
                 {resultText}
               </p>
               <div className="flex items-center justify-between gap-2">
@@ -396,6 +475,46 @@ export default function SelectorPage() {
                     </button>
                   ) : null}
                 </div>
+              </div>
+            </div>
+          ) : popupStage === "limit" ? (
+            // Daily free limit reached — same box chrome as the loading/result
+            // stages (white panel, yellow border), with an upsell + CTA. The
+            // button opens the editor's Plans & Billing screen natively.
+            <div className="w-[360px] max-w-full px-1">
+              {/* Close — top-right, matching the result stage. */}
+              <button
+                onClick={closeSelector}
+                aria-label="Close"
+                className="absolute right-2 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full text-neutral-400 transition hover:bg-neutral-100 hover:text-black"
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+              <p className="mb-1.5 mt-1 pr-6 text-[15px] font-extrabold leading-tight text-black">
+                Daily rewrite limit reached
+              </p>
+              <div className="flex items-end justify-between gap-3">
+                <p className="text-[12px] leading-5 text-neutral-600">
+                  Upgrade to huumanity Pro to have unlimited rewrites.
+                </p>
+                <button
+                  onClick={handleUpgrade}
+                  className="shrink-0 whitespace-nowrap rounded-full bg-black px-4 py-2 text-[11px] font-bold text-[#fff700] transition hover:brightness-110"
+                >
+                  Upgrade to Pro
+                </button>
               </div>
             </div>
           ) : null}
