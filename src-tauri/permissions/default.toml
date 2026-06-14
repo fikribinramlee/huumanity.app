@@ -19,5 +19,9 @@ commands.allow = [
   "get_selector_health",
   "show_selector_window",
   "expand_selector_window",
+  "position_selector_panel",
   "hide_selector_window",
+  "open_billing",
+  "set_session_token",
+  "get_session_token",
 ]
