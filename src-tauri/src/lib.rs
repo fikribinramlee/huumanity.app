@@ -1,7 +1,7 @@
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
@@ -30,6 +30,13 @@ struct SelectorState {
     // checks this and leaves the window completely alone so it never hides or
     // repositions the panel out from under the user.
     popup_open: Mutex<bool>,
+    // When the selector panel was last shown or hidden. On macOS, hiding the
+    // overlay while huu is the active app makes the OS fire a `Reopen` event
+    // (active app, no visible windows) — which we must NOT treat like a real
+    // dock-icon click, or clicking "Copy"/closing the panel would pop the editor
+    // window into view. We suppress `Reopen`-driven window surfacing for a short
+    // window after any selector activity. `None` until the first interaction.
+    last_selector_activity: Mutex<Option<Instant>>,
     // The latest short-lived Clerk session token, pushed by the authenticated
     // editor window. The selector overlay runs on `tauri://localhost` and cannot
     // send the Clerk cookie cross-origin to huumanity.app, so it attaches this
@@ -126,7 +133,13 @@ pub fn run() {
         .run(|app, event| {
             #[cfg(target_os = "macos")]
             if let RunEvent::Reopen { .. } = event {
-                if let Err(err) = show_main_window(app) {
+                // Ignore the Reopen that macOS fires as a side effect of the
+                // selector overlay hiding (e.g. clicking "Copy" or closing the
+                // panel). Only a genuine dock-icon click — with no recent
+                // selector activity — should surface the editor window.
+                if selector_recently_active(&app.state::<SelectorState>()) {
+                    debug_log("ignoring Reopen triggered by selector hide");
+                } else if let Err(err) = show_main_window(app) {
                     debug_log(&format!("show main window failed: {err}"));
                 }
             }
@@ -666,6 +679,7 @@ fn expand_selector_window(
     if let Ok(mut open) = state.popup_open.lock() {
         *open = true;
     }
+    mark_selector_activity(&state);
 
     let window = ensure_selector_window(&app)?;
     // Provisional placement using a select-stage height estimate so the first
@@ -782,6 +796,28 @@ fn position_selector_panel(
     place_selector_panel(&app, &window, &selection, panel_height)
 }
 
+/// Record that the selector overlay was just shown or hidden. Used to suppress
+/// the macOS `Reopen`-driven editor pop-up that otherwise fires when the overlay
+/// hides while huu is the active app (see the `RunEvent::Reopen` handler).
+fn mark_selector_activity(state: &SelectorState) {
+    if let Ok(mut at) = state.last_selector_activity.lock() {
+        *at = Some(Instant::now());
+    }
+}
+
+/// True if the selector was active within the last ~2s — i.e. a `Reopen` right
+/// now is almost certainly an artifact of the overlay hiding, not a real dock
+/// click, so we should not surface the editor window.
+fn selector_recently_active(state: &SelectorState) -> bool {
+    state
+        .last_selector_activity
+        .lock()
+        .ok()
+        .and_then(|at| *at)
+        .map(|at| at.elapsed() < Duration::from_millis(2000))
+        .unwrap_or(false)
+}
+
 #[tauri::command]
 fn hide_selector_window(
     app: tauri::AppHandle,
@@ -790,6 +826,7 @@ fn hide_selector_window(
     if let Ok(mut open) = state.popup_open.lock() {
         *open = false;
     }
+    mark_selector_activity(&state);
     if let Some(window) = app.get_webview_window("selector") {
         window.hide().map_err(|e| e.to_string())?;
     }
