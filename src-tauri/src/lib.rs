@@ -891,38 +891,34 @@ fn get_session_token(state: State<'_, SelectorState>) -> Result<Option<String>, 
 
 fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow, String> {
     if let Some(window) = app.get_webview_window("selector") {
+        #[cfg(any(target_os = "macos", target_os = "linux"))]
         let _ = window.set_visible_on_all_workspaces(true);
         let _ = window.set_always_on_top(true);
         return Ok(window);
     }
 
     // The selector is a NATIVE OVERLAY and must ALWAYS load from the bundled
-    // local frontend (`/selector`) — never the remote site. This is the fix for
-    // "none of my changes ever appear": in a release build `webview_url` returns
-    // `External("https://huumanity.app/selector")`, so the packaged app fetched
-    // the OLD deployed page over the internet and ignored every local edit. The
-    // main editor window stays remote (it needs first-party Clerk cookies for
-    // Pro/auth); the selector has no such need and MUST track local builds.
-    WebviewWindowBuilder::new(app, "selector", WebviewUrl::App("/selector".into()))
+    // local frontend (`/selector`) — never the remote site. The main editor
+    // window stays remote (needs first-party Clerk cookies); the selector has
+    // no such need and MUST track local builds.
+    let builder = WebviewWindowBuilder::new(app, "selector", WebviewUrl::App("/selector".into()))
         .title("huu selector")
         .inner_size(SELECTOR_DOT_SIZE, SELECTOR_DOT_SIZE)
         .decorations(false)
         .transparent(true)
-        // No native window drop-shadow — that soft square is what showed up as a
-        // "frame / lines" around the circle. The button carries its own subtle
-        // CSS shadow instead.
         .shadow(false)
         .always_on_top(true)
-        .visible_on_all_workspaces(true)
         .visible(false)
-        .skip_taskbar(true)
-        // The overlay is never the key window (the user's app keeps focus). On
-        // macOS a click on a non-key window is normally swallowed just to focus
-        // it — that was the "I have to click the yellow dot twice" bug. Accepting
-        // first mouse delivers that first click straight to the button.
-        .accept_first_mouse(true)
-        .build()
-        .map_err(|e| e.to_string())
+        .skip_taskbar(true);
+
+    // macOS: keep all workspaces visible and accept first mouse so the first
+    // click on the dot lands without needing a prior focus click.
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .visible_on_all_workspaces(true)
+        .accept_first_mouse(true);
+
+    builder.build().map_err(|e| e.to_string())
 }
 
 fn start_selection_watcher(app: tauri::AppHandle) {
@@ -1055,10 +1051,11 @@ fn debug_log(message: &str) {
         .map(|duration| duration.as_secs())
         .unwrap_or_default();
 
+    let log_path = std::env::temp_dir().join("huu-selector.log");
     if let Ok(mut file) = OpenOptions::new()
         .create(true)
         .append(true)
-        .open("/tmp/huu-selector.log")
+        .open(&log_path)
     {
         let _ = writeln!(file, "[{timestamp}] {message}");
     }
@@ -1100,7 +1097,13 @@ fn activate_source_process(pid: i32) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn activate_source_process(pid: i32) -> Result<(), String> {
+    windows_accessibility::bring_process_to_front(pid as u32);
+    Ok(())
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn activate_source_process(_pid: i32) -> Result<(), String> {
     Ok(())
 }
@@ -1162,7 +1165,12 @@ fn platform_current_selection() -> Result<Option<DesktopSelection>, String> {
     Ok(platform_current_selection_probe().selection)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn platform_current_selection() -> Result<Option<DesktopSelection>, String> {
+    Ok(windows_accessibility::current_selection_probe().selection)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn platform_current_selection() -> Result<Option<DesktopSelection>, String> {
     Ok(None)
 }
@@ -1172,7 +1180,12 @@ fn platform_current_selection_probe() -> SelectionProbe {
     macos_accessibility::current_selection_probe()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn platform_current_selection_probe() -> SelectionProbe {
+    windows_accessibility::current_selection_probe()
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn platform_current_selection_probe() -> SelectionProbe {
     SelectionProbe {
         selection: None,
@@ -1745,13 +1758,203 @@ mod macos_accessibility {
 fn send_shortcut(key: &str) -> Result<(), String> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
+    let ch = match key {
+        "v" => 'v',
+        "c" => 'c',
+        other => return Err(format!("unsupported shortcut key: {other}")),
+    };
     let mut enigo = Enigo::new(&Settings::default()).map_err(|e| e.to_string())?;
-    enigo
-        .key(Key::Control, Direction::Press)
-        .map_err(|e| e.to_string())?;
-    enigo.text(key).map_err(|e| e.to_string())?;
-    enigo
-        .key(Key::Control, Direction::Release)
-        .map_err(|e| e.to_string())?;
+    enigo.key(Key::Control, Direction::Press).map_err(|e| e.to_string())?;
+    enigo.key(Key::Unicode(ch), Direction::Click).map_err(|e| e.to_string())?;
+    enigo.key(Key::Control, Direction::Release).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Windows text-selection via UI Automation
+// ─────────────────────────────────────────────────────────────────────────────
+#[cfg(target_os = "windows")]
+mod windows_accessibility {
+    use windows::{
+        core::Interface,
+        Win32::{
+            Foundation::POINT,
+            System::Com::{
+                CoInitializeEx, SafeArrayAccessData, SafeArrayGetLBound, SafeArrayGetUBound,
+                SafeArrayUnaccessData, COINIT_APARTMENTTHREADED,
+            },
+            UI::{
+                Accessibility::{
+                    CUIAutomation, IUIAutomation, IUIAutomationTextPattern,
+                    UIA_TextPatternId,
+                },
+                WindowsAndMessaging::{
+                    EnumWindows, GetCursorPos, GetWindowThreadProcessId, IsWindowVisible,
+                    SetForegroundWindow,
+                },
+            },
+        },
+    };
+    use windows::Win32::Foundation::{BOOL, HWND, LPARAM};
+
+    use super::{DesktopSelection, SelectionProbe};
+
+    // COM must be initialised once per thread. We call this at the start of every
+    // probe — CoInitializeEx returns S_FALSE (not an error) if already done.
+    fn ensure_com() {
+        unsafe {
+            let _ = CoInitializeEx(None, COINIT_APARTMENTTHREADED);
+        }
+    }
+
+    pub fn current_selection_probe() -> SelectionProbe {
+        ensure_com();
+        match try_get_selection() {
+            Ok(Some(sel)) => SelectionProbe {
+                status: format!(
+                    "selection found len={} can_replace={}",
+                    sel.text.len(),
+                    sel.can_replace
+                ),
+                selection: Some(sel),
+            },
+            Ok(None) => SelectionProbe {
+                selection: None,
+                status: "no text selected".to_string(),
+            },
+            Err(e) => SelectionProbe {
+                selection: None,
+                status: format!("uia: {e}"),
+            },
+        }
+    }
+
+    fn try_get_selection() -> windows::core::Result<Option<DesktopSelection>> {
+        unsafe {
+            // Get the UI Automation instance (in-process COM server).
+            let automation: IUIAutomation = windows::core::CoCreateInstance(
+                &CUIAutomation,
+                None,
+                windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
+            )?;
+
+            // Get the element that currently has keyboard focus.
+            let element = automation.GetFocusedElement()?;
+
+            // Ignore focus on our own process (selector window is focused).
+            let pid = element.CurrentProcessId()? as u32;
+            if pid == std::process::id() {
+                return Ok(None);
+            }
+
+            // Check if the focused element supports the Text pattern.
+            let pattern_unk = match element.GetCurrentPattern(UIA_TextPatternId) {
+                Ok(p) => p,
+                Err(_) => return Ok(None),
+            };
+            let text_pattern: IUIAutomationTextPattern = pattern_unk.cast()?;
+
+            // Get the current text selection (array of ranges).
+            let selection_array = text_pattern.GetSelection()?;
+            if selection_array.Length()? == 0 {
+                return Ok(None);
+            }
+
+            let range = selection_array.GetElement(0)?;
+            let text = range.GetText(-1)?.to_string();
+            if text.trim().is_empty() {
+                return Ok(None);
+            }
+
+            // Bounding rect of the first selected range (for button placement).
+            let (x, y, width, height) = get_range_bounds(&range);
+
+            Ok(Some(DesktopSelection {
+                text,
+                x,
+                y,
+                width,
+                height,
+                source_pid: Some(pid as i32),
+                can_replace: true,
+            }))
+        }
+    }
+
+    unsafe fn get_range_bounds(
+        range: &windows::Win32::UI::Accessibility::IUIAutomationTextRange,
+    ) -> (f64, f64, f64, f64) {
+        // GetBoundingRectangles returns a SAFEARRAY of DOUBLE:
+        // [left, top, width, height, left2, top2, ...] (one rect per line of text).
+        // We use the first rect; fall back to cursor position on any error.
+        let sa = match range.GetBoundingRectangles() {
+            Ok(p) if !p.is_null() => p,
+            _ => return cursor_pos_rect(),
+        };
+
+        let lb = match SafeArrayGetLBound(sa, 1) {
+            Ok(v) => v,
+            Err(_) => return cursor_pos_rect(),
+        };
+        let ub = match SafeArrayGetUBound(sa, 1) {
+            Ok(v) => v,
+            Err(_) => return cursor_pos_rect(),
+        };
+        if ub - lb + 1 < 4 {
+            return cursor_pos_rect();
+        }
+
+        let mut raw: *mut std::ffi::c_void = std::ptr::null_mut();
+        if SafeArrayAccessData(sa, &mut raw).is_err() || raw.is_null() {
+            return cursor_pos_rect();
+        }
+
+        let count = (ub - lb + 1) as usize;
+        let slice = std::slice::from_raw_parts(raw as *const f64, count);
+        let result = (slice[0], slice[1], slice[2], slice[3]);
+        let _ = SafeArrayUnaccessData(sa);
+        result
+    }
+
+    fn cursor_pos_rect() -> (f64, f64, f64, f64) {
+        unsafe {
+            let mut pt = POINT::default();
+            let _ = GetCursorPos(&mut pt);
+            (pt.x as f64, pt.y as f64, 1.0, 1.0)
+        }
+    }
+
+    // Find the foreground window owned by `target_pid` and call SetForegroundWindow
+    // on it so the source app regains focus before we send Ctrl+V.
+    pub fn bring_process_to_front(target_pid: u32) {
+        struct SearchData {
+            target_pid: u32,
+            found: HWND,
+        }
+
+        unsafe extern "system" fn enum_callback(hwnd: HWND, lparam: LPARAM) -> BOOL {
+            let data = &mut *(lparam.0 as *mut SearchData);
+            let mut win_pid = 0u32;
+            GetWindowThreadProcessId(hwnd, Some(&mut win_pid));
+            if win_pid == data.target_pid && IsWindowVisible(hwnd).as_bool() {
+                data.found = hwnd;
+                return BOOL(0); // stop enumeration
+            }
+            BOOL(1)
+        }
+
+        let mut data = SearchData {
+            target_pid,
+            found: HWND::default(),
+        };
+        unsafe {
+            let _ = EnumWindows(
+                Some(enum_callback),
+                LPARAM(&mut data as *mut SearchData as isize),
+            );
+            if data.found != HWND::default() {
+                let _ = SetForegroundWindow(data.found);
+            }
+        }
+    }
 }

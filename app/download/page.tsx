@@ -1,25 +1,40 @@
+import { headers } from "next/headers";
 import type { Metadata } from "next";
 import { DownloadPageClient } from "./DownloadPageClient";
 
 export const metadata: Metadata = {
   title: "Download huumanity desktop app",
   description:
-    "Download the huumanity desktop app and humanize text anywhere on your Mac.",
+    "Download the huumanity desktop app and humanize text anywhere on your computer.",
 };
 
-// The DMG is too large for Vercel's static file limit (~100 MB compressed).
-// It must be hosted on GitHub Releases (or R2/S3).
-// Set NEXT_PUBLIC_DOWNLOAD_URL in Vercel dashboard → Settings → Environment Variables
-// to the GitHub Release asset download URL, e.g.:
-//   https://github.com/fikribinramlee/huumanity.app/releases/download/v0.1.0/huumanity_0.1.0_aarch64.dmg
-const DOWNLOAD_FILE = "huu-mac.dmg";
-const DOWNLOAD_URL = process.env.NEXT_PUBLIC_DOWNLOAD_URL ?? "";
+// Set these in Vercel → Settings → Environment Variables after each release.
+//   NEXT_PUBLIC_DOWNLOAD_URL_MAC  → GitHub Release .dmg URL
+//   NEXT_PUBLIC_DOWNLOAD_URL_WIN  → GitHub Release .exe URL (NSIS installer)
+const MAC_URL = process.env.NEXT_PUBLIC_DOWNLOAD_URL_MAC ?? process.env.NEXT_PUBLIC_DOWNLOAD_URL ?? "";
+const WIN_URL = process.env.NEXT_PUBLIC_DOWNLOAD_URL_WIN ?? "";
 
-export default function DownloadPage() {
+function detectOS(ua: string): "mac" | "windows" | "other" {
+  const u = ua.toLowerCase();
+  if (u.includes("windows")) return "windows";
+  if (u.includes("mac")) return "mac";
+  return "other";
+}
+
+export default async function DownloadPage() {
+  const headersList = await headers();
+  const ua = headersList.get("user-agent") ?? "";
+  const os = detectOS(ua);
+
+  const downloadUrl = os === "windows" ? WIN_URL : MAC_URL;
+  const downloadFileName =
+    os === "windows" ? "huu-setup.exe" : "huu-mac.dmg";
+
   return (
     <DownloadPageClient
-      downloadUrl={DOWNLOAD_URL}
-      downloadFileName={DOWNLOAD_FILE}
+      downloadUrl={downloadUrl}
+      downloadFileName={downloadFileName}
+      detectedOs={os}
     />
   );
 }

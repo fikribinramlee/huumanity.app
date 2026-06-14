@@ -6,9 +6,10 @@ import { useCallback, useEffect } from "react";
 type Props = {
   downloadUrl: string;
   downloadFileName: string;
+  detectedOs: "mac" | "windows" | "other";
 };
 
-export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
+export function DownloadPageClient({ downloadUrl, downloadFileName, detectedOs }: Props) {
   const hasUrl = Boolean(downloadUrl);
 
   const triggerDownload = useCallback(() => {
@@ -22,12 +23,29 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
     document.body.removeChild(link);
   }, [downloadFileName, downloadUrl]);
 
-  // Auto-download once when the page loads (Wispr Flow style).
   useEffect(() => {
     if (!hasUrl) return;
     const timer = window.setTimeout(triggerDownload, 600);
     return () => window.clearTimeout(timer);
   }, [hasUrl, triggerDownload]);
+
+  const isWindows = detectedOs === "windows";
+
+  const steps = isWindows
+    ? [
+        "Run the downloaded huu installer",
+        "Open the app and sign in",
+        "Finish the quick setup and start rephrasing anywhere",
+      ]
+    : [
+        "Open the downloaded huu file",
+        "Open the app and sign up",
+        "Finish the quick setup and start rephrasing anywhere",
+      ];
+
+  const comingSoonNote = isWindows
+    ? "The Windows build is on its way. Check back soon."
+    : "We're getting the latest build ready. Check back in a few minutes.";
 
   return (
     <div className="min-h-screen flex flex-col lg:flex-row">
@@ -43,18 +61,12 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
           </h1>
 
           <ol className="space-y-5 text-base sm:text-lg text-neutral-200">
-            <li className="flex gap-4">
-              <span className="font-display text-[#fff700] shrink-0">1.</span>
-              <span>Open the downloaded huu file</span>
-            </li>
-            <li className="flex gap-4">
-              <span className="font-display text-[#fff700] shrink-0">2.</span>
-              <span>Open the app and sign up</span>
-            </li>
-            <li className="flex gap-4">
-              <span className="font-display text-[#fff700] shrink-0">3.</span>
-              <span>Finish the quick setup and start rephrasing anywhere</span>
-            </li>
+            {steps.map((step, i) => (
+              <li key={i} className="flex gap-4">
+                <span className="font-display text-[#fff700] shrink-0">{i + 1}.</span>
+                <span>{step}</span>
+              </li>
+            ))}
           </ol>
 
           {hasUrl ? (
@@ -75,8 +87,9 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
                 </div>
               </div>
               <p className="mt-5 text-xs leading-5 text-neutral-500">
-                Your computer may ask you to confirm the download or grant huu
-                permissions the first time you open it.
+                {isWindows
+                  ? "Windows may ask you to confirm the installer the first time you run it. Click \"More info\" then \"Run anyway\"."
+                  : "Your computer may ask you to confirm the download or grant huu permissions the first time you open it."}
               </p>
               <p className="mt-3 text-sm text-neutral-400">
                 Need another copy?{" "}
@@ -92,27 +105,23 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
           ) : (
             <div className="mt-9 rounded-3xl border border-white/10 bg-white/5 p-5">
               <p className="text-sm font-bold text-white">Download coming soon</p>
-              <p className="mt-2 text-sm text-neutral-400">
-                We&apos;re getting the latest build ready. Check back in a few minutes.
-              </p>
+              <p className="mt-2 text-sm text-neutral-400">{comingSoonNote}</p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Right — browser mockup (Wispr-style visual guide) */}
+      {/* Right — visual guide */}
       <div className="flex-1 bg-[#fdfbe7] flex items-center justify-center px-8 py-16 lg:py-0 relative overflow-hidden">
         <div className="absolute inset-0 opacity-25 bg-[radial-gradient(circle_at_30%_40%,#fff700_0%,transparent_55%)]" />
 
         <div className="relative w-full max-w-xl">
-          {/* Browser chrome */}
           <div className="rounded-2xl bg-white shadow-xl border border-black/10 overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 bg-neutral-100 border-b border-black/5">
               <span className="w-3 h-3 rounded-full bg-black/10" />
               <span className="w-3 h-3 rounded-full bg-black/10" />
               <span className="w-3 h-3 rounded-full bg-black/10" />
               <div className="flex-1 mx-4 h-7 rounded-lg bg-black/5" />
-              {/* Download icon highlight */}
               <div className="relative">
                 <div className="w-8 h-8 rounded-full bg-[#fff700] flex items-center justify-center shadow-lg shadow-[#fff700]/30">
                   <svg
@@ -130,7 +139,6 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
                     <line x1="12" y1="15" x2="12" y2="3" />
                   </svg>
                 </div>
-                {/* Cursor */}
                 <svg
                   className="absolute -bottom-3 -right-4 drop-shadow-md"
                   width="28"
@@ -145,7 +153,6 @@ export function DownloadPageClient({ downloadUrl, downloadFileName }: Props) {
               </div>
             </div>
 
-            {/* Page content skeleton */}
             <div className="bg-white p-8 space-y-4">
               <div className="h-4 rounded-full bg-neutral-200 w-3/4" />
               <div className="h-3 rounded-full bg-neutral-100 w-full" />
