@@ -1780,8 +1780,12 @@ mod windows_accessibility {
         Win32::{
             Foundation::POINT,
             System::Com::{
-                CoInitializeEx, SafeArrayAccessData, SafeArrayGetLBound, SafeArrayGetUBound,
-                SafeArrayUnaccessData, COINIT_APARTMENTTHREADED,
+                CoCreateInstance, CoInitializeEx, CLSCTX_INPROC_SERVER,
+                COINIT_APARTMENTTHREADED,
+            },
+            System::Ole::{
+                SafeArrayAccessData, SafeArrayGetLBound, SafeArrayGetUBound,
+                SafeArrayUnaccessData,
             },
             UI::{
                 Accessibility::{
@@ -1832,10 +1836,10 @@ mod windows_accessibility {
     fn try_get_selection() -> windows::core::Result<Option<DesktopSelection>> {
         unsafe {
             // Get the UI Automation instance (in-process COM server).
-            let automation: IUIAutomation = windows::core::CoCreateInstance(
+            let automation: IUIAutomation = CoCreateInstance(
                 &CUIAutomation,
                 None,
-                windows::Win32::System::Com::CLSCTX_INPROC_SERVER,
+                CLSCTX_INPROC_SERVER,
             )?;
 
             // Get the element that currently has keyboard focus.

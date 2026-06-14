@@ -1,15 +1,36 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type Props = {
-  downloadUrl: string;
-  downloadFileName: string;
-  detectedOs: "mac" | "windows" | "other";
+  macUrl: string;
+  winUrl: string;
 };
 
-export function DownloadPageClient({ downloadUrl, downloadFileName, detectedOs }: Props) {
+type DetectedOs = "mac" | "windows" | "other";
+
+function detectOs(): DetectedOs {
+  if (typeof navigator === "undefined") return "other";
+  const ua = `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
+  if (ua.includes("win")) return "windows";
+  if (ua.includes("mac")) return "mac";
+  return "other";
+}
+
+export function DownloadPageClient({ macUrl, winUrl }: Props) {
+  // Default to mac on the server render; correct it on mount once we can read
+  // the real user agent. Avoids a hydration mismatch by only switching after
+  // the first client effect.
+  const [os, setOs] = useState<DetectedOs>("mac");
+
+  useEffect(() => {
+    setOs(detectOs());
+  }, []);
+
+  const isWindows = os === "windows";
+  const downloadUrl = isWindows ? winUrl : macUrl;
+  const downloadFileName = isWindows ? "huu-setup.exe" : "huu-mac.dmg";
   const hasUrl = Boolean(downloadUrl);
 
   const triggerDownload = useCallback(() => {
@@ -23,13 +44,12 @@ export function DownloadPageClient({ downloadUrl, downloadFileName, detectedOs }
     document.body.removeChild(link);
   }, [downloadFileName, downloadUrl]);
 
+  // Auto-download once the OS is known and a URL exists.
   useEffect(() => {
     if (!hasUrl) return;
     const timer = window.setTimeout(triggerDownload, 600);
     return () => window.clearTimeout(timer);
   }, [hasUrl, triggerDownload]);
-
-  const isWindows = detectedOs === "windows";
 
   const steps = isWindows
     ? [
@@ -88,7 +108,7 @@ export function DownloadPageClient({ downloadUrl, downloadFileName, detectedOs }
               </div>
               <p className="mt-5 text-xs leading-5 text-neutral-500">
                 {isWindows
-                  ? "Windows may ask you to confirm the installer the first time you run it. Click \"More info\" then \"Run anyway\"."
+                  ? "Windows may warn you the first time you run the installer. Click \"More info\" then \"Run anyway\"."
                   : "Your computer may ask you to confirm the download or grant huu permissions the first time you open it."}
               </p>
               <p className="mt-3 text-sm text-neutral-400">
