@@ -65,7 +65,11 @@ jobs:
           name: ${{ github.ref_name }}
           draft: false
           prerelease: false
+          # Don't clobber assets already on the release (e.g. the Mac DMG we
+          # upload separately) — just add the Windows installer alongside them.
           files: ${{ steps.installer.outputs.path }}
-          repository: fikribinramlee/huumanity-releases
         env:
-          GITHUB_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          # The public huumanity.app repo hosts releases directly, so the built-in
+          # token (granted contents:write above) is all we need — no separate repo
+          # or RELEASES_TOKEN secret required.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
