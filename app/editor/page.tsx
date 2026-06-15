@@ -12,7 +12,7 @@ import { HuuLogo } from "../components/HuuLogo";
 
 type View = "home" | "scratchpad";
 type SettingsTab = "account" | "billing";
-type AuthState = "login" | "signing-in" | "verified" | "app";
+type AuthState = "login" | "verified" | "app";
 type Plan = "free" | "pro";
 
 type SubscriptionStatus = {
@@ -614,8 +614,10 @@ useEffect(() => {
     if (isTauriRuntime()) {
       // Desktop: sign in / sign up in the system browser. The success page
       // (/app-verified) hands a one-time sign-in token back via the
-      // `huu://open?ticket=…` deep link, which this app redeems on return.
-      setAuthState("signing-in"); // show the "finish in your browser" screen
+      // `huu://open?ticket=…` deep link, which this app redeems on return —
+      // landing the user straight in the app UI. We intentionally stay on the
+      // login screen here (no separate "finish signing in" waiting page): the
+      // browser handoff + deep link is the whole flow.
       try {
         await openUrl("https://huumanity.app/sign-up?next=/app-verified");
       } catch {
@@ -760,45 +762,6 @@ useEffect(() => {
   }
 
   // ── Auth: Waiting for the user to finish in the system browser ─────────────
-
-  if (authState === "signing-in") {
-    return (
-      <main className="flex h-screen w-screen flex-col items-center overflow-y-auto bg-white text-black">
-        {/* Top bar — back button to return to the menu at any time */}
-        <div className="flex w-full max-w-lg items-center px-6 pt-8">
-          <button
-            onClick={() => setAuthState("login")}
-            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 -ml-2 text-sm font-bold text-neutral-500 transition hover:text-black"
-          >
-            <IcChevronLeft />
-            Back
-          </button>
-        </div>
-
-        <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 pb-12 text-center max-w-sm mx-auto">
-          <span className="flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-[#fff700] ring-2 ring-black shadow-[0_4px_0_rgba(0,0,0,0.12)]">
-            <span className="h-6 w-6 animate-spin rounded-full border-[3px] border-black/20 border-t-black" />
-          </span>
-          <div>
-            <h1 className="font-display text-3xl leading-tight">
-              Finish signing in
-            </h1>
-            <p className="mt-2 text-sm text-neutral-500 leading-6">
-              We opened your browser to sign in. Once you&apos;re done, click{" "}
-              <span className="font-bold text-black">Open huumanity</span> and
-              you&apos;ll land right back here.
-            </p>
-          </div>
-          <button
-            onClick={handleSignIn}
-            className="text-sm font-bold text-neutral-500 underline underline-offset-4 transition hover:text-black"
-          >
-            Didn&apos;t open? Try again
-          </button>
-        </div>
-      </main>
-    );
-  }
 
   // ── Auth: Verified screen ──────────────────────────────────────────────────
 
