@@ -2332,12 +2332,7 @@ export default function LandingPage() {
                   {isWaitlist ? (
                     <>{waitlistLabel}</>
                   ) : (
-                    <>
-                      <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                        <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-                      </svg>
-                      Download for macOS
-                    </>
+                    <DownloadCtaContent platform={downloadPlatform} />
                   )}
                 </Link>
                 <a
@@ -2513,12 +2508,7 @@ export default function LandingPage() {
                 {isWaitlist ? (
                   <>{waitlistLabel}</>
                 ) : (
-                  <>
-                    <svg width="13" height="16" viewBox="0 0 18 22" fill="currentColor" aria-hidden="true">
-                      <path d="M14.7 11.6c0-2.7 2.2-4 2.3-4.1-1.3-1.8-3.2-2.1-3.8-2.1-1.6-.2-3.1.9-3.9.9s-2-.9-3.3-.9C4.3 5.4 2.7 6.4 1.8 8c-1.9 3.2-.5 8 1.3 10.6.9 1.3 1.9 2.7 3.3 2.6 1.3-.1 1.8-.8 3.4-.8s2 .8 3.4.8c1.4 0 2.3-1.3 3.2-2.6 1-1.5 1.4-2.9 1.4-3-.1 0-3.1-1.2-3.1-4ZM12.1 3.7c.7-.9 1.2-2 1.1-3.2-1.1 0-2.3.7-3.1 1.6-.7.8-1.3 2-1.1 3.1 1.1.1 2.3-.6 3.1-1.5Z"/>
-                    </svg>
-                    Download for macOS
-                  </>
+                  <DownloadCtaContent platform={downloadPlatform} />
                 )}
               </Link>
             </div>
