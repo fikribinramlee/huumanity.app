@@ -157,6 +157,19 @@ export default function EditorPage() {
   const [profileSaved, setProfileSaved] = useState(false);
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
 
+  // Platform — macOS needs Accessibility + Input Monitoring permissions; Windows
+  // needs none (the global mouse hook + UI Automation work without any grant).
+  // Default to macOS for the server render, correct it on mount. The setup view
+  // only renders after auth resolves, by which point this has settled.
+  const [desktopOs, setDesktopOs] = useState<"macos" | "windows">("macos");
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const ua = `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
+    setDesktopOs(ua.includes("win") ? "windows" : "macos");
+  }, []);
+  const isWindows = desktopOs === "windows";
+  const isMac = desktopOs === "macos";
+
   // Setup
   const [hasCompletedSetup, setHasCompletedSetup] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -510,9 +523,16 @@ export default function EditorPage() {
 
 useEffect(() => {
     if (authState !== "app") return;
-    const id = window.setInterval(() => void refreshSelectorHealth(), 3000);
+    // `get_selector_health` runs a synchronous selection probe (UI Automation on
+    // Windows, AX on macOS) — expensive to fire on a tight loop and the cause of
+    // the Windows lag. Poll fast ONLY during macOS first-run setup, where we need
+    // to react the instant the user toggles a permission. Once set up — and always
+    // on Windows, which has no permission to wait for — poll slowly.
+    const fast = isMac && !hasCompletedSetup;
+    const intervalMs = fast ? 3000 : 30000;
+    const id = window.setInterval(() => void refreshSelectorHealth(), intervalMs);
     return () => window.clearInterval(id);
-  }, [authState, refreshSelectorHealth]);
+  }, [authState, isMac, hasCompletedSetup, refreshSelectorHealth]);
 
   // NOTE: the automatic "show the dot when text is selected" behavior lives
   // entirely in Rust now (a native mouse-up event tap — see
@@ -810,8 +830,12 @@ useEffect(() => {
 
   const selectorHealthRows = [
     {
-      label: "Accessibility",
-      value: selectorHealth?.accessibilityAllowed ? "Allowed" : "Blocked",
+      label: isWindows ? "Access" : "Accessibility",
+      value: selectorHealth?.accessibilityAllowed
+        ? isWindows
+          ? "Ready"
+          : "Allowed"
+        : "Blocked",
       ok: Boolean(selectorHealth?.accessibilityAllowed),
     },
     {
@@ -1094,7 +1118,22 @@ useEffect(() => {
 
               <div className="space-y-4">
 
-                {/* Step 1 — Accessibility */}
+                {/* Windows intro — no permissions needed */}
+                {isWindows && (
+                  <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
+                    <p className="font-black text-base mb-1">
+                      1. You&apos;re ready to go
+                    </p>
+                    <p className="text-sm text-neutral-500 leading-6">
+                      On Windows, huu works right out of the box — no extra
+                      permissions to enable. Select text in any app and the yellow
+                      huu button appears automatically next to it.
+                    </p>
+                  </div>
+                )}
+
+                {/* Step 1 — Accessibility (macOS only) */}
+                {isMac && (
                 <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
                   <p className="font-black text-base mb-1">
                     1. Allow desktop control
@@ -1122,8 +1161,10 @@ useEffect(() => {
                     Status: {detectorStatus}
                   </p>
                 </div>
+                )}
 
-                {/* Step 2 — Input Monitoring */}
+                {/* Step 2 — Input Monitoring (macOS only) */}
+                {isMac && (
                 <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
                   <p className="font-black text-base mb-1">
                     2. Allow input monitoring
@@ -1143,10 +1184,13 @@ useEffect(() => {
                     </button>
                   </div>
                 </div>
+                )}
 
-                {/* Step 3 — Test selection */}
+                {/* Test selection */}
                 <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                  <p className="font-black text-base mb-1">3. Test selection</p>
+                  <p className="font-black text-base mb-1">
+                    {isMac ? "3." : "2."} Test selection
+                  </p>
                   <p className="text-sm text-neutral-500 leading-6 mb-4">
                     Select text in another app, then click Test selection. This
                     is the fallback path while the automatic yellow selector runs
@@ -1165,17 +1209,19 @@ useEffect(() => {
                   )}
                 </div>
 
-                {/* Step 4 — Finish */}
+                {/* Finish */}
                 <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                  <p className="font-black text-base mb-1">4. Start using huu</p>
+                  <p className="font-black text-base mb-1">
+                    {isMac ? "4." : "3."} Start using huu
+                  </p>
                   <p className="text-sm text-neutral-500 leading-6 mb-4">
-                    Once Accessibility is allowed, huu will watch for
-                    highlighted text and show the yellow button when the focused
-                    app exposes the selection to macOS.
+                    {isMac
+                      ? "Once Accessibility is allowed, huu will watch for highlighted text and show the yellow button when the focused app exposes the selection to macOS."
+                      : "huu is already watching for highlighted text. Finish setup and the yellow button will appear whenever you select text in any app."}
                   </p>
                   <button
                     onClick={completeSetup}
-                    disabled={!accessibilityAllowed}
+                    disabled={isMac && !accessibilityAllowed}
                     className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900 disabled:opacity-40"
                   >
                     Finish setup
@@ -1218,7 +1264,7 @@ useEffect(() => {
                       Desktop selector
                     </p>
                     <p className="text-sm font-bold text-white leading-6">
-                      {accessibilityAllowed
+                      {isWindows || accessibilityAllowed
                         ? "Running. Highlight text in any app to see the yellow huu button."
                         : "Accessibility permission needed to use huu on your desktop."}
                     </p>
@@ -1226,7 +1272,7 @@ useEffect(() => {
                       {detectorStatus}
                     </p>
                   </div>
-                  {!accessibilityAllowed && (
+                  {isMac && !accessibilityAllowed && (
                     <button
                       onClick={openAccessibilitySettings}
                       className="shrink-0 rounded-full bg-[#fff700] px-4 py-2 text-sm font-black text-black transition hover:brightness-95"
@@ -1284,7 +1330,7 @@ useEffect(() => {
                 </div>
                 <h2 className="font-display text-3xl">Nothing rewritten yet.</h2>
                 <p className="mt-3 text-sm text-neutral-500 leading-6">
-                  Select text in any app on your Mac. The yellow huu button will
+                  Select text in any app. The yellow huu button will
                   appear next to your selection automatically.
                 </p>
                 <div className="mt-6 flex justify-center gap-3">
@@ -1309,9 +1355,9 @@ useEffect(() => {
               <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 p-5">
                 <p className="text-sm font-bold text-red-900">{captureError}</p>
                 <p className="mt-1 text-sm leading-6 text-red-700">
-                  Go to System Settings &rarr; Privacy &amp; Security &rarr;
-                  Accessibility and allow huu. Then select text in another app
-                  and click Try it out again.
+                  {isMac
+                    ? "Go to System Settings → Privacy & Security → Accessibility and allow huu. Then select text in another app and click Try it out again."
+                    : "Select text in another app, then click Try it out again."}
                 </p>
               </div>
             )}
