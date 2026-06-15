@@ -14,6 +14,7 @@ commands.allow = [
   "check_accessibility_permission",
   "request_accessibility_permission",
   "open_accessibility_settings",
+  "open_input_monitoring_settings",
   "get_current_selection",
   "get_selector_payload",
   "get_selector_health",
@@ -24,4 +25,5 @@ commands.allow = [
   "open_billing",
   "set_session_token",
   "get_session_token",
+  "refresh_session_token",
 ]

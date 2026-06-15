@@ -113,6 +113,21 @@ pub fn run() {
             ensure_selector_window(app.handle())?;
             start_selection_watcher(app.handle().clone());
 
+            // Rust-driven token heartbeat. The editor mints ~60s Clerk tokens for
+            // the selector, but its OWN setInterval throttles to >60s when the
+            // window is hidden — so the token expired right when you used the
+            // selector elsewhere (the "Open huumanity and sign in" bug). Rust
+            // timers are never throttled, so we drive the mint from here: every
+            // 25s we ask the editor to refresh the token. (The editor's listener
+            // no-ops when signed out, so this is harmless then.)
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || loop {
+                    std::thread::sleep(Duration::from_secs(25));
+                    let _ = handle.emit_to("main", "huu-mint-token", ());
+                });
+            }
+
             // Handle `huu://open?ticket=…` deep links from the "Open huumanity"
             // buttons on the post-sign-up / payment-success pages. We forward the
             // query string onto the editor URL so the web app can redeem the
@@ -968,10 +983,11 @@ fn refresh_session_token(
     // Wake the editor window and ask it to mint a fresh token immediately.
     let _ = app.emit_to("main", "huu-mint-token", ());
 
-    // Poll for the editor's response for up to ~1.5s. The generation counter
+    // Poll for the editor's response for up to ~2.5s. The generation counter
     // bumps as soon as `set_session_token` runs, so we return the instant a
-    // fresh token lands rather than always waiting the full timeout.
-    let deadline = Instant::now() + Duration::from_millis(1500);
+    // fresh token lands rather than always waiting the full timeout. The window
+    // is generous because a hidden editor webview may be slow to wake.
+    let deadline = Instant::now() + Duration::from_millis(2500);
     while Instant::now() < deadline {
         if state.token_generation.load(Ordering::Relaxed) != start_gen {
             break;
