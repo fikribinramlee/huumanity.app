@@ -54,6 +54,7 @@ export function DownloadPageClient({ macUrl, winUrl }: Props) {
   const steps = isWindows
     ? [
         "Run the downloaded huu installer",
+        "Windows may show a SmartScreen warning — click \"More info\" then \"Run anyway\" to continue",
         "Open the app and sign in",
         "Finish the quick setup and start rephrasing anywhere",
       ]
