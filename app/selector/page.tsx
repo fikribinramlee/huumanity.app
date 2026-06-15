@@ -142,6 +142,10 @@ export default function SelectorPage() {
     setGeneratedSignature("");
     setError("");
     setCopied(false);
+    // Warm a fresh session token while the user reads the tone options, so the
+    // first rewrite doesn't have to wait on the editor minting one. Fire-and-
+    // forget — handleGenerate refreshes again right before the call anyway.
+    void invoke("refresh_session_token").catch(() => {});
     try {
       await invoke("expand_selector_window");
     } catch (err) {
@@ -189,21 +193,27 @@ export default function SelectorPage() {
     setError("");
     setCopied(false);
 
-    try {
-      // The selector runs on tauri://localhost and calls the rewrite API
-      // cross-origin, so the Clerk cookie is never sent. Authenticate instead
-      // with the short-lived session token the editor window pumps into Rust;
-      // without it the API can't identify the user and the rewrite wouldn't
-      // count against their daily limit. The X-Huu-Client marker lets the API
-      // refuse uncounted anonymous rewrites from the desktop (see route.ts).
-      let token: string | null = null;
+    // The selector runs on tauri://localhost and calls the rewrite API
+    // cross-origin, so the Clerk cookie is never sent. Authenticate instead with
+    // a session token minted by the editor window. `refresh_session_token` asks
+    // the editor to mint a FRESH one on demand (Clerk tokens live ~60s and the
+    // editor's background pump throttles when hidden), falling back to the cached
+    // token. The X-Huu-Client marker lets the API refuse uncounted anonymous
+    // rewrites from the desktop (see route.ts).
+    const getFreshToken = async (): Promise<string | null> => {
       try {
-        token = await invoke<string | null>("get_session_token");
+        return await invoke<string | null>("refresh_session_token");
       } catch {
-        token = null;
+        try {
+          return await invoke<string | null>("get_session_token");
+        } catch {
+          return null;
+        }
       }
+    };
 
-      const res = await fetch(humanizeEndpoint(), {
+    const callApi = (token: string | null) =>
+      fetch(humanizeEndpoint(), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -213,7 +223,35 @@ export default function SelectorPage() {
         body: JSON.stringify({ text: selection.text, tones: selectedTones }),
       });
 
-      const data = await res.json();
+    try {
+      let token = await getFreshToken();
+
+      // One automatic retry on a transient network failure (Vercel cold start,
+      // brief connectivity drop) before surfacing anything to the user.
+      let res: Response;
+      try {
+        res = await callApi(token);
+      } catch {
+        await new Promise((r) => window.setTimeout(r, 600));
+        res = await callApi(token);
+      }
+
+      // 401 = the token was stale (editor pump throttled while hidden). Force a
+      // fresh mint and retry once. This is the common transient case, NOT a real
+      // sign-out, so recover silently instead of nagging a signed-in user.
+      if (res.status === 401) {
+        token = await getFreshToken();
+        if (token) {
+          try {
+            res = await callApi(token);
+          } catch {
+            await new Promise((r) => window.setTimeout(r, 600));
+            res = await callApi(token);
+          }
+        }
+      }
+
+      const data = await res.json().catch(() => ({} as Record<string, unknown>));
 
       // Daily free limit hit — show the upgrade panel instead of a raw error.
       if (res.status === 429 || data.error === "usage_limit_reached") {
@@ -221,9 +259,8 @@ export default function SelectorPage() {
         return;
       }
 
-      // No valid session token reached the API (editor signed out or token
-      // expired). Don't silently hand out a free, uncounted rewrite — prompt
-      // the user to open huumanity so a fresh token can be minted.
+      // Still unauthenticated after a fresh mint — the editor genuinely isn't
+      // signed in. Only now prompt the user to open huumanity.
       if (res.status === 401 || data.error === "auth_required") {
         setError("Open huumanity and sign in to keep rewriting.");
         setPopupStage("select");
@@ -231,19 +268,16 @@ export default function SelectorPage() {
       }
 
       if (!res.ok || !data.result) {
-        throw new Error(data.error ?? "Could not rewrite this text.");
+        throw new Error("rewrite_failed");
       }
 
-      setResultText(data.result);
+      setResultText(data.result as string);
       setGeneratedSignature(signature);
       setPopupStage("result");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Something went wrong.";
-      setError(
-        message === "Failed to fetch" || message === "Load failed"
-          ? "Could not reach the rewrite API. Run the local web app or set NEXT_PUBLIC_HUMANIZE_API_URL for desktop builds."
-          : message
-      );
+    } catch {
+      // Never surface internal/developer text (env var names, stack traces) to
+      // an end user — always a calm, actionable message.
+      setError("Something went wrong. Please try again.");
       setPopupStage("select");
     } finally {
       setIsGenerating(false);

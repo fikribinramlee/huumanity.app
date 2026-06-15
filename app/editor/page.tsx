@@ -416,25 +416,52 @@ export default function EditorPage() {
   // tauri://localhost and CANNOT send the Clerk cookie cross-origin to the
   // rewrite API, so without a token its rewrites look anonymous and never count
   // against the daily limit. This authenticated editor window mints a fresh
-  // short-lived Clerk token (~60s lifetime) and hands it to the Rust layer every
-  // 30s; the selector attaches it as a Bearer header so every rewrite is
-  // correctly attributed and counted. Only runs inside the desktop app.
+  // short-lived Clerk token (~60s lifetime) and hands it to the Rust layer.
+  //
+  // Two delivery paths, because a Clerk token lives only ~60s and a hidden
+  // window's setInterval gets throttled by the OS to >60s (the token then
+  // expires exactly when you're using the selector in another app — the old
+  // "Open huumanity and sign in" bug):
+  //   1. A periodic backup pump (every 20s while visible).
+  //   2. On-demand: Rust fires `huu-mint-token` right before the selector
+  //      needs a token; we mint immediately and push it back. Event-driven
+  //      wakeups are far more reliable than background timers under throttling.
+  // Only runs inside the desktop app.
   useEffect(() => {
     if (authState !== "app" || !isTauriRuntime()) return;
     let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
     const pump = async () => {
       try {
         const token = await getToken();
         if (!cancelled) await invoke("set_session_token", { token: token ?? null });
       } catch {
-        /* transient; next tick retries */
+        /* transient; next tick / next request retries */
       }
     };
+
+    // Mint on first run and whenever the window becomes visible again.
     void pump();
-    const id = window.setInterval(pump, 30_000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void pump();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    // On-demand mint requested by the selector (via Rust).
+    void (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      const stop = await listen("huu-mint-token", () => void pump());
+      if (cancelled) stop();
+      else unlisten = stop;
+    })();
+
+    const id = window.setInterval(pump, 20_000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
+      document.removeEventListener("visibilitychange", onVisible);
+      unlisten?.();
     };
   }, [authState, getToken]);
 

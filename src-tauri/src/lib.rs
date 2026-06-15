@@ -5,8 +5,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use tauri::{
-    LogicalPosition, LogicalSize, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder,
-    WindowEvent,
+    Emitter, LogicalPosition, LogicalSize, Manager, RunEvent, State, WebviewUrl,
+    WebviewWindowBuilder, WindowEvent,
 };
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -48,6 +48,10 @@ struct SelectorState {
     // sees an anonymous caller and never counts the rewrite against the user's
     // daily limit (the "rewrites never count / users abuse it" bug).
     session_token: Mutex<Option<String>>,
+    // Bumped every time the editor pushes a token via `set_session_token`. The
+    // on-demand `refresh_session_token` command watches this to detect when the
+    // editor has responded to a mint request with a fresh token.
+    token_generation: std::sync::atomic::AtomicU64,
 }
 
 struct SelectionProbe {
@@ -89,7 +93,8 @@ pub fn run() {
             hide_selector_window,
             open_billing,
             set_session_token,
-            get_session_token
+            get_session_token,
+            refresh_session_token
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {
@@ -928,6 +933,10 @@ fn set_session_token(
 ) -> Result<(), String> {
     let mut slot = state.session_token.lock().map_err(|e| e.to_string())?;
     *slot = token.filter(|t| !t.is_empty());
+    drop(slot);
+    state
+        .token_generation
+        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     Ok(())
 }
 
@@ -936,6 +945,40 @@ fn set_session_token(
 /// user and count the rewrite against their daily limit.
 #[tauri::command]
 fn get_session_token(state: State<'_, SelectorState>) -> Result<Option<String>, String> {
+    let slot = state.session_token.lock().map_err(|e| e.to_string())?;
+    Ok(slot.clone())
+}
+
+/// Mint a FRESH session token on demand. Clerk session tokens live ~60s and the
+/// editor's background pump can be throttled to >60s when its window is hidden
+/// (the normal state while you're using the selector in another app), so the
+/// cached token may be stale right when the selector needs it. This asks the
+/// authenticated editor window to mint a new token NOW (via the `huu://mint-token`
+/// event), waits briefly for it to push one back, and returns whatever we have.
+/// Falls back to the cached token on timeout so a momentarily-unresponsive editor
+/// never blocks a rewrite outright.
+#[tauri::command]
+fn refresh_session_token(
+    app: tauri::AppHandle,
+    state: State<'_, SelectorState>,
+) -> Result<Option<String>, String> {
+    use std::sync::atomic::Ordering;
+
+    let start_gen = state.token_generation.load(Ordering::Relaxed);
+    // Wake the editor window and ask it to mint a fresh token immediately.
+    let _ = app.emit_to("main", "huu-mint-token", ());
+
+    // Poll for the editor's response for up to ~1.5s. The generation counter
+    // bumps as soon as `set_session_token` runs, so we return the instant a
+    // fresh token lands rather than always waiting the full timeout.
+    let deadline = Instant::now() + Duration::from_millis(1500);
+    while Instant::now() < deadline {
+        if state.token_generation.load(Ordering::Relaxed) != start_gen {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(40));
+    }
+
     let slot = state.session_token.lock().map_err(|e| e.to_string())?;
     Ok(slot.clone())
 }
