@@ -69,7 +69,7 @@ export function ExternalRewritePanel({ text, onClose }: Props) {
       setError(
         typeof err === "string"
           ? err
-          : "Could not paste back. Enable Accessibility permission for huu."
+          : "Could not paste back. Enable Accessibility permission for huumanity."
       );
     }
   };

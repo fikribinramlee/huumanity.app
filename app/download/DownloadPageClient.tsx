@@ -30,7 +30,7 @@ export function DownloadPageClient({ macUrl, winUrl }: Props) {
 
   const isWindows = os === "windows";
   const downloadUrl = isWindows ? winUrl : macUrl;
-  const downloadFileName = isWindows ? "huu-setup.exe" : "huu-mac.dmg";
+  const downloadFileName = isWindows ? "huumanity-setup.exe" : "huumanity-mac.dmg";
   const hasUrl = Boolean(downloadUrl);
 
   const triggerDownload = useCallback(() => {
@@ -53,13 +53,13 @@ export function DownloadPageClient({ macUrl, winUrl }: Props) {
 
   const steps = isWindows
     ? [
-        "Run the downloaded huu installer",
-        "Windows may show a SmartScreen warning — click \"More info\" then \"Run anyway\" to continue",
+        "Run the downloaded huumanity installer",
+        "Windows may show a SmartScreen warning. Click \"More info\" then \"Run anyway\" to continue",
         "Open the app and sign in",
         "Finish the quick setup and start rephrasing anywhere",
       ]
     : [
-        "Open the downloaded huu file",
+        "Open the downloaded huumanity file",
         "Open the app and sign up",
         "Finish the quick setup and start rephrasing anywhere",
       ];
@@ -78,7 +78,7 @@ export function DownloadPageClient({ macUrl, winUrl }: Props) {
 
         <div className="flex-1 flex flex-col justify-center max-w-lg mt-12 lg:mt-0">
           <h1 className="font-display text-4xl sm:text-5xl lg:text-[3.25rem] leading-[1.08] mb-10">
-            Open huu in 3 steps:
+            Open huumanity in 3 steps:
           </h1>
 
           <ol className="space-y-5 text-base sm:text-lg text-neutral-200">
@@ -110,7 +110,7 @@ export function DownloadPageClient({ macUrl, winUrl }: Props) {
               <p className="mt-5 text-xs leading-5 text-neutral-500">
                 {isWindows
                   ? "Windows may warn you the first time you run the installer. Click \"More info\" then \"Run anyway\"."
-                  : "Your computer may ask you to confirm the download or grant huu permissions the first time you open it."}
+                  : "Your computer may ask you to confirm the download or grant huumanity permissions the first time you open it."}
               </p>
               <p className="mt-3 text-sm text-neutral-400">
                 Need another copy?{" "}

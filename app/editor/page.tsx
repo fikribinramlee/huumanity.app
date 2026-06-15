@@ -327,13 +327,13 @@ export default function EditorPage() {
       setAccessibilityAllowed(allowed);
       setDetectorStatus(
         allowed
-          ? "Selector is running. Highlight text in any app to use Huumanity."
-          : "Allow Huumanity in macOS Accessibility to enable desktop selection."
+          ? "Selector is running. Highlight text in any app to use huumanity."
+          : "Allow huumanity in macOS Accessibility to enable desktop selection."
       );
       return allowed;
     } catch (err) {
       setAccessibilityAllowed(false);
-      setDetectorStatus(`Could not check Accessibility permission — ${String(err)}`);
+      setDetectorStatus(`Could not check Accessibility permission: ${String(err)}`);
       return false;
     }
   }, []);
@@ -359,13 +359,13 @@ export default function EditorPage() {
       setDetectorStatus(
         health.accessibilityAllowed
           ? health.status
-          : "Allow Huumanity in macOS Accessibility to enable desktop selection."
+          : "Allow huumanity in macOS Accessibility to enable desktop selection."
       );
       await refreshApiConnection();
       return health;
     } catch (err) {
       setSelectorHealth(null);
-      setDetectorStatus(`Could not read selector health — ${String(err)}`);
+      setDetectorStatus(`Could not read selector health: ${String(err)}`);
       return null;
     } finally {
       setIsCheckingHealth(false);
@@ -560,7 +560,7 @@ useEffect(() => {
       await invoke("open_accessibility_settings");
     } catch (err) {
       setCaptureError(
-        `Could not open Accessibility settings — ${String(err)}. Open System Settings → Privacy & Security → Accessibility and enable Huumanity.`
+        `Could not open Accessibility settings: ${String(err)}. Open System Settings → Privacy & Security → Accessibility and enable huumanity.`
       );
     }
   };
@@ -570,7 +570,7 @@ useEffect(() => {
       await invoke("open_input_monitoring_settings");
     } catch (err) {
       setCaptureError(
-        `Could not open Input Monitoring settings — ${String(err)}. Open System Settings → Privacy & Security → Input Monitoring and enable Huumanity.`
+        `Could not open Input Monitoring settings: ${String(err)}. Open System Settings → Privacy & Security → Input Monitoring and enable huumanity.`
       );
     }
   };
@@ -588,7 +588,7 @@ useEffect(() => {
       setCaptureError(
         typeof err === "string"
           ? err
-          : "Could not read selected text. Enable Accessibility permission for Huumanity."
+          : "Could not read selected text. Enable Accessibility permission for huumanity."
       );
     } finally {
       setIsCapturing(false);
@@ -697,7 +697,7 @@ useEffect(() => {
               <span className="w-2.5 h-2.5 rounded-full bg-[#FEBC2E]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#28C840]" />
               <span className="ml-3 text-[11px] font-semibold text-neutral-400">
-                Untitled — Notion
+                Untitled · Notion
               </span>
             </div>
 
@@ -823,7 +823,7 @@ useEffect(() => {
               onClick={() => setAuthState("app")}
               className="w-full rounded-xl bg-black py-4 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
             >
-              Open Huumanity &rarr;
+              Open huumanity &rarr;
             </button>
             <button
               onClick={() => window.close()}
@@ -833,7 +833,7 @@ useEffect(() => {
             </button>
           </div>
           <p className="text-[11px] text-neutral-400">
-            You can always reopen Huumanity from your Applications folder.
+            You can always reopen huumanity from your Applications folder.
           </p>
         </div>
       </main>
@@ -1172,9 +1172,9 @@ useEffect(() => {
                         1. You&apos;re ready to go
                       </p>
                       <p className="text-sm text-neutral-500 leading-6">
-                        Huumanity works right out of the box on Windows, with no
+                        On Windows, huumanity works right out of the box, with no
                         extra permissions to enable. Select text in any app and the
-                        yellow Huumanity button appears automatically next to it.
+                        yellow huumanity button appears automatically next to it.
                       </p>
                     </div>
                   )}
@@ -1259,11 +1259,11 @@ useEffect(() => {
                   {/* Finish */}
                   <div className="rounded-xl border border-black/[0.07] bg-[#fafaf8] p-5">
                     <p className="font-black text-base mb-1">
-                      {isMac ? "4." : "3."} Start using Huumanity
+                      {isMac ? "4." : "3."} Start using huumanity
                     </p>
                     <p className="text-sm text-neutral-500 leading-6 mb-4">
                       {isMac
-                        ? "Once Accessibility is allowed, Huumanity will watch for highlighted text and show the yellow button when the focused app exposes the selection to macOS."
+                        ? "Once Accessibility is allowed, huumanity will watch for highlighted text and show the yellow button when the focused app exposes the selection to macOS."
                         : "Huumanity is already watching for highlighted text. Finish setup and the yellow button will appear whenever you select text in any app."}
                     </p>
                     <button
@@ -1310,8 +1310,8 @@ useEffect(() => {
                     </p>
                     <p className="text-sm font-bold text-white leading-6">
                       {isWindows || accessibilityAllowed
-                        ? "Running. Highlight text in any app to see the yellow Huumanity button."
-                        : "Accessibility permission needed to use Huumanity on your desktop."}
+                        ? "Running. Highlight text in any app to see the yellow huumanity button."
+                        : "Accessibility permission needed to use huumanity on your desktop."}
                     </p>
                     <p className="mt-0.5 text-xs text-white/40">
                       {detectorStatus}
@@ -1375,7 +1375,7 @@ useEffect(() => {
                 </div>
                 <h2 className="font-display text-3xl">Nothing rewritten yet.</h2>
                 <p className="mt-3 text-sm text-neutral-500 leading-6">
-                  Select text in any app. The yellow Huumanity button will
+                  Select text in any app. The yellow huumanity button will
                   appear next to your selection automatically.
                 </p>
                 <div className="mt-6 flex justify-center gap-3">
@@ -1401,7 +1401,7 @@ useEffect(() => {
                 <p className="text-sm font-bold text-red-900">{captureError}</p>
                 <p className="mt-1 text-sm leading-6 text-red-700">
                   {isMac
-                    ? "Go to System Settings → Privacy & Security → Accessibility and allow Huumanity. Then select text in another app and click Try it out again."
+                    ? "Go to System Settings → Privacy & Security → Accessibility and allow huumanity. Then select text in another app and click Try it out again."
                     : "Select text in another app, then click Try it out again."}
                 </p>
               </div>

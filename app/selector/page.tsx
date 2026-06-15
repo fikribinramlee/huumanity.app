@@ -309,7 +309,7 @@ export default function SelectorPage() {
       setError(
         typeof err === "string"
           ? err
-          : "Could not paste back. Enable Accessibility permission for huu."
+          : "Could not paste back. Enable Accessibility permission for huumanity."
       );
     }
   };
@@ -349,7 +349,7 @@ export default function SelectorPage() {
           type="button"
           onClick={openOptions}
           className="huu-pop-in flex h-5 w-5 items-center justify-center rounded-full bg-[#fff700] text-black shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition hover:brightness-95 active:scale-90"
-          aria-label="Open huu rewrite options"
+          aria-label="Open huumanity rewrite options"
         >
           <svg
             width="11"

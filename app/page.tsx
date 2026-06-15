@@ -63,28 +63,28 @@ const USE_CASES: UseCase[] = [
   {
     id: "anywhere",
     label: "Anywhere",
-    title: "huu for Anywhere",
+    title: "huumanity for Anywhere",
     blurb:
       "Highlight any text you see on your screen. Doesn't matter where it is: a webpage, a doc, a form. Pick a tone and huumanity rewrites it right there for you to clipboard it.",
   },
   {
     id: "outreach",
     label: "Outreach",
-    title: "huu for Outreach",
+    title: "huumanity for Outreach",
     blurb:
       "Whether it be for cold emails, DMs, or follow-ups. Your prospects can smell a ChatGPT template from the subject line. huumanity rewrites your draft so it sounds like it was written by an actual human with emotions, and that you actually gave a damn before hitting send.",
   },
   {
     id: "posts",
     label: "Posts",
-    title: "huu for Posts",
+    title: "huumanity for Posts",
     blurb:
       "If your X and LinkedIn posts, Instagram captions, or newsletters sound obviously written by AI, no one will find that shit trustworthy. Nobody shares content that sounds like a robot wrote it. huumanity gives your posts the edge and the voice that makes people care about what you have to say.",
   },
   {
     id: "scripts",
     label: "Scripts",
-    title: "huu for Scripts",
+    title: "huumanity for Scripts",
     blurb:
       "Audiences can still hear that your script is written by AI. Doesn't matter if it's for a whole YouTube video or short-form content. Reading AI-written scripts out loud is painful for everyone in the room. huumanity rewrites them so the words actually sound like yours.",
   },
@@ -93,13 +93,13 @@ const USE_CASES: UseCase[] = [
 const TESTIMONIALS = [
   {
     quote:
-      "huu literally saved my outbound. My reply rate went from 1.2% to 11% in two weeks. The emails finally sound like a person.",
+      "Huumanity literally saved my outbound. My reply rate went from 1.2% to 11% in two weeks. The emails finally sound like a person.",
     name: "Maya Patel",
     role: "Founder, Loomly",
   },
   {
     quote:
-      "I draft with ChatGPT and finish with huu. It’s the only tool that strips the AI smell without changing what I’m trying to say.",
+      "I draft with ChatGPT and finish with huumanity. It’s the only tool that strips the AI smell without changing what I’m trying to say.",
     name: "Daniel Cho",
     role: "Head of Content, Mercury",
   },
@@ -111,19 +111,19 @@ const TESTIMONIALS = [
   },
   {
     quote:
-      "I rewrite every cold email with huu before sending. My reps used to ignore my Loom requests. Now they reply same day.",
+      "I rewrite every cold email with huumanity before sending. My reps used to ignore my Loom requests. Now they reply same day.",
     name: "James O’Connor",
     role: "Sales Lead, Bracket",
   },
   {
     quote:
-      "Every recruiter on my team uses huu. Candidates told us our outreach finally sounds like a human company, not a careers page.",
+      "Every recruiter on my team uses huumanity. Candidates told us our outreach finally sounds like a human company, not a careers page.",
     name: "Priya Iyer",
     role: "Talent Partner, Northwind",
   },
   {
     quote:
-      "I write 30+ DMs a day. huu makes them sound like me without me having to rewrite from scratch. Genuinely life-changing.",
+      "I write 30+ DMs a day. Huumanity makes them sound like me without me having to rewrite from scratch. Genuinely life-changing.",
     name: "Owen Bell",
     role: "Creator, 480k on X",
   },
@@ -2707,7 +2707,7 @@ export default function LandingPage() {
         <div className="border-t border-white/10">
           <div className="w-full max-w-6xl mx-auto px-6 py-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <p className="text-xs text-neutral-500">
-              © {new Date().getFullYear()} huu. All rights reserved.
+              © {new Date().getFullYear()} huumanity. All rights reserved.
             </p>
             <p className="text-xs text-neutral-500">
               Built for people who don&apos;t want to sound like a robot.
