@@ -985,7 +985,7 @@ fn is_probe_rephrashable(probe: &SelectionProbe) -> bool {
 }
 
 /// Hide the floating dot (with the CSS fade) and forget its frame.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn hide_selector_dot(app: &tauri::AppHandle, state: &SelectorState) {
     if let Ok(mut frame) = state.dot_frame.lock() {
         *frame = None;
@@ -999,7 +999,7 @@ fn hide_selector_dot(app: &tauri::AppHandle, state: &SelectorState) {
 
 /// Is the point (global display points) on top of the currently-shown dot? Used
 /// to keep a click on the dot from being treated as a "click elsewhere" dismiss.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn point_in_dot_frame(state: &SelectorState, x: f64, y: f64) -> bool {
     if let Ok(frame) = state.dot_frame.lock() {
         if let Some((fx, fy, fw, fh)) = *frame {
@@ -1228,10 +1228,155 @@ fn start_selection_watcher(app: tauri::AppHandle) {
     });
 }
 
-// Non-macOS (Windows, …): keep the polling watcher. Windows UI Automation gives
-// real, stable selection bounds, so the chase bug never manifested there and the
-// simpler poll loop is fine.
-#[cfg(not(target_os = "macos"))]
+// Windows: statics for the low-level mouse hook callback (extern "system" fns
+// can't close over Rust state, so we store the channel sender and sequence
+// counter in module-level statics).
+#[cfg(target_os = "windows")]
+static WIN_HOOK_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+// true = mouse-up, false = mouse-down; payload: (is_up, x, y, seq)
+#[cfg(target_os = "windows")]
+static WIN_HOOK_TX: std::sync::OnceLock<
+    std::sync::mpsc::SyncSender<(bool, f64, f64, u64)>,
+> = std::sync::OnceLock::new();
+
+// Windows: event-driven selector using WH_MOUSE_LL — the Win32 equivalent of
+// the macOS CGEventTap. Same worker-thread logic, same gesture-direction math.
+#[cfg(target_os = "windows")]
+fn start_selection_watcher(app: tauri::AppHandle) {
+    use std::sync::atomic::Ordering;
+    use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, HC_ACTION,
+        MSLLHOOKSTRUCT, MSG, WH_MOUSE_LL, WM_LBUTTONDOWN, WM_LBUTTONUP,
+    };
+
+    let (tx, rx) = std::sync::mpsc::sync_channel::<(bool, f64, f64, u64)>(64);
+    let _ = WIN_HOOK_TX.set(tx);
+
+    // Worker thread — mirrors the macOS worker verbatim.
+    {
+        let app = app.clone();
+        std::thread::spawn(move || {
+            let state = app.state::<SelectorState>();
+            if let Ok(mut running) = state.watcher_running.lock() {
+                *running = true;
+            }
+            debug_log("mouse-driven selector worker started (windows)");
+
+            let mut last_down = (0.0_f64, 0.0_f64);
+
+            while let Ok((is_up, ex, ey, up_seq)) = rx.recv() {
+                let popup_open = state.popup_open.lock().map(|o| *o).unwrap_or(false);
+
+                if !is_up {
+                    // Mouse-down
+                    last_down = (ex, ey);
+                    if popup_open { continue; }
+                    if point_in_dot_frame(&state, ex, ey) { continue; }
+                    hide_selector_dot(&app, &state);
+                    continue;
+                }
+
+                // Mouse-up
+                if popup_open { continue; }
+                std::thread::sleep(Duration::from_millis(1000));
+                if WIN_HOOK_SEQ.load(Ordering::Relaxed) != up_seq { continue; }
+
+                let mut probe = platform_current_selection_probe();
+                if probe.status != "huu-self-focused" && !is_probe_rephrashable(&probe) {
+                    std::thread::sleep(Duration::from_millis(150));
+                    if WIN_HOOK_SEQ.load(Ordering::Relaxed) != up_seq { continue; }
+                    probe = platform_current_selection_probe();
+                }
+
+                if let Ok(mut last_status) = state.last_status.lock() {
+                    *last_status = probe.status.clone();
+                }
+
+                if probe.status == "huu-self-focused" { continue; }
+                if state.popup_open.lock().map(|o| *o).unwrap_or(false) { continue; }
+
+                if !is_probe_rephrashable(&probe) {
+                    hide_selector_dot(&app, &state);
+                    continue;
+                }
+
+                let mut sel = probe.selection.expect("rephrashable implies Some");
+                let gap = 8.0;
+                let half = SELECTOR_DOT_SIZE / 2.0;
+
+                let dx = ex - last_down.0;
+                let dy = ey - last_down.1;
+                let ends_at_end = if dx.abs() >= dy.abs() { dx >= 0.0 } else { dy >= 0.0 };
+
+                debug_log(&format!(
+                    "  gesture down=({:.0},{:.0}) up=({:.0},{:.0}) dx={:.0} dy={:.0} ends_at_end={}",
+                    last_down.0, last_down.1, ex, ey, dx, dy, ends_at_end
+                ));
+
+                let (center_x, center_y) =
+                    if let Some((cx, cy)) = platform_selection_endpoint(ends_at_end) {
+                        if ends_at_end { (cx + gap + half, cy) } else { (cx - gap - half, cy) }
+                    } else {
+                        if ends_at_end { (ex + gap + half, ey) } else { (ex - gap - half, ey) }
+                    };
+
+                sel.x = center_x;
+                sel.y = center_y;
+                sel.width = 0.0;
+                sel.height = 0.0;
+                if let Err(err) = show_selector_for_selection(&app, &state, sel) {
+                    debug_log(&format!("show selector failed: {err}"));
+                }
+            }
+        });
+    }
+
+    // Hook thread: installs WH_MOUSE_LL and pumps the Windows message loop.
+    // The hook callback is an extern "system" fn (no closure) and reads from
+    // the module-level statics above.
+    std::thread::spawn(move || {
+        unsafe extern "system" fn mouse_hook_proc(
+            code: i32,
+            wparam: WPARAM,
+            lparam: LPARAM,
+        ) -> LRESULT {
+            if code == HC_ACTION as i32 {
+                let info = &*(lparam.0 as *const MSLLHOOKSTRUCT);
+                let x = info.pt.x as f64;
+                let y = info.pt.y as f64;
+                let msg = wparam.0 as u32;
+                if msg == WM_LBUTTONDOWN || msg == WM_LBUTTONUP {
+                    let v = WIN_HOOK_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
+                    if let Some(tx) = WIN_HOOK_TX.get() {
+                        let _ = tx.try_send((msg == WM_LBUTTONUP, x, y, v));
+                    }
+                }
+            }
+            CallNextHookEx(None, code, wparam, lparam)
+        }
+
+        unsafe {
+            let hook = match SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), None, 0) {
+                Ok(h) => h,
+                Err(e) => {
+                    debug_log(&format!("mouse hook install failed: {e}"));
+                    return;
+                }
+            };
+            debug_log("windows low-level mouse hook installed");
+            let mut msg = MSG::default();
+            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                let _ = windows::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+            let _ = windows::Win32::UI::WindowsAndMessaging::UnhookWindowsHookEx(hook);
+        }
+    });
+}
+
+// Linux / other non-Windows, non-macOS: keep the old polling watcher as a stub.
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn start_selection_watcher(app: tauri::AppHandle) {
     std::thread::spawn(move || {
         let mut last_probe_status = String::new();
@@ -1247,7 +1392,7 @@ fn start_selection_watcher(app: tauri::AppHandle) {
             *watcher_running = true;
         }
 
-        debug_log("selection watcher started");
+        debug_log("selection watcher started (polling)");
 
         loop {
             std::thread::sleep(Duration::from_millis(200));
@@ -1288,10 +1433,7 @@ fn start_selection_watcher(app: tauri::AppHandle) {
             }
 
             miss_count = 0;
-
-            if shown {
-                continue;
-            }
+            if shown { continue; }
 
             let selection = probe.selection.expect("rephrashable implies Some");
             let text = selection.text.trim().to_string();
@@ -1471,7 +1613,12 @@ fn platform_selection_endpoint(ends_at_end: bool) -> Option<(f64, f64)> {
     macos_accessibility::selection_endpoint(ends_at_end)
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn platform_selection_endpoint(ends_at_end: bool) -> Option<(f64, f64)> {
+    windows_accessibility::selection_endpoint(ends_at_end)
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn platform_selection_endpoint(_ends_at_end: bool) -> Option<(f64, f64)> {
     None
 }
@@ -2422,7 +2569,8 @@ mod windows_accessibility {
             UI::{
                 Accessibility::{
                     CUIAutomation, IUIAutomation, IUIAutomationTextPattern,
-                    UIA_TextPatternId,
+                    TextPatternRangeEndpoint_End, TextPatternRangeEndpoint_Start,
+                    TextUnit_Character, UIA_TextPatternId,
                 },
                 WindowsAndMessaging::{
                     EnumWindows, GetCursorPos, GetWindowThreadProcessId, IsWindowVisible,
@@ -2590,6 +2738,105 @@ mod windows_accessibility {
             );
             if data.found != HWND::default() {
                 let _ = SetForegroundWindow(data.found);
+            }
+        }
+    }
+
+    /// Returns the screen coordinate of one character edge at the chosen end of
+    /// the selection: right edge of the last char (`ends_at_end = true`) or left
+    /// edge of the first char (`ends_at_end = false`). Same contract as the macOS
+    /// `selection_endpoint` function. Returns `None` when UIA reports no selection
+    /// or the element doesn't support the Text pattern — the caller falls back to
+    /// the mouse-release point.
+    pub fn selection_endpoint(ends_at_end: bool) -> Option<(f64, f64)> {
+        ensure_com();
+        unsafe {
+            let automation: IUIAutomation =
+                CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
+            let element = automation.GetFocusedElement().ok()?;
+
+            // Ignore our own windows.
+            let pid = element.CurrentProcessId().ok()? as u32;
+            if pid == std::process::id() {
+                return None;
+            }
+
+            let pattern_unk = element.GetCurrentPattern(UIA_TextPatternId).ok()?;
+            let text_pattern: IUIAutomationTextPattern = pattern_unk.cast().ok()?;
+
+            let selection_array = text_pattern.GetSelection().ok()?;
+            if selection_array.Length().ok()? == 0 {
+                return None;
+            }
+            let full_range = selection_array.GetElement(0).ok()?;
+
+            // Clone the full range and collapse it to a single character at the
+            // desired end using MoveEndpointByUnit.
+            let one_char = full_range.Clone().ok()?;
+
+            if ends_at_end {
+                // Move start to the end, then back one character so we have
+                // a 1-char range covering the last character of the selection.
+                one_char
+                    .MoveEndpointByUnit(
+                        TextPatternRangeEndpoint_Start,
+                        TextUnit_Character,
+                        1_000_000,
+                    )
+                    .ok()?;
+                one_char
+                    .MoveEndpointByUnit(
+                        TextPatternRangeEndpoint_Start,
+                        TextUnit_Character,
+                        -1,
+                    )
+                    .ok()?;
+            } else {
+                // Move end to the start, then forward one character so we have
+                // a 1-char range covering the first character of the selection.
+                one_char
+                    .MoveEndpointByUnit(
+                        TextPatternRangeEndpoint_End,
+                        TextUnit_Character,
+                        -1_000_000,
+                    )
+                    .ok()?;
+                one_char
+                    .MoveEndpointByUnit(
+                        TextPatternRangeEndpoint_End,
+                        TextUnit_Character,
+                        1,
+                    )
+                    .ok()?;
+            }
+
+            // Read the bounding rect of the 1-char range — first rect in the array.
+            let sa = one_char.GetBoundingRectangles().ok()?;
+            if sa.is_null() {
+                return None;
+            }
+            let lb = SafeArrayGetLBound(sa, 1).ok()?;
+            let ub = SafeArrayGetUBound(sa, 1).ok()?;
+            if ub - lb + 1 < 4 {
+                return None;
+            }
+            let mut raw: *mut std::ffi::c_void = std::ptr::null_mut();
+            SafeArrayAccessData(sa, &mut raw).ok()?;
+            if raw.is_null() {
+                return None;
+            }
+            let count = (ub - lb + 1) as usize;
+            let slice = std::slice::from_raw_parts(raw as *const f64, count);
+            // rect: [left, top, width, height]
+            let (left, top, width, height) = (slice[0], slice[1], slice[2], slice[3]);
+            let _ = SafeArrayUnaccessData(sa);
+
+            // Return the correct edge, vertically centered on the character.
+            let cy = top + height / 2.0;
+            if ends_at_end {
+                Some((left + width, cy)) // right edge of last char
+            } else {
+                Some((left, cy)) // left edge of first char
             }
         }
     }
