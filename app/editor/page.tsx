@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useUser, useClerk, useAuth } from "@clerk/nextjs";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -175,6 +175,15 @@ export default function EditorPage() {
     if (typeof window === "undefined") return false;
     return localStorage.getItem("huu_desktop_setup_complete") === "true";
   });
+  // The setup card lives on the home page as a toggle. Expanded by default on
+  // first run; collapsed once setup is done (but reopenable any time).
+  const [setupExpanded, setSetupExpanded] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("huu_desktop_setup_complete") !== "true";
+  });
+  // Scrolled into view when the user finishes setup, so the home content below
+  // the (now collapsed) setup card comes into focus.
+  const homeContentRef = useRef<HTMLDivElement | null>(null);
   const [accessibilityAllowed, setAccessibilityAllowed] = useState(false);
   const [detectorStatus, setDetectorStatus] = useState(
     "Waiting for Accessibility permission."
@@ -318,8 +327,8 @@ export default function EditorPage() {
       setAccessibilityAllowed(allowed);
       setDetectorStatus(
         allowed
-          ? "Selector is running. Highlight text in any app to use huu."
-          : "Allow huu in macOS Accessibility to enable desktop selection."
+          ? "Selector is running. Highlight text in any app to use Huumanity."
+          : "Allow Huumanity in macOS Accessibility to enable desktop selection."
       );
       return allowed;
     } catch (err) {
@@ -350,7 +359,7 @@ export default function EditorPage() {
       setDetectorStatus(
         health.accessibilityAllowed
           ? health.status
-          : "Allow huu in macOS Accessibility to enable desktop selection."
+          : "Allow Huumanity in macOS Accessibility to enable desktop selection."
       );
       await refreshApiConnection();
       return health;
@@ -551,7 +560,7 @@ useEffect(() => {
       await invoke("open_accessibility_settings");
     } catch (err) {
       setCaptureError(
-        `Could not open Accessibility settings — ${String(err)}. Open System Settings → Privacy & Security → Accessibility and enable huu.`
+        `Could not open Accessibility settings — ${String(err)}. Open System Settings → Privacy & Security → Accessibility and enable Huumanity.`
       );
     }
   };
@@ -561,7 +570,7 @@ useEffect(() => {
       await invoke("open_input_monitoring_settings");
     } catch (err) {
       setCaptureError(
-        `Could not open Input Monitoring settings — ${String(err)}. Open System Settings → Privacy & Security → Input Monitoring and enable huu.`
+        `Could not open Input Monitoring settings — ${String(err)}. Open System Settings → Privacy & Security → Input Monitoring and enable Huumanity.`
       );
     }
   };
@@ -579,7 +588,7 @@ useEffect(() => {
       setCaptureError(
         typeof err === "string"
           ? err
-          : "Could not read selected text. Enable Accessibility permission for huu."
+          : "Could not read selected text. Enable Accessibility permission for Huumanity."
       );
     } finally {
       setIsCapturing(false);
@@ -594,6 +603,11 @@ useEffect(() => {
   const completeSetup = () => {
     localStorage.setItem("huu_desktop_setup_complete", "true");
     setHasCompletedSetup(true);
+    setSetupExpanded(false);
+    // Collapse the setup card and bring the home content below it into view.
+    requestAnimationFrame(() => {
+      homeContentRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   };
 
   const handleSignIn = async () => {
@@ -726,7 +740,7 @@ useEffect(() => {
           </div>
 
           <p className="mt-8 text-center text-sm text-neutral-500 max-w-xs leading-6">
-            Highlight any text in any app. huu rewrites it so it sounds like a
+            Highlight any text in any app. Huumanity rewrites it so it sounds like a
             real person.
           </p>
         </div>
@@ -800,8 +814,8 @@ useEffect(() => {
               You&apos;re in.
             </h1>
             <p className="mt-2 text-sm text-neutral-500 leading-6">
-              Your huumanity account is connected. huu is ready to rewrite text
-              anywhere on your Mac.
+              Your huumanity account is connected. Huumanity is ready to rewrite
+              text anywhere on your computer.
             </p>
           </div>
           <div className="flex w-full flex-col gap-2">
@@ -809,7 +823,7 @@ useEffect(() => {
               onClick={() => setAuthState("app")}
               className="w-full rounded-xl bg-black py-4 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
             >
-              Open huu &rarr;
+              Open Huumanity &rarr;
             </button>
             <button
               onClick={() => window.close()}
@@ -819,7 +833,7 @@ useEffect(() => {
             </button>
           </div>
           <p className="text-[11px] text-neutral-400">
-            You can always reopen huu from your Applications folder.
+            You can always reopen Huumanity from your Applications folder.
           </p>
         </div>
       </main>
@@ -1104,141 +1118,172 @@ useEffect(() => {
             />
           </div>
 
-        ) : !hasCompletedSetup ? (
-
-          /* ── SETUP VIEW ── */
-          <div className="flex-1 p-8">
-            <div className="max-w-2xl">
-              <p className="mb-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-400">
-                First run setup
-              </p>
-              <h1 className="font-display text-4xl leading-tight mb-8">
-                Set up desktop selector
-              </h1>
-
-              <div className="space-y-4">
-
-                {/* Windows intro — no permissions needed */}
-                {isWindows && (
-                  <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                    <p className="font-black text-base mb-1">
-                      1. You&apos;re ready to go
-                    </p>
-                    <p className="text-sm text-neutral-500 leading-6">
-                      On Windows, huu works right out of the box — no extra
-                      permissions to enable. Select text in any app and the yellow
-                      huu button appears automatically next to it.
-                    </p>
-                  </div>
-                )}
-
-                {/* Step 1 — Accessibility (macOS only) */}
-                {isMac && (
-                <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                  <p className="font-black text-base mb-1">
-                    1. Allow desktop control
-                  </p>
-                  <p className="text-sm text-neutral-500 leading-6 mb-4">
-                    huu needs macOS Accessibility permission so it can read the
-                    text you highlighted, place the yellow button near it, and
-                    paste the rewrite back.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={openAccessibilitySettings}
-                      className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
-                    >
-                      Open Accessibility settings
-                    </button>
-                    <button
-                      onClick={refreshAccessibilityPermission}
-                      className="rounded-full border-2 border-black/10 px-5 py-2.5 text-sm font-bold transition hover:border-black"
-                    >
-                      I allowed it
-                    </button>
-                  </div>
-                  <p className="mt-3 text-xs font-bold text-neutral-400">
-                    Status: {detectorStatus}
-                  </p>
-                </div>
-                )}
-
-                {/* Step 2 — Input Monitoring (macOS only) */}
-                {isMac && (
-                <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                  <p className="font-black text-base mb-1">
-                    2. Allow input monitoring
-                  </p>
-                  <p className="text-sm text-neutral-500 leading-6 mb-4">
-                    huu also needs macOS Input Monitoring so it can detect the
-                    exact moment you finish highlighting text and place the yellow
-                    button in the right spot. Without this, the button never
-                    appears.
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={openInputMonitoringSettings}
-                      className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
-                    >
-                      Open Input Monitoring settings
-                    </button>
-                  </div>
-                </div>
-                )}
-
-                {/* Test selection */}
-                <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                  <p className="font-black text-base mb-1">
-                    {isMac ? "3." : "2."} Test selection
-                  </p>
-                  <p className="text-sm text-neutral-500 leading-6 mb-4">
-                    Select text in another app, then click Test selection. This
-                    is the fallback path while the automatic yellow selector runs
-                    in the background.
-                  </p>
-                  <button
-                    onClick={captureSelectedText}
-                    className="rounded-full bg-[#fff700] px-5 py-2.5 text-sm font-black text-black ring-2 ring-black transition hover:brightness-95"
-                  >
-                    {isCapturing ? "Reading selection..." : "Test selection"}
-                  </button>
-                  {captureError && (
-                    <p className="mt-3 text-sm font-semibold text-red-600">
-                      {captureError}
-                    </p>
-                  )}
-                </div>
-
-                {/* Finish */}
-                <div className="rounded-2xl border border-black/[0.08] bg-white p-6 shadow-sm">
-                  <p className="font-black text-base mb-1">
-                    {isMac ? "4." : "3."} Start using huu
-                  </p>
-                  <p className="text-sm text-neutral-500 leading-6 mb-4">
-                    {isMac
-                      ? "Once Accessibility is allowed, huu will watch for highlighted text and show the yellow button when the focused app exposes the selection to macOS."
-                      : "huu is already watching for highlighted text. Finish setup and the yellow button will appear whenever you select text in any app."}
-                  </p>
-                  <button
-                    onClick={completeSetup}
-                    disabled={isMac && !accessibilityAllowed}
-                    className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900 disabled:opacity-40"
-                  >
-                    Finish setup
-                  </button>
-                </div>
-
-              </div>
-            </div>
-          </div>
-
         ) : (
 
-          /* ── DASHBOARD VIEW ── */
+          /* ── HOME / DASHBOARD VIEW ── */
           <div className="flex-1 p-8">
 
+            {/* Collapsible "Set up desktop selector" — a toggle box that lives on
+                top of the home page instead of a separate full-screen step. It is
+                expanded by default on first run, and reopenable any time. */}
+            <div className="mb-6 overflow-hidden rounded-2xl border border-black/[0.08] bg-white shadow-sm">
+              <button
+                type="button"
+                onClick={() => setSetupExpanded((v) => !v)}
+                className="flex w-full items-center justify-between gap-4 px-6 py-5 text-left transition hover:bg-black/[0.02]"
+              >
+                <div>
+                  <p className="mb-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-400">
+                    {hasCompletedSetup ? "Desktop selector" : "First run setup"}
+                  </p>
+                  <h2 className="font-display text-2xl leading-tight">
+                    Set up desktop selector
+                  </h2>
+                </div>
+                <span className="flex shrink-0 items-center gap-2">
+                  {hasCompletedSetup && (
+                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-emerald-600">
+                      Ready
+                    </span>
+                  )}
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={`text-neutral-400 transition-transform ${setupExpanded ? "rotate-180" : ""}`}
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </span>
+              </button>
+
+              {setupExpanded && (
+                <div className="space-y-3 border-t border-black/[0.06] p-6">
+
+                  {/* Windows intro — no permissions needed */}
+                  {isWindows && (
+                    <div className="rounded-xl border border-black/[0.07] bg-[#fafaf8] p-5">
+                      <p className="font-black text-base mb-1">
+                        1. You&apos;re ready to go
+                      </p>
+                      <p className="text-sm text-neutral-500 leading-6">
+                        Huumanity works right out of the box on Windows, with no
+                        extra permissions to enable. Select text in any app and the
+                        yellow Huumanity button appears automatically next to it.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Step 1 — Accessibility (macOS only) */}
+                  {isMac && (
+                  <div className="rounded-xl border border-black/[0.07] bg-[#fafaf8] p-5">
+                    <p className="font-black text-base mb-1">
+                      1. Allow desktop control
+                    </p>
+                    <p className="text-sm text-neutral-500 leading-6 mb-4">
+                      Huumanity needs macOS Accessibility permission so it can read
+                      the text you highlighted, place the yellow button near it, and
+                      paste the rewrite back.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={openAccessibilitySettings}
+                        className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
+                      >
+                        Open Accessibility settings
+                      </button>
+                      <button
+                        onClick={refreshAccessibilityPermission}
+                        className="rounded-full border-2 border-black/10 px-5 py-2.5 text-sm font-bold transition hover:border-black"
+                      >
+                        I allowed it
+                      </button>
+                    </div>
+                    <p className="mt-3 text-xs font-bold text-neutral-400">
+                      Status: {detectorStatus}
+                    </p>
+                  </div>
+                  )}
+
+                  {/* Step 2 — Input Monitoring (macOS only) */}
+                  {isMac && (
+                  <div className="rounded-xl border border-black/[0.07] bg-[#fafaf8] p-5">
+                    <p className="font-black text-base mb-1">
+                      2. Allow input monitoring
+                    </p>
+                    <p className="text-sm text-neutral-500 leading-6 mb-4">
+                      Huumanity also needs macOS Input Monitoring so it can detect
+                      the exact moment you finish highlighting text and place the
+                      yellow button in the right spot. Without this, the button
+                      never appears.
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={openInputMonitoringSettings}
+                        className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900"
+                      >
+                        Open Input Monitoring settings
+                      </button>
+                    </div>
+                  </div>
+                  )}
+
+                  {/* Test selection */}
+                  <div className="rounded-xl border border-black/[0.07] bg-[#fafaf8] p-5">
+                    <p className="font-black text-base mb-1">
+                      {isMac ? "3." : "2."} Test selection
+                    </p>
+                    <p className="text-sm text-neutral-500 leading-6 mb-4">
+                      Select text in another app, then click Test selection. This
+                      is the fallback path while the automatic yellow selector runs
+                      in the background.
+                    </p>
+                    <button
+                      onClick={captureSelectedText}
+                      className="rounded-full bg-[#fff700] px-5 py-2.5 text-sm font-black text-black ring-2 ring-black transition hover:brightness-95"
+                    >
+                      {isCapturing ? "Reading selection..." : "Test selection"}
+                    </button>
+                    {captureError && (
+                      <p className="mt-3 text-sm font-semibold text-red-600">
+                        {captureError}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Finish */}
+                  <div className="rounded-xl border border-black/[0.07] bg-[#fafaf8] p-5">
+                    <p className="font-black text-base mb-1">
+                      {isMac ? "4." : "3."} Start using Huumanity
+                    </p>
+                    <p className="text-sm text-neutral-500 leading-6 mb-4">
+                      {isMac
+                        ? "Once Accessibility is allowed, Huumanity will watch for highlighted text and show the yellow button when the focused app exposes the selection to macOS."
+                        : "Huumanity is already watching for highlighted text. Finish setup and the yellow button will appear whenever you select text in any app."}
+                    </p>
+                    <button
+                      onClick={completeSetup}
+                      disabled={isMac && !accessibilityAllowed}
+                      className="rounded-full bg-black px-5 py-2.5 text-sm font-black text-[#fff700] transition hover:bg-neutral-900 disabled:opacity-40"
+                    >
+                      Finish setup
+                    </button>
+                  </div>
+
+                </div>
+              )}
+            </div>
+
             {/* Page header */}
-            <div className="mb-8 flex items-start justify-between gap-4">
+            <div
+              ref={homeContentRef}
+              className="mb-8 flex items-start justify-between gap-4 scroll-mt-8"
+            >
               <div>
                 <p className="mb-1 text-xs font-black uppercase tracking-[0.2em] text-neutral-400">
                   Home
@@ -1265,8 +1310,8 @@ useEffect(() => {
                     </p>
                     <p className="text-sm font-bold text-white leading-6">
                       {isWindows || accessibilityAllowed
-                        ? "Running. Highlight text in any app to see the yellow huu button."
-                        : "Accessibility permission needed to use huu on your desktop."}
+                        ? "Running. Highlight text in any app to see the yellow Huumanity button."
+                        : "Accessibility permission needed to use Huumanity on your desktop."}
                     </p>
                     <p className="mt-0.5 text-xs text-white/40">
                       {detectorStatus}
@@ -1330,7 +1375,7 @@ useEffect(() => {
                 </div>
                 <h2 className="font-display text-3xl">Nothing rewritten yet.</h2>
                 <p className="mt-3 text-sm text-neutral-500 leading-6">
-                  Select text in any app. The yellow huu button will
+                  Select text in any app. The yellow Huumanity button will
                   appear next to your selection automatically.
                 </p>
                 <div className="mt-6 flex justify-center gap-3">
@@ -1356,7 +1401,7 @@ useEffect(() => {
                 <p className="text-sm font-bold text-red-900">{captureError}</p>
                 <p className="mt-1 text-sm leading-6 text-red-700">
                   {isMac
-                    ? "Go to System Settings → Privacy & Security → Accessibility and allow huu. Then select text in another app and click Try it out again."
+                    ? "Go to System Settings → Privacy & Security → Accessibility and allow Huumanity. Then select text in another app and click Try it out again."
                     : "Select text in another app, then click Try it out again."}
                 </p>
               </div>
