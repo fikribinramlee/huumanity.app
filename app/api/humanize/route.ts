@@ -264,9 +264,9 @@ export async function POST(req: NextRequest) {
     const userMessage =
       instructions.length === 1
         ? `${instructions[0]}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text.`
-        : `You will be given MULTIPLE style instructions below. Apply all of them at once and produce a single rewrite that satisfies every one of them.\n\n${instructions
-            .map((inst, i) => `=== STYLE ${i + 1} ===\n${inst}`)
-            .join("\n\n")}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text. No explanation, no quotes, no preamble.`;
+        : `Rewrite the text below by blending ALL of the following style rules into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every rule at once.\n\nSTYLE RULES TO BLEND:\n${instructions
+            .map((inst, i) => `--- Rule set ${i + 1} ---\n${inst}`)
+            .join("\n\n")}\n\nText to rewrite:\n${text}\n\nOne rewrite only. No labels, no headings, no explanation, no quotes.`;
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
