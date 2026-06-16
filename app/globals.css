@@ -54,6 +54,13 @@ body {
   to   { opacity: 1; transform: scale(1);   }
 }
 
+/* Fixed center-right pill tab (web demo) — slides in from the right edge
+   while keeping its vertical centering (translateY(-50%) preserved). */
+@keyframes huu-tab-slidein {
+  from { opacity: 0; transform: translateY(-50%) translateX(110%); }
+  to   { opacity: 1; transform: translateY(-50%) translateX(0);    }
+}
+
 /* Wave shimmer used in the popup loading state. */
 .huu-shimmer {
   background-color: #e5e7eb;

@@ -2116,26 +2116,31 @@ export default function LandingPage() {
               type="button"
               // pointerDown (not mouseDown) so a finger tap on touch devices
               // opens the popup too — and preventDefault keeps the text
-              // selection intact when the button steals the press.
+              // selection intact when the tab steals the press.
               onPointerDown={(e) => {
                 e.preventDefault();
                 openPopup();
               }}
-              className="absolute z-20 w-9 h-9 rounded-full bg-[#fff700] hover:brightness-95 border-2 border-black shadow-md flex items-center justify-center text-black"
+              // Grammarly-style fixed pill tab flush to the center-right of the
+              // viewport — same trigger/logic as the old floating dot, but the
+              // UX matches the desktop app's right-edge tab instead of chasing
+              // the selection. position:fixed so it stays put while scrolling.
+              className="fixed z-[60] flex h-14 w-9 items-center justify-center rounded-l-2xl rounded-r-none bg-[#fff700] hover:brightness-95 text-black shadow-[-4px_2px_14px_rgba(0,0,0,0.35)]"
               style={{
-                top: anchor.tabTop,
-                left: anchor.tabLeft,
-                animation: "huu-btn-fadein 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards",
+                right: 0,
+                top: "50%",
+                transform: "translateY(-50%)",
+                animation: "huu-tab-slidein 0.4s cubic-bezier(0.22,0.61,0.36,1) forwards",
               }}
               aria-label="Open rephrase options"
             >
               <svg
-                width="14"
-                height="14"
+                width="18"
+                height="18"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                strokeWidth="2.5"
+                strokeWidth="3"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               >
