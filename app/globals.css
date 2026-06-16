@@ -124,11 +124,11 @@ body {
 @keyframes huuPopIn {
   from {
     opacity: 0;
-    transform: scale(0.82);
+    transform: translateX(16px) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: scale(1);
+    transform: translateX(0) scale(1);
   }
 }
 @keyframes huuPanelIn {
@@ -144,17 +144,22 @@ body {
 @keyframes huuFadeOut {
   from {
     opacity: 1;
+    transform: translateX(0) scale(1);
   }
   to {
     opacity: 0;
+    transform: translateX(16px) scale(0.96);
   }
 }
 .huu-pop-in {
-  animation: huuPopIn 200ms cubic-bezier(0.2, 0.8, 0.3, 1.06) both;
+  /* Smooth slide-and-fade in from the right edge — reads as a gentle fade rather
+     than an abrupt pop. */
+  animation: huuPopIn 220ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 .huu-pop-in-panel {
   animation: huuPanelIn 150ms ease-out both;
 }
 html.huu-hiding {
-  animation: huuFadeOut 140ms ease-in both;
+  /* Mirror the show animation: same 220ms, same easing, slide-out to the right. */
+  animation: huuFadeOut 220ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }

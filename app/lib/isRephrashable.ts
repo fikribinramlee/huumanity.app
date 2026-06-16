@@ -33,6 +33,13 @@ function looksLikeCodeOrData(s: string): boolean {
   //  via the ratio thresholds below; these are the genuinely "techy" ones.)
   const codeSymbols = (nonSpace.match(/[{}[\]()<>=+*/\\|^~%$@#_`]/g) ?? []).length;
 
+  // A long, letter-dominated block is PROSE even with incidental numbers, ranges
+  // ("3-5"), times ("1:1"), dates ("10/05") or prices ("$4k") — the stuff that
+  // fills real WhatsApp/Telegram/Slack messages. Such text skips the single-token
+  // numeric/design checks below; density + code-keyword/operator-seq checks remain.
+  const wordCount = s.split(/\s+/).filter(Boolean).length;
+  const longProse = wordCount >= 6 && letters / len >= 0.7;
+
   // 1. Symbol-dense → code / formula / design token.
   if (codeSymbols / len > 0.12) return true;
   // 2. Digit-dense → number / calculation / data.
@@ -51,20 +58,27 @@ function looksLikeCodeOrData(s: string): boolean {
     return true;
   }
 
-  // 5. Arithmetic / equations: "number op number", or any "=" (assignment /
-  //    equation — essentially never appears in prose worth rephrasing).
-  if (/[0-9]\s*[-+*/=^×÷]\s*[0-9]/.test(s)) return true;
-  if (/=/.test(s)) return true;
+  // 5 & 6: single-token numeric / design checks — applied to SHORT text only.
+  // A long prose paragraph (a real message) skips these, so an incidental "=",
+  // date, time, price, or CSS-looking unit can't disqualify genuine writing.
+  if (!longProse) {
+    // 5. Arithmetic / equations: "number op number", or any "=". NOTE: "-" and
+    //    "/" are deliberately NOT operators — ranges/hyphens ("3-5"), ratios
+    //    ("10/10") and "24/7" are everywhere in prose; genuine arithmetic with
+    //    them ("10/2") is still caught by digit density.
+    if (/[0-9]\s*[+*=^×÷]\s*[0-9]/.test(s)) return true;
+    if (/=/.test(s)) return true;
 
-  // 6. Design tokens: hex colors, CSS units, color / transform functions.
-  if (/#[0-9a-fA-F]{3,8}\b/.test(s)) return true;
-  if (/\b\d+(\.\d+)?(px|rem|em|vh|vw|vmin|vmax|pt|pc|mm|cm|ch|fr|deg|ms)\b/.test(s)) return true;
-  if (
-    /\b(rgb|rgba|hsl|hsla|hwb|var|calc|url|translate|translatex|translatey|rotate|scale|matrix|linear-gradient|radial-gradient)\s*\(/i.test(
-      s
-    )
-  ) {
-    return true;
+    // 6. Design tokens: hex colors, CSS units, color / transform functions.
+    if (/#[0-9a-fA-F]{3,8}\b/.test(s)) return true;
+    if (/\b\d+(\.\d+)?(px|rem|em|vh|vw|vmin|vmax|pt|pc|mm|cm|ch|fr|deg|ms)\b/.test(s)) return true;
+    if (
+      /\b(rgb|rgba|hsl|hsla|hwb|var|calc|url|translate|translatex|translatey|rotate|scale|matrix|linear-gradient|radial-gradient)\s*\(/i.test(
+        s
+      )
+    ) {
+      return true;
+    }
   }
 
   return false;
@@ -84,13 +98,15 @@ export function isRephrashable(text: string): boolean {
     const word = words[0];
     const letters = word.replace(/[^a-zA-Z]/g, "");
 
-    if (letters.length < 3) return false; // too short (a, ok, hi) / pure number
+    if (letters.length < 2) return false; // 0–1 letters / pure number
     // Must be essentially all letters — rejects stubs like "v2", "x5", "px",
-    // "h1", "n_count" that slipped past the length check.
+    // "h1", "n_count" and URLs/handles ("foo.com") that slipped past the check.
     if (letters.length / word.length < 0.8) return false;
     if (letters === letters.toUpperCase()) return false; // ALL CAPS / acronym
-    if (/^[A-Z]/.test(word)) return false; // proper noun / name / place
-    return true; // lowercase common word ✓
+    // NOTE: capitalized words (incl. names) are intentionally ALLOWED now — the
+    // tab should appear for any real word, predictably; over-rejecting a word the
+    // user clearly selected is worse than occasionally offering on a name.
+    return true; // any single real word ✓
   }
 
   // ── Two or more words ────────────────────────────────────────────────────
@@ -99,12 +115,14 @@ export function isRephrashable(text: string): boolean {
   const letterCount = (nonSpace.match(/[a-zA-Z]/g) ?? []).length;
   // Prose is letter-dominated.
   if (letterCount / nonSpace.length < 0.55) return false;
-  // Needs at least two real alphabetic words (≥2 letters each) so a couple of
-  // numbers/symbols glued together can't masquerade as a phrase.
+  // Needs at least one real alphabetic word (≥2 letters) so a couple of
+  // numbers/symbols glued together can't masquerade as a phrase — but short,
+  // valid phrases like "a cat" or "I am" now qualify (they were wrongly rejected
+  // when this required two such words).
   const wordyCount = words.filter(
     (w) => (w.match(/[a-zA-Z]/g) ?? []).length >= 2
   ).length;
-  if (wordyCount < 2) return false;
+  if (wordyCount < 1) return false;
 
   return true;
 }

@@ -123,18 +123,12 @@ export default function SelectorPage() {
   }, [expanded]);
 
   const openOptions = async () => {
-    // Single payload fetch — set the current selection and gate on
-    // rephrasability in one pass (the old double-invoke added needless latency
-    // to the very click we want to feel instant).
-    let payload: DesktopSelection | null = null;
-    try {
-      payload = await invoke<DesktopSelection | null>("get_selector_payload");
-    } catch {
-      payload = null;
-    }
-    setSelection(payload);
-    // Ground rule: only expand tone panel for rephrashable text
-    if (payload?.text && !isRephrashable(payload.text)) return;
+    // Expand the tone bar IMMEDIATELY so the click feels instant. The native
+    // watcher only ever shows the dot for rephrashable selections, so we can
+    // trust the selection we already have and skip the blocking payload fetch
+    // that used to sit in front of this very click (the ~2s "bar takes a moment
+    // to appear" lag). We refresh the payload in the background below so
+    // handleGenerate still has the freshest selected text.
     setExpanded(true);
     setPopupStage("select");
     setSelectedTones([]);
@@ -142,10 +136,10 @@ export default function SelectorPage() {
     setGeneratedSignature("");
     setError("");
     setCopied(false);
-    // Warm a fresh session token while the user reads the tone options, so the
-    // first rewrite doesn't have to wait on the editor minting one. Fire-and-
-    // forget — handleGenerate refreshes again right before the call anyway.
-    void invoke("refresh_session_token").catch(() => {});
+
+    // Open the panel FIRST so the tone bar appears instantly. Everything else
+    // (selection refresh, token warm-up) runs AFTER and must never gate this —
+    // doing the token warm-up before this was what made the bar take 2-4s.
     try {
       await invoke("expand_selector_window");
     } catch (err) {
@@ -153,6 +147,24 @@ export default function SelectorPage() {
         typeof err === "string" ? err : "Could not open rewrite options."
       );
     }
+
+    // Background refresh of the current selection — non-blocking, just keeps
+    // `selection.text` current for the rewrite call.
+    void invoke<DesktopSelection | null>("get_selector_payload")
+      .then((payload) => {
+        if (payload?.text && !isRephrashable(payload.text)) {
+          // Selection turned non-rephrasable between dot-show and click — bail.
+          void closeSelector();
+          return;
+        }
+        if (payload) setSelection(payload);
+      })
+      .catch(() => {});
+
+    // Warm a fresh session token while the user reads the tone options, so the
+    // first rewrite has a valid token already cached. Now an async command, so it
+    // runs off the main thread and can't delay the panel that already opened.
+    void invoke("refresh_session_token").catch(() => {});
   };
 
   const humanizeEndpoint = () => {
@@ -195,20 +207,24 @@ export default function SelectorPage() {
 
     // The selector runs on tauri://localhost and calls the rewrite API
     // cross-origin, so the Clerk cookie is never sent. Authenticate instead with
-    // a session token minted by the editor window. `refresh_session_token` asks
-    // the editor to mint a FRESH one on demand (Clerk tokens live ~60s and the
-    // editor's background pump throttles when hidden), falling back to the cached
-    // token. The X-Huu-Client marker lets the API refuse uncounted anonymous
-    // rewrites from the desktop (see route.ts).
-    const getFreshToken = async (): Promise<string | null> => {
+    // a session token minted by the editor window. openOptions already warmed a
+    // FRESH token the moment the panel opened, so here we read the CACHED token
+    // first (instant) and only pay the slow on-demand mint if the call actually
+    // comes back 401. This is what removes the up-to-2.5s wait that used to sit
+    // in front of every rewrite. The X-Huu-Client marker lets the API refuse
+    // uncounted anonymous rewrites from the desktop (see route.ts).
+    const cachedToken = async (): Promise<string | null> => {
+      try {
+        return await invoke<string | null>("get_session_token");
+      } catch {
+        return null;
+      }
+    };
+    const mintFreshToken = async (): Promise<string | null> => {
       try {
         return await invoke<string | null>("refresh_session_token");
       } catch {
-        try {
-          return await invoke<string | null>("get_session_token");
-        } catch {
-          return null;
-        }
+        return cachedToken();
       }
     };
 
@@ -224,7 +240,7 @@ export default function SelectorPage() {
       });
 
     try {
-      let token = await getFreshToken();
+      let token = await cachedToken();
 
       // One automatic retry on a transient network failure (Vercel cold start,
       // brief connectivity drop) before surfacing anything to the user.
@@ -236,11 +252,12 @@ export default function SelectorPage() {
         res = await callApi(token);
       }
 
-      // 401 = the token was stale (editor pump throttled while hidden). Force a
-      // fresh mint and retry once. This is the common transient case, NOT a real
-      // sign-out, so recover silently instead of nagging a signed-in user.
+      // 401 = the cached token was stale (editor pump throttled while hidden).
+      // Only NOW pay for a fresh mint and retry once. This is the common
+      // transient case, NOT a real sign-out, so recover silently instead of
+      // nagging a signed-in user.
       if (res.status === 401) {
-        token = await getFreshToken();
+        token = await mintFreshToken();
         if (token) {
           try {
             res = await callApi(token);
@@ -338,22 +355,23 @@ export default function SelectorPage() {
   const canReplaceSelection = selection?.canReplace ?? false;
 
   if (!expanded) {
-    // Small floating dot — a clean 20px yellow circle, NO border, with a soft
-    // shadow so it reads on light backgrounds, and a compact bold up-arrow.
-    // Roughly the size of a line of text so it sits beside the selection without
-    // distracting or causing cognitive overload.
+    // Grammarly-style TAB: a yellow vertical pill flush against the right edge of
+    // the screen, vertically centered. Rounded on the left, square on the right so
+    // it reads as protruding from the edge. The native window is itself pinned to
+    // the right edge and vertically centered, so this just hugs the right side of
+    // that window. The shadow is cast leftward (onto the screen) so it's visible.
     return (
-      <main className="flex h-screen w-screen items-center justify-center bg-transparent">
+      <main className="flex h-screen w-screen items-center justify-end bg-transparent">
         <button
           key={showNonce}
           type="button"
           onClick={openOptions}
-          className="huu-pop-in flex h-5 w-5 items-center justify-center rounded-full bg-[#fff700] text-black shadow-[0_1px_3px_rgba(0,0,0,0.3)] transition hover:brightness-95 active:scale-90"
+          className="huu-pop-in flex h-12 w-8 items-center justify-center rounded-l-2xl rounded-r-none bg-[#fff700] text-black shadow-[-2px_2px_8px_rgba(0,0,0,0.28)] transition hover:brightness-95 active:scale-95"
           aria-label="Open huumanity rewrite options"
         >
           <svg
-            width="11"
-            height="11"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="black"
@@ -371,7 +389,7 @@ export default function SelectorPage() {
 
   return (
     <main
-      className="flex h-screen w-screen flex-col items-center justify-end bg-transparent p-3"
+      className="flex h-screen w-screen flex-col items-end justify-center bg-transparent p-3"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) {
           void closeSelector();
@@ -381,8 +399,9 @@ export default function SelectorPage() {
       {/* Mirrors the website's tone bar EXACTLY: white box, bright yellow
           border, single row of tone pills + a round arrow button. No black
           header, no always-on close — the X appears only in the result stage,
-          just like the site. Anchored to the bottom of the transparent window
-          so it sits directly above the selected text. */}
+          just like the site. Right-aligned and vertically centered in the
+          transparent window, which itself floats just inside the right screen
+          edge — so the panel opens LEFTWARD into the screen and never clips. */}
       <section
         ref={panelRef}
         className="huu-pop-in-panel relative w-fit max-w-full rounded-2xl border-2 border-[#fff700] bg-white shadow-[0_6px_20px_rgba(0,0,0,0.12)]"

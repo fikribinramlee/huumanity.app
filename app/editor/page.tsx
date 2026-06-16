@@ -1051,10 +1051,10 @@ useEffect(() => {
                   <div className="border-t border-black/[0.07] p-1.5">
                     <button
                       onClick={() => {
-                        void signOut();
                         localStorage.removeItem("huu_logged_in");
                         setAuthState("login");
                         setUserMenuOpen(false);
+                        void signOut({ redirectUrl: "/editor" });
                       }}
                       className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-bold text-red-600 transition hover:bg-red-50"
                     >
@@ -1481,10 +1481,10 @@ useEffect(() => {
                       <div className="flex items-center gap-3">
                         <button
                           onClick={() => {
-                            void signOut();
                             localStorage.removeItem("huu_logged_in");
                             setAuthState("login");
                             setSettingsOpen(false);
+                            void signOut({ redirectUrl: "/editor" });
                           }}
                           className="rounded-xl border border-black/15 bg-[#f5f5f3] px-5 py-2.5 text-sm font-semibold text-neutral-700 transition hover:border-black/30 hover:bg-neutral-100"
                         >

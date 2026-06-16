@@ -266,7 +266,10 @@ export async function POST(req: NextRequest) {
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 1024,
+      // 1024 truncated longer real-world selections (full emails, paragraphs)
+      // mid-rewrite, which read as a broken/partial result. 4096 gives ~3000
+      // words of headroom so the rewrite is never cut off.
+      max_tokens: 4096,
       system: ANTI_AI_RULES,
       messages: [{ role: "user", content: userMessage }],
     });
