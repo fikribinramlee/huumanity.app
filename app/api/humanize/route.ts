@@ -60,28 +60,28 @@ BANNED PATTERNS. never do any of these:
 `.trim();
 
 const TONE_INSTRUCTIONS: Record<string, string> = {
-  Humanize: `Your job is to strip every AI pattern out of this text and rewrite it so it sounds like a real person wrote it. The 17 banned patterns in the system prompt are your primary tool. Go through the text and find every violation — every AI word, every AI sentence structure, every AI rhythm — and replace it with something a real person would actually write.
-
-If the entire text is full of AI patterns, rewrite the whole thing. Do not try to preserve AI-sounding sentences just because they carry meaning. The meaning can survive in a completely different structure, different words, different format. Change whatever needs to change to make it sound human. The only things that must survive intact are the core message, specific details like names and numbers, and the CTA if there is one.
+  Humanize: `Rephrase this text so it sounds like a real human wrote it. Keep the exact same meaning, tone intent, length and message. just strip out everything that makes it sound AI-generated.
 
 WHAT TO DO
-- Read the original and identify every AI pattern from the 17 rules — staccato rhythm, setup-then-contradict, throwaway endings, em dashes, repeated lead words, filler openers, buzzwords, everything
-- Rewrite sentence by sentence if needed. If a sentence violates a rule, rewrite that sentence completely — don't just swap one word
-- Change the structure if the original structure is what makes it sound AI. A different sentence order, a different paragraph break, a different way of connecting thoughts — all of that is fair game
-- Match the approximate length of the original unless the original is bloated with filler, in which case cut it
-- The output should read like something a normal person typed out, not a content writer, not a LinkedIn influencer, not a motivational speaker
+- Read the original and understand what it is actually trying to say
+- Rewrite it in plain natural language that a real person would use
+- Keep all the same messaging, context, names, numbers, and CTA
+- Match the approximate length of the original. dont make it significantly shorter or longer unless cutting obvious filler
+- importantly follow the banned patterns rules.
+- rephrase and change the words to make it sound more natural and human. not corporate, and not over-casual. just a normal person writing clearly
 
 WHAT TO REMOVE
-- Every pattern from the 17 banned rules — treat this list as a checklist and clear every single one
-- Hollow openers: "I hope this finds you well", "I wanted to reach out", "I am writing to", "I am reaching out"
-- Corporate buzzwords: synergies, leverage, circle back, touch base, deliverables, at your earliest convenience, moving forward, value proposition, actionable insights
+- Every phrase from the banned patterns list
+- Any word or sentence that exists purely to sound professional or sophisticated
+- Hollow openers: "I hope this finds you well", "I wanted to reach out", "I am writing to"
+- Any buzzwords: synergies, leverage, circle back, touch base, deliverables, at your earliest convenience, moving forward
 - Passive constructions that distance the writer from the message
-- Any sentence that exists purely to sound smart or sophisticated rather than to say something
 
 WHAT TO KEEP
-- The core meaning and message — nothing that matters gets stripped
-- All specific details: names, numbers, context, links, CTA
-- The approximate length — don't pad it, don't gut it
+- The meaning of the original text, nothing stripped that matters
+- The length of the original text, nothing added nor removed in the original text.
+- Any specific details: names, numbers, context, links
+- The original structure if it works. only restructure if the original is confusing
 
 Return only the rewritten text. No explanation, no intro line, no quotes around it.`,
 
@@ -122,8 +122,6 @@ Never open with staccato metrics or statements ("3k signups. 100 active. That's 
 Return only the rewritten text. No explanation, intro line, or quotes around it.`,
 
   Controversial: `Rewrite this text like someone who says the uncomfortable truth out loud and doesnt apologise for it. The kind of person who posts something, watches it blow up, and doesnt delete it.
-
-FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
 
 VOICE & TONE
 - Say the thing everyone thinks but nobody says
@@ -171,8 +169,6 @@ Never open with staccato metrics or statements ("3k signups. 100 active. That's 
 
 Return only the rewritten text. No explanation or intro line, or quotes around it.`,
   Direct: `Rewrite this text so it gets to the point immediately and says exactly what it means without wasting a single word.
-
-FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
 
 CORE RULES
 - Remove every word that doesnt add meaning
@@ -268,8 +264,8 @@ export async function POST(req: NextRequest) {
     const userMessage =
       instructions.length === 1
         ? `${instructions[0]}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text.`
-        : `Rewrite the text below by blending ALL of the following styles into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every style at once.\n\nIMPORTANT — these styles share ONE foundation: every style below carries the exact same anti-AI foundation (the 17 banned patterns in the system prompt). That foundation does not change between styles, so apply it ONCE — strip every AI word, structure, and rhythm a single time. The ONLY thing that differs between the styles is the VOICE (how casual, how blunt, how provocative, how stripped-down). Do not let the styles repeat or fight each other on the anti-AI rules — clear those once, then blend the voices into one consistent voice.\n\nSTYLES TO BLEND:\n${instructions
-            .map((inst, i) => `--- Style ${i + 1} ---\n${inst}`)
+        : `Rewrite the text below by blending ALL of the following style rules into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every rule at once.\n\nSTYLE RULES TO BLEND:\n${instructions
+            .map((inst, i) => `--- Rule set ${i + 1} ---\n${inst}`)
             .join("\n\n")}\n\nText to rewrite:\n${text}\n\nOne rewrite only. No labels, no headings, no explanation, no quotes.`;
 
     const message = await client.messages.create({
