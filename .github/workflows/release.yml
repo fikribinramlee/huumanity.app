@@ -1,75 +1,98 @@
-name: Build Windows
+name: Release
 
-# Runs when you push a tag like v0.1.1, v0.2.0, etc.
+# Push a tag to trigger:  git tag v0.2.0 && git push --tags
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
 
 jobs:
-  build-windows:
-    name: Windows (x64)
-    runs-on: windows-latest
-    # Lets the default GITHUB_TOKEN create a release + upload assets. Without this
-    # the token is read-only and the release step fails with 403 "Resource not
-    # accessible by integration".
+  publish:
     permissions:
-      contents: write
+      contents: write   # create GitHub Release + upload assets
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target aarch64-apple-darwin   # Apple Silicon
+          - platform: macos-latest
+            args: --target x86_64-apple-darwin    # Intel Mac
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: '20'
+          cache: npm
 
-      - name: Setup Rust
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-pc-windows-msvc
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: src-tauri
+          workspaces: src-tauri -> target
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build
-        # These are PUBLIC Clerk values (the publishable key is shipped to every
-        # browser that loads huumanity.app) — needed only so `next build` can
-        # prerender pages. No secret key is required: the prerendered pages don't
-        # call Clerk's backend at build time, and the desktop editor loads the
-        # live site at runtime where the real secrets live.
+      # ── macOS: import Developer ID cert into a temporary keychain ──
+      - name: Import Apple certificate (macOS)
+        if: matrix.platform == 'macos-latest'
         env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import certificate.p12 -k build.keychain \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: \
+            -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          rm certificate.p12
+
+      # ── Build, sign update bundles, and publish to GitHub Release ──
+      - name: Build and publish
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # These are public Clerk values — shipped to every browser that loads
+          # huumanity.app. Required so `next build` can prerender pages.
           NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_live_Y2xlcmsuaHV1bWFuaXR5LmFwcCQ
           NEXT_PUBLIC_CLERK_SIGN_IN_URL: /sign-in
           NEXT_PUBLIC_CLERK_SIGN_UP_URL: /sign-up
           NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL: /download
           NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL: /download
-        run: npm run tauri:build
 
-      - name: Find installer
-        id: installer
-        shell: pwsh
-        run: |
-          $exe = Get-ChildItem -Recurse "src-tauri/target/release/bundle/nsis" -Filter "*.exe" | Select-Object -First 1
-          echo "path=$($exe.FullName)" >> $env:GITHUB_OUTPUT
-          echo "name=$($exe.Name)" >> $env:GITHUB_OUTPUT
+          # Tauri updater signing — signs .tar.gz/.zip bundles so the app can
+          # verify downloaded updates before installing them.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-      - name: Create GitHub Release and upload installer
-        uses: softprops/action-gh-release@v2
+          # macOS code signing + notarization
+          APPLE_SIGNING_IDENTITY: 'Developer ID Application: Fikri Bin ramlee (JJKZ58P2CL)'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
-          name: ${{ github.ref_name }}
-          draft: false
+          tagName: ${{ github.ref_name }}
+          releaseName: 'huumanity ${{ github.ref_name }}'
+          releaseBody: ''
+          releaseDraft: false
           prerelease: false
-          # Don't clobber assets already on the release (e.g. the Mac DMG we
-          # upload separately) — just add the Windows installer alongside them.
-          files: ${{ steps.installer.outputs.path }}
-        env:
-          # The public huumanity.app repo hosts releases directly, so the built-in
-          # token (granted contents:write above) is all we need — no separate repo
-          # or RELEASES_TOKEN secret required.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # tauri-action generates latest.json and uploads it alongside the
+          # platform installers — the in-app updater fetches this file.
+          args: ${{ matrix.args }}

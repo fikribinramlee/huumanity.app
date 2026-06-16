@@ -16,6 +16,7 @@
     "core:default",
     "deep-link:default",
     "opener:default",
+    "updater:default",
     "allow-app-commands"
   ]
 }

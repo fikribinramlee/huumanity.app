@@ -22,6 +22,12 @@
       "desktop": {
         "schemes": ["huu"]
       }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ4RDBBRDlEOUM3NDkyMQpSV1FoU2NmWjJRcU5CTnRPb3VoUWxXS2IzaFcxYnByRnpmYXZaZks5RDNmWGlZTndHN1FlWXhaWgo=",
+      "endpoints": [
+        "https://github.com/fikribinramlee/huumanity.app/releases/latest/download/latest.json"
+      ]
     }
   },
   "bundle": {

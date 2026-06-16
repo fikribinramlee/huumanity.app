@@ -73,6 +73,7 @@ struct SelectorHealth {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .manage(SelectorState::default())
@@ -125,6 +126,23 @@ pub fn run() {
                 std::thread::spawn(move || loop {
                     std::thread::sleep(Duration::from_secs(25));
                     let _ = handle.emit_to("main", "huu-mint-token", ());
+                });
+            }
+
+            // Background auto-updater: check for a new release ~5 seconds after
+            // launch, download and install silently, restart on next open.
+            {
+                use tauri_plugin_updater::UpdaterExt;
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    if let Ok(updater) = handle.updater() {
+                        if let Ok(Some(update)) = updater.check().await {
+                            let _ = update
+                                .download_and_install(|_chunk, _total| {}, || {})
+                                .await;
+                        }
+                    }
                 });
             }
 
