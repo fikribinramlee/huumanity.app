@@ -252,17 +252,16 @@ fn paste_text_into_source(
     if let Ok(mut open) = state.popup_open.lock() {
         *open = false;
     }
-    // Hiding the selector here makes macOS fire a spurious `Reopen` (no visible
-    // huu windows left). Mark activity FIRST so the Reopen handler suppresses it
-    // — otherwise accepting a rewrite would pop the editor window open. (Same
-    // guard the normal `hide_selector_window` path already uses.)
+    // Marking activity suppresses the spurious `Reopen` macOS fires once no huu
+    // window is visible (the time-window guard in the Reopen handler).
     mark_selector_activity(&state);
-    if let Some(window) = app.get_webview_window("selector") {
-        let _ = window.hide();
-    }
 
-    std::thread::sleep(Duration::from_millis(120));
-
+    // ORDER MATTERS. Hand focus to the source app BEFORE hiding the selector.
+    // If we hid the selector while huu was still the frontmost app, macOS would
+    // promote huu's NEXT window — the editor — to the front, and the moment the
+    // panel vanishes the editor is revealed. That is the "desktop app pops up on
+    // Accept" bug. Activating the source first means huu is no longer the active
+    // app when its selector window hides, so nothing of huu's can surface.
     if let Some(pid) = source_pid {
         if let Err(err) = activate_source_process(pid) {
             debug_log(&format!("source activation failed pid={pid}: {err}"));
@@ -270,6 +269,21 @@ fn paste_text_into_source(
             std::thread::sleep(Duration::from_millis(180));
         }
     }
+
+    if let Some(window) = app.get_webview_window("selector") {
+        let _ = window.hide();
+    }
+    // Belt-and-suspenders: if huu is somehow STILL frontmost (no source pid, or
+    // activation lost the race), order the editor out so it can't be revealed.
+    #[cfg(target_os = "macos")]
+    if platform_frontmost_pid() == Some(std::process::id() as i32) {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.hide();
+        }
+    }
+
+    // Short settle so the focus change + hide land before we paste.
+    std::thread::sleep(Duration::from_millis(80));
 
     paste_text(text)
 }
@@ -938,21 +952,33 @@ fn hide_selector_window(
         *frame = None;
     }
     mark_selector_activity(&state);
-    if let Some(window) = app.get_webview_window("selector") {
-        fade_and_hide_selector(&window);
-    }
 
-    // If huu is STILL the frontmost app once the panel is gone (i.e. the user
-    // closed it from within the overlay — cross, backdrop, or a click that kept
-    // huu active — rather than by switching to another app), huu's editor window
-    // would surface next (Reopen / window cycling). Hand focus back to the app the
-    // text was selected in so huu drops to the background and the editor never
-    // pops. If the user closed by clicking INTO another app, that app is already
-    // frontmost (not huu), so we leave their focus exactly where they put it.
+    // If huu is STILL the frontmost app (i.e. the user closed from within the
+    // overlay — Copy, cross, backdrop — rather than by switching to another
+    // app), hand focus BACK to the source app FIRST, before hiding. Hiding the
+    // selector while huu is active promotes huu's editor window to the front,
+    // and during the 235ms fade it would flash into view. Refocusing the source
+    // first means huu isn't active when the selector hides, so the editor can't
+    // surface. If the user closed by clicking INTO another app, that app is
+    // already frontmost (not huu), so we leave their focus exactly where it is.
     #[cfg(target_os = "macos")]
     if platform_frontmost_pid() == Some(std::process::id() as i32) {
         if let Some(pid) = source_pid {
             let _ = activate_source_process(pid);
+            std::thread::sleep(Duration::from_millis(140));
+        }
+    }
+
+    if let Some(window) = app.get_webview_window("selector") {
+        fade_and_hide_selector(&window);
+    }
+
+    // Final guard for the no-source-pid case: if huu remained frontmost, order
+    // the editor out so the fade can't reveal it.
+    #[cfg(target_os = "macos")]
+    if platform_frontmost_pid() == Some(std::process::id() as i32) {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.hide();
         }
     }
     Ok(())
