@@ -45,25 +45,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      # ── macOS: import Developer ID cert into a temporary keychain ──
-      - name: Import Apple certificate (macOS)
-        if: matrix.platform == 'macos-latest'
-        env:
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
-        run: |
-          echo "$APPLE_CERTIFICATE" | base64 --decode > certificate.p12
-          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security default-keychain -s build.keychain
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
-          security import certificate.p12 -k build.keychain \
-            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          security set-key-partition-list -S apple-tool:,apple: \
-            -s -k "$KEYCHAIN_PASSWORD" build.keychain
-          rm certificate.p12
-
       # ── Build, sign update bundles, and publish to GitHub Release ──
+      # tauri-action imports the Apple certificate into a temporary keychain
+      # itself when APPLE_CERTIFICATE is provided — no manual `security import`
+      # step is needed (and the manual step's `base64 --decode` is fragile on
+      # the macOS runner, which is what previously broke the build).
       - name: Build and publish
         uses: tauri-apps/tauri-action@v0
         env:
@@ -82,7 +68,10 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
-          # macOS code signing + notarization
+          # macOS code signing + notarization. tauri-action handles importing
+          # APPLE_CERTIFICATE into a keychain on the macOS runners.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: 'Developer ID Application: Fikri Bin ramlee (JJKZ58P2CL)'
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
