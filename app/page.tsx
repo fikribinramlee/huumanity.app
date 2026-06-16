@@ -268,7 +268,6 @@ function writeAnonUsage(next: AnonUsage) {
     localStorage.setItem(ANON_USAGE_KEY, JSON.stringify(next));
   } catch {}
 }
-const BRAND = "#fff700";
 
 // ---------- Scroll-scrub helper ----------
 
@@ -2043,7 +2042,7 @@ export default function LandingPage() {
               spellCheck={false}
               data-placeholder="Paste your text here to humanize it…"
               className="min-h-[380px] p-8 pt-12 sm:p-10 sm:pt-12 text-[15px] sm:text-base leading-7 text-neutral-700 whitespace-pre-wrap focus:outline-none font-sans"
-              style={{ caretColor: BRAND }}
+              style={{ caretColor: "#000" }}
             >
               {isCustomMode ? "" : SAMPLES[activeTab]}
             </div>

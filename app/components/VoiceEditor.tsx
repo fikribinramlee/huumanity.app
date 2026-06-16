@@ -16,11 +16,16 @@ export function VoiceEditor() {
   const [saved, setSaved] = useState("");
   const [justSaved, setJustSaved] = useState(false);
 
-  // Load the committed voice on mount so the textarea is pre-filled.
+  // Load the committed voice on mount so the textarea is pre-filled. This runs
+  // client-only (localStorage is unavailable during prerender), so the field
+  // starts empty on the server and fills in after hydration — intentional, so
+  // the one-time setState here is safe.
   useEffect(() => {
     const stored = localStorage.getItem(VOICE_KEY) ?? "";
+    /* eslint-disable react-hooks/set-state-in-effect */
     setDraft(stored);
     setSaved(stored);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, []);
 
   const isDirty = draft !== saved;
@@ -42,11 +47,8 @@ export function VoiceEditor() {
           My Voice
         </p>
         <h2 className="font-display text-3xl">Make it sound like you.</h2>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-neutral-500">
-          This is your space. Describe how you actually write — your words, your
-          rhythm, the little quirks that make it yours — and huumanity remembers
-          it. It layers on top of whatever tone you pick, so every rewrite comes
-          out in your voice, not a generic one.
+        <p className="mt-1 text-sm leading-6 text-neutral-500">
+          This is your space. Describe how you actually write, the words you use, the rhythm, the little quirks that make it yours, and huumanity remembers it. It layers on top of whatever tone you pick, so every rewrite comes out in your voice, not a generic one.
         </p>
       </div>
 
@@ -58,14 +60,14 @@ export function VoiceEditor() {
           spellCheck={false}
           placeholder="e.g. I write in lowercase, keep sentences short, never use exclamation marks, and lean a bit dry and deadpan. I say 'tbh' and 'honestly' a lot. No corporate words."
           className="min-h-[320px] flex-1 resize-none rounded-3xl border-2 border-black bg-[#fbfaf8] p-6 text-[15px] leading-7 text-neutral-800 placeholder:text-neutral-400 focus:outline-none"
-          style={{ caretColor: "#fff700" }}
+          style={{ caretColor: "#000" }}
         />
 
         {/* Save row — committing is what "activates" the voice for the API */}
         <div className="mt-4 flex items-center justify-between gap-4">
           <p className="text-xs text-neutral-400">
             {isDirty
-              ? "Unsaved changes — hit Save to apply your voice."
+              ? "Unsaved changes. Hit Save to apply your voice."
               : saved
                 ? "Your voice is active across every rewrite."
                 : "Add your style above, then Save to turn it on."}

@@ -318,7 +318,7 @@ export function ScratchpadEditor({ onUpgradeRequired, limitReached = false }: Sc
           suppressContentEditableWarning
           spellCheck={false}
           className="min-h-[360px] rounded-3xl border-2 border-black bg-[#fbfaf8] p-6 text-[15px] leading-7 text-neutral-800 whitespace-pre-wrap focus:outline-none"
-          style={{ caretColor: "#fff700" }}
+          style={{ caretColor: "#000" }}
         >
           {SAMPLE}
         </div>
