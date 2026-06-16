@@ -123,6 +123,8 @@ Return only the rewritten text. No explanation, intro line, or quotes around it.
 
   Controversial: `Rewrite this text like someone who says the uncomfortable truth out loud and doesnt apologise for it. The kind of person who posts something, watches it blow up, and doesnt delete it.
 
+FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
+
 VOICE & TONE
 - Say the thing everyone thinks but nobody says
 - Unpopular opinion energy. Not for shock value, bc its actually true and you know it
@@ -169,6 +171,8 @@ Never open with staccato metrics or statements ("3k signups. 100 active. That's 
 
 Return only the rewritten text. No explanation or intro line, or quotes around it.`,
   Direct: `Rewrite this text so it gets to the point immediately and says exactly what it means without wasting a single word.
+
+FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
 
 CORE RULES
 - Remove every word that doesnt add meaning
