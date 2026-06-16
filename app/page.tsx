@@ -606,40 +606,38 @@ export default function LandingPage() {
   useEffect(() => {
     const el = benefitSectionRef.current;
     if (!el) return;
-    // gain < 1 stretches the timeline across MORE scroll distance, so the whole
-    // sequence isn't finished by the time the section reaches the viewport
-    // centre. The story now spans the full pass-through: selection done by a
-    // quarter scroll, tones/Enter through the middle, Accept once the section is
-    // fully in view, and the Gmail replacement only as you scroll past it.
+    // gain < 1 stretches the timeline across more scroll distance; 0.7 keeps the
+    // whole sequence playing through the pass-through without dragging — it's
+    // fully done a bit before the section is halfway up the viewport, then holds.
     return attachScrollScrub(el, 12000, (T) => {
       // Cursor rides the whole sequence, then leaves shortly after it clicks
-      // Accept and the rewrite lands — so it never hovers over the empty top slot.
-      setCursorVisible(T >= 500 && T < 11400);
+      // Accept and the rewrite lands.
+      setCursorVisible(T >= 400 && T < 10800);
       setCursorExiting(false);
       // Bottom-up story: select the email (pos 0) → click the right-edge tab (1) →
       // sweep up to the tone bar: Unpolished (2), Controversial (3), Enter (4)
       // → the result generates → cursor rises to Accept (5).
       setCursorPos(
-        T >= 8800 ? 5
-        : T >= 6600 ? 4
-        : T >= 5400 ? 3
-        : T >= 4200 ? 2
-        : T >= 2600 ? 1
+        T >= 8000 ? 5
+        : T >= 6000 ? 4
+        : T >= 4900 ? 3
+        : T >= 3800 ? 2
+        : T >= 2200 ? 1
         : 0
       );
-      setArrowFlash(T >= 7000);
-      setAcceptFlash(T >= 9600);
+      setArrowFlash(T >= 6400);
+      setAcceptFlash(T >= 8800);
       setAnimStep(
-        T >= 10600 ? 8   // Accept clicked → rewrite replaces the Gmail draft (no highlight)
-        : T >= 8200 ? 7  // result card's Back/Copy/Accept buttons appear
-        : T >= 7600 ? 6  // result card generates at the top
-        : T >= 5800 ? 5  // Controversial lights up
-        : T >= 4600 ? 4  // Unpolished lights up
-        : T >= 3400 ? 3  // tone bar opens
-        : T >= 1200 ? 2  // text selected + tab slides in
+        T >= 9800 ? 8   // Accept clicked → rewrite replaces the Gmail draft (no highlight)
+        : T >= 7400 ? 7  // result card's Back/Copy/Accept buttons appear
+        : T >= 6800 ? 6  // result card generates at the top
+        : T >= 5200 ? 5  // Controversial lights up
+        : T >= 4100 ? 4  // Unpolished lights up
+        : T >= 2900 ? 3  // tone bar opens
+        : T >= 1000 ? 2  // text selected + tab slides in
         : 0
       );
-    }, 0.62);
+    }, 0.7);
   }, []);
 
   // Compute cursor target positions from real DOM layout (updates on resize too).
@@ -1537,7 +1535,7 @@ export default function LandingPage() {
                 evenly; they animate via opacity/transform only, never reflowing. */}
             <div
               ref={rightColumnRef}
-              className="relative flex flex-col justify-center gap-7 p-6 sm:p-8 min-h-[600px]"
+              className="relative flex flex-col justify-center gap-7 p-6 sm:p-8 min-h-[640px]"
             >
 
               {/* macOS cursor — position controlled by cursorPos, visibility by cursorVisible.
@@ -1563,16 +1561,15 @@ export default function LandingPage() {
                 </svg>
               </div>
 
-              {/* RESULT CARD — top slot, generates after Enter (step 6), fades once
-                  Accept is clicked (step 8) and the rewrite drops into the email.
-                  In normal flow so its slot stays reserved (the top goes empty/black
-                  after Accept, matching the end state). */}
+              {/* RESULT CARD — top slot, generates after Enter (step 6) and STAYS
+                  put once Accept is clicked (the rewrite also drops into the email).
+                  Only scrolling back up reverses it. */}
               <div
                 className="w-full bg-white rounded-2xl p-4 border-2 border-[#fff700] shadow-[0_6px_24px_rgba(255,247,0,0.22)]"
                 style={{
                   zIndex: 15,
-                  opacity: animStep >= 8 ? 0 : animStep >= 6 ? 1 : 0,
-                  transform: animStep >= 6 && animStep < 8 ? "translateY(0)" : "translateY(-10px)",
+                  opacity: animStep >= 6 ? 1 : 0,
+                  transform: animStep >= 6 ? "translateY(0)" : "translateY(-10px)",
                   transition: "opacity 0.5s ease-out, transform 0.5s ease-out",
                 }}
               >
@@ -1613,11 +1610,12 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* TONE BAR — middle slot, RIGHT-aligned so it sits right next to the
-                  yellow tab on the screen edge. Opens when the tab is clicked (step 3). */}
+              {/* TONE BAR — middle slot, right-aligned but kept clear of the yellow
+                  tab (mr) so there's breathing room between them. Opens when the tab
+                  is clicked (step 3). */}
               <div
                 aria-hidden="true"
-                className="self-end"
+                className="self-end mr-12 sm:mr-16"
                 style={{
                   zIndex: 20,
                   pointerEvents: "none",
@@ -1697,9 +1695,9 @@ export default function LandingPage() {
                   </span>
                 </div>
                 <div className="h-px bg-neutral-200" />
-                <div data-viz="email" className="px-4 py-3 whitespace-pre-wrap">
+                <div data-viz="email" className="px-5 py-4 whitespace-pre-wrap min-h-[200px]">
                   <span
-                    className={`font-sans text-[11.5px] leading-[1.65] transition-colors duration-500 ${
+                    className={`font-sans text-[13px] leading-[1.75] transition-colors duration-500 ${
                       animStep >= 8
                         ? "text-neutral-800"
                         : animStep >= 2
