@@ -1884,6 +1884,7 @@ mod macos_accessibility {
         boolean::CFBoolean,
         dictionary::{CFDictionary, CFDictionaryRef},
         string::{CFString, CFStringRef},
+        url::CFURL,
     };
     use core_graphics::{
         event::CGEvent,
@@ -2051,6 +2052,25 @@ mod macos_accessibility {
                     selection: None,
                     status: "huu-self-focused".to_string(),
                 };
+            }
+
+            // HUUMANITY-SITE GUARD. The user can run the desktop app AND use the
+            // site (huumanity.app/editor) in a browser at the same time. When
+            // they select text on that page, the page already has its OWN
+            // in-editor tab — the global selector must NOT double up, fire a ⌘C
+            // probe, or activate huu's window over the browser (that focus-steal
+            // was breaking the page's own Accept/Copy and popping huu's window).
+            // Reuse the self-focus sentinel so every existing guard treats it the
+            // same: skip silently, show nothing. Best-effort — if the URL can't
+            // be read we fall through and behave exactly as before.
+            if let Some(url) = focused_page_url(focused as AXUIElementRef) {
+                if url.to_ascii_lowercase().contains("huumanity") {
+                    CFRelease(focused);
+                    return SelectionProbe {
+                        selection: None,
+                        status: "huu-self-focused".to_string(),
+                    };
+                }
             }
 
             // Hard wall on the whole tree walk. Even with a per-call timeout, a
@@ -2248,6 +2268,47 @@ mod macos_accessibility {
         let value = copy_attribute(element, attr_name)?;
         let cf_type = CFType::wrap_under_create_rule(value);
         cf_type.downcast::<CFBoolean>().map(bool::from)
+    }
+
+    /// The URL of the web page that owns `focused`, if it's web content. The URL
+    /// lives on the AXWebArea, an ancestor of the focused text element, exposed
+    /// as `AXURL` (a CFURL) or sometimes `AXDocument` (a string). Walk up the
+    /// parent chain and return the first one we find. Used to recognize when a
+    /// selection is happening on huumanity's own site so the global selector can
+    /// stand down (the site already has its own in-editor tab). Best-effort:
+    /// returns None for native apps or anything that doesn't expose a URL.
+    unsafe fn focused_page_url(focused: AXUIElementRef) -> Option<String> {
+        let mut current = focused;
+        let mut owned: Vec<CFTypeRef> = Vec::new();
+        let mut result: Option<String> = None;
+
+        for _ in 0..10 {
+            if let Some(value) = copy_attribute(current, "AXURL") {
+                let cf_type = CFType::wrap_under_create_rule(value);
+                if let Some(url) = cf_type.downcast::<CFURL>() {
+                    result = Some(url.get_string().to_string());
+                } else if let Some(s) = cf_type.downcast::<CFString>() {
+                    result = Some(s.to_string());
+                }
+                if result.as_deref().is_some_and(|s| !s.is_empty()) {
+                    break;
+                }
+            }
+            if let Some(doc) = copy_attribute_string(current, "AXDocument") {
+                if !doc.is_empty() {
+                    result = Some(doc);
+                    break;
+                }
+            }
+            let Some(parent) = copy_attribute(current, "AXParent") else {
+                break;
+            };
+            owned.push(parent);
+            current = parent as AXUIElementRef;
+        }
+
+        owned.iter().for_each(|r| CFRelease(*r));
+        result
     }
 
     unsafe fn can_replace_selection(element: AXUIElementRef) -> bool {
