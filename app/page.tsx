@@ -639,7 +639,7 @@ export default function LandingPage() {
         : T >= 1800 ? 2  // text selected + tab slides in
         : 0
       );
-    }, 0.85);
+    }, 0.95);
   }, []);
 
   // Compute cursor target positions from real DOM layout (updates on resize too).
@@ -1547,7 +1547,7 @@ export default function LandingPage() {
                 style={{
                   position: "absolute",
                   top: cursorPos === 0 ? vizPos.email : cursorPos === 5 ? vizPos.accept : vizPos.bar,
-                  left: (["10%", "89%", btnLefts.u, btnLefts.c, btnLefts.e, btnLefts.a] as string[])[Math.min(cursorPos, 5)] ?? "10%",
+                  left: (["10%", "96%", btnLefts.u, btnLefts.c, btnLefts.e, btnLefts.a] as string[])[Math.min(cursorPos, 5)] ?? "10%",
                   opacity: cursorVisible ? 1 : 0,
                   transform: cursorExiting ? "translateX(30px)" : "translateX(0)",
                   transition: "top 0.9s cubic-bezier(0.33,1,0.68,1), left 0.75s cubic-bezier(0.33,1,0.68,1), opacity 0.4s ease, transform 0.55s ease-in",
