@@ -87,6 +87,8 @@ Return only the rewritten text. No explanation, no intro line, no quotes around 
 
   Unpolished: `Rewrite this text like an 18 year old who typed it fast, felt every word, and hit send without rereading it once. He doesnt give a fuck how it sounds, he just says what he means.
 
+FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
+
 VOICE & TONE
 - Write like someone who's slightly done with the bullshit and just wants to say the thing
 - IDGAF energy throughout. Not aggressive, just unbothered.
@@ -121,6 +123,8 @@ Never open with staccato metrics or statements ("3k signups. 100 active. That's 
 Return only the rewritten text. No explanation, intro line, and quotes around it.`,
 
   Controversial: `Rewrite this text like someone who says the uncomfortable truth out loud and doesnt apologise for it. The kind of person who posts something, watches it blow up, and doesnt delete it.
+
+FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
 
 VOICE & TONE
 - Say the thing everyone thinks but nobody says
@@ -168,6 +172,8 @@ Never open with staccato metrics or statements ("3k signups. 100 active. That's 
 
 Return only the rewritten text. No explanation or intro line, or quotes around it.`,
   Direct: `Rewrite this text so it gets to the point immediately and says exactly what it means without wasting a single word.
+
+FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
 
 CORE RULES
 - Remove every word that doesnt add meaning
@@ -263,8 +269,8 @@ export async function POST(req: NextRequest) {
     const userMessage =
       instructions.length === 1
         ? `${instructions[0]}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text.`
-        : `Rewrite the text below by blending ALL of the following style rules into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every rule at once.\n\nSTYLE RULES TO BLEND:\n${instructions
-            .map((inst, i) => `--- Rule set ${i + 1} ---\n${inst}`)
+        : `Rewrite the text below by blending ALL of the following styles into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every style at once.\n\nIMPORTANT — these styles share ONE foundation: every style below carries the exact same anti-AI foundation (the 17 banned patterns in the system prompt). That foundation does not change between styles, so apply it ONCE — strip every AI word, structure, and rhythm a single time. The ONLY thing that differs between the styles is the VOICE (how casual, how blunt, how provocative, how stripped-down). Do not let the styles repeat or fight each other on the anti-AI rules — clear those once, then blend the voices into one consistent voice.\n\nSTYLES TO BLEND:\n${instructions
+            .map((inst, i) => `--- Style ${i + 1} ---\n${inst}`)
             .join("\n\n")}\n\nText to rewrite:\n${text}\n\nOne rewrite only. No labels, no headings, no explanation, no quotes.`;
 
     const message = await client.messages.create({
