@@ -85,30 +85,28 @@ WHAT TO KEEP
 
 Return only the rewritten text. No explanation, no intro line, no quotes around it.`,
 
-  Unpolished: `Rewrite this text like an 18 year old who typed it fast, felt every word, and hit send without rereading it once. He doesnt give a fuck how it sounds, he just says what he means.
+  Unpolished: `Rewrite this text like someone who typed it in one go, felt it, and hit send without thinking twice. Raw, unfiltered, zero polish. The energy is someone who types fast and doesnt waste time dressing it up.
 
 FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
 
 VOICE & TONE
 - Write like someone who's slightly done with the bullshit and just wants to say the thing
-- IDGAF energy throughout. Not aggressive, just unbothered.
+- IDGAF energy. Not aggressive, just unbothered — says what they mean and moves on
 - Opinionated. If theres a point, make it land without cushioning it
 - Feels like a voice note, a rant tweet, or a DM typed while walking
-- No warm-up or sign-offs, Just the message.
-- Use gen z slang naturally where it fits: ngl, idk, idc, idgaf, icl, mf, ffs, tbh, tbf, bc, goated. but dont make it forced, use when it actually makes sense in context
-- Throw in a swear word here and there where it adds punch. shit, fuck, ass, crap, but not in every sentence, but where it lands right
-- Use ALL CAPS on a word or short phrase if the original text has something worth emphasising. to show conviction or frustration, not just randomly
+- No warm-up or sign-offs. Just the message.
+- Use gen z slang (ngl, idk, idc, idgaf, icl, mf, ffs, tbh, tbf, bc, goated) mid-sentence as a reaction or modifier — never to open the piece or start a sentence. They belong inside the thought, not in front of it
+- Throw in a swear word here and there where it adds punch: shit, fuck, ass, crap — not in every sentence, only where it lands right
+- Use ALL CAPS on a word or short phrase when the original has something worth emphasising — to show conviction or frustration, not randomly
 
 GRAMMAR & SPELLING
 - Drop apostrophes casually: youre, dont, cant, its, ur, thats, wont
-- One or two minor spelling slips on small filler words. never on the main idea word
+- Slip in 1–2 natural typos on commonly misspelled words — the kind a fast typer makes: "jsut" instead of "just", "teh" instead of "the", "definately" instead of "definitely", "embarassing" instead of "embarrassing". Never misspell the key idea word, only the small filler words around it
+- Connect thoughts with casual conjunctions: "bc", "so", "and", "like" — let sentences run where they naturally would instead of chopping them at every pause
 - Start sentences with "and" or "but" or "bc" when it flows
-- Let thoughts trail with ... if something is implied
-- Line length depends on the original. if its a long thought, keep it long. if its punchy, keep it short. dont force either.
-- Doesnt reread or fix mistakes before sending. that energy should come through.
+- Line length follows the original. if its a long thought, keep it long. if its short, keep it short. dont force either.
 
 WHAT TO REMOVE
-- All AI buzzwords in banned patterns
 - Fake enthusiasm: "Exciting opportunity", "thrilled to share", "passionate about"
 - Any sentence that exists just to soften the message or sound polite
 - Filler openers that delay the point
@@ -118,9 +116,9 @@ WHAT TO KEEP
 - Specific details like names, numbers, context
 - The original intent, just stripped of all the polish
 
-Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). weave numbers into full sentences instead.
+Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). Weave numbers into full sentences instead.
 
-Return only the rewritten text. No explanation, intro line, and quotes around it.`,
+Return only the rewritten text. No explanation, intro line, or quotes around it.`,
 
   Controversial: `Rewrite this text like someone who says the uncomfortable truth out loud and doesnt apologise for it. The kind of person who posts something, watches it blow up, and doesnt delete it.
 
