@@ -228,6 +228,8 @@ export default function SelectorPage() {
       }
     };
 
+    const voiceInstructions =
+      localStorage.getItem("huu-voice-instructions")?.trim() ?? "";
     const callApi = (token: string | null) =>
       fetch(humanizeEndpoint(), {
         method: "POST",
@@ -236,7 +238,11 @@ export default function SelectorPage() {
           "X-Huu-Client": "desktop-selector",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ text: selection.text, tones: selectedTones }),
+        body: JSON.stringify({
+          text: selection.text,
+          tones: selectedTones,
+          ...(voiceInstructions ? { voiceInstructions } : {}),
+        }),
       });
 
     try {

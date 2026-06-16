@@ -135,6 +135,10 @@ export default function EditorPage() {
   const [activeView, setActiveView] = useState<View>("home");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+  // My Voice — personal style layered on top of the selected tone. Persisted
+  // to localStorage so every rewrite surface can read it at call time.
+  const [voiceInstructions, setVoiceInstructions] = useState("");
+
   // Subscription / usage
   const [subscription, setSubscription] = useState<SubscriptionStatus>({
     plan: process.env.NEXT_PUBLIC_TEST_PRO === "true" ? "pro" : "free",
@@ -373,6 +377,18 @@ export default function EditorPage() {
   }, [refreshApiConnection]);
 
   // ── Effects ────────────────────────────────────────────────────────────────
+
+  // My Voice: load saved instructions on mount so the textarea is pre-filled.
+  useEffect(() => {
+    const saved = localStorage.getItem("huu-voice-instructions");
+    if (saved) setVoiceInstructions(saved);
+  }, []);
+
+  // My Voice: persist on every change so it survives restarts and is readable
+  // by every rewrite surface (scratchpad, selector, external panel).
+  useEffect(() => {
+    localStorage.setItem("huu-voice-instructions", voiceInstructions);
+  }, [voiceInstructions]);
 
   // Restore auth state — Clerk session takes priority over localStorage.
   // This means if the user already has an active Clerk session in the browser
@@ -910,6 +926,35 @@ useEffect(() => {
             {sidebarOpen && <span className="truncate">Settings</span>}
           </button>
         </nav>
+
+        {/* My Voice — personal style that layers on top of the selected tone */}
+        {sidebarOpen && (
+          <div className="border-t border-black/[0.06] px-3 py-3">
+            <label
+              htmlFor="huu-my-voice"
+              className="flex items-center gap-2 px-0.5 text-sm font-bold text-black"
+            >
+              <span className="text-[#fff700]">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3" />
+                </svg>
+              </span>
+              My Voice
+            </label>
+            <p className="mt-1 px-0.5 text-xs leading-4 text-neutral-500">
+              Add your personal style. It layers on top of the selected tone.
+            </p>
+            <textarea
+              id="huu-my-voice"
+              value={voiceInstructions}
+              onChange={(e) => setVoiceInstructions(e.target.value)}
+              placeholder="e.g. keep it short, lowercase, no exclamation marks, sound a bit dry"
+              rows={4}
+              className="mt-2.5 w-full resize-none rounded-xl border border-black/[0.08] bg-white px-3 py-2.5 text-xs leading-5 text-black placeholder:text-neutral-400 outline-none transition focus:border-black/30"
+            />
+          </div>
+        )}
 
         {/* Bottom — upgrade widget only, fills the available space */}
         <div className="border-t border-black/[0.06] p-3">

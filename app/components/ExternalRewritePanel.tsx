@@ -30,10 +30,16 @@ export function ExternalRewritePanel({ text, onClose }: Props) {
     setError("");
 
     try {
+      const voiceInstructions =
+        localStorage.getItem("huu-voice-instructions")?.trim() ?? "";
       const res = await fetch("/api/humanize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text, tones: selectedTones }),
+        body: JSON.stringify({
+          text,
+          tones: selectedTones,
+          ...(voiceInstructions ? { voiceInstructions } : {}),
+        }),
       });
 
       const data = await res.json();
