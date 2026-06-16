@@ -547,10 +547,11 @@ export default function LandingPage() {
   // Column 1 — select text. Cursor position and visibility are decoupled so
   // we never animate the position while invisible. Without this the cursor
   // would teleport between cycles (and between right/left anchored states).
-  const [c1Sel, setC1Sel] = useState(0); // # of words highlighted, counting from the END
-  const [c1CursorPos, setC1CursorPos] = useState<"start" | "end" | "tab" | "after">("start");
+  const [c1Sel, setC1Sel] = useState(0);
+  const [c1Tab, setC1Tab] = useState(false); // yellow pill tab visible in col 1
+  const [c1CursorPos, setC1CursorPos] = useState<"start" | "end" | "tab">("start");
   const [c1CursorOn, setC1CursorOn] = useState(false);
-  const [c1Bar, setC1Bar] = useState(false); // tone-bar box faded in
+  const [c1Bar, setC1Bar] = useState(false);
   // Column 2 — pick tone(s)
   const [c2Tone, setC2Tone] = useState(0); // 0 none · 1 Unpolished · 2 +Direct · 3 Enter clicked
   const [c2Cursor, setC2Cursor] = useState<"hidden" | "tab" | "unpolished" | "direct" | "enter" | "away">("hidden");
@@ -808,6 +809,7 @@ export default function LandingPage() {
 
     const reset = () => {
       setC1Sel(0);
+      setC1Tab(false);
       setC1CursorPos("start");
       setC1CursorOn(false);
       setC1Bar(false);
@@ -830,28 +832,31 @@ export default function LandingPage() {
         setC1CursorOn(true);
         await sleep(800);
         if (tok.cancelled) return;
-        setC1CursorPos("end"); // glide to start-of-text while selecting
+        setC1CursorPos("end");
         for (let i = 1; i <= totalWords; i++) {
           setC1Sel(i);
           await sleep(2200 / totalWords);
           if (tok.cancelled) return;
         }
-        await sleep(500);
-        if (tok.cancelled) return;
-        setC1CursorPos("tab"); // glide to the yellow tab (top-right of tweet card)
-        await sleep(1000); // hold 1s on the tab — reads as a deliberate click
-        if (tok.cancelled) return;
-        setC1Bar(true); // tone bar fades in above (result of the tab click)
         await sleep(400);
         if (tok.cancelled) return;
+        setC1Tab(true); // yellow pill tab slides in on the right
+        await sleep(500);
+        if (tok.cancelled) return;
+        setC1CursorPos("tab"); // cursor glides to the yellow tab
+        await sleep(1100); // hold on the tab — reads as a deliberate click
+        if (tok.cancelled) return;
+        setC1Bar(true); // tone bar fades in (result of clicking the tab)
+        await sleep(500);
+        if (tok.cancelled) return;
         setC1CursorOn(false); // cursor fades out while still on the tab
-        await sleep(900);
+        await sleep(800);
         if (tok.cancelled) return;
 
-        // ── COLUMN 2 — cursor fades in ON the tab, then sweeps to tones ──
+        // ── COLUMN 2 — cursor fades in ON the tab, sweeps left to tones ──
         setCurrentStep(2);
-        setC2Cursor("tab"); // cursor appears at the tab position (col 2 top-right)
-        await sleep(700); // brief moment to show it sitting on the tab
+        setC2Cursor("tab"); // appears at the tab on the right
+        await sleep(800);
         if (tok.cancelled) return;
         setC2Cursor("unpolished");
         await sleep(950);
@@ -1730,8 +1735,8 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* "How it Works" headline above the 3-step grid */}
-        <div className="max-w-6xl mx-auto mt-20 sm:mt-28 mb-10 sm:mb-14">
+        {/* "How it Works" headline — centered above the 3-step grid */}
+        <div className="max-w-6xl mx-auto mt-20 sm:mt-28 mb-10 sm:mb-14 text-center">
           <h2
             className="font-display text-black leading-tight tracking-tight"
             style={{ fontSize: "clamp(2rem, 4vw, 3rem)" }}
@@ -1768,9 +1773,33 @@ export default function LandingPage() {
                 <ToneBar />
               </div>
             </div>
-            {/* tweet box — cursor selects the text then glides to the yellow tab */}
-            <div className="relative rounded-xl border border-black/10 bg-white shadow-sm p-4">
-              <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} />
+            {/* outer wrapper — overflow-visible so cursor + tab can sit outside */}
+            <div className="relative overflow-visible">
+              {/* yellow pill tab — slides in from the right after text selected */}
+              <div
+                aria-hidden="true"
+                className="absolute top-1/2 -translate-y-1/2 flex items-center justify-center"
+                style={{
+                  right: "-2.25rem",
+                  opacity: c1Tab ? 1 : 0,
+                  transform: `translateY(-50%) translateX(${c1Tab ? "0" : "12px"})`,
+                  transition: "opacity 0.35s ease, transform 0.35s ease",
+                  pointerEvents: "none",
+                  zIndex: 10,
+                }}
+              >
+                <div className="flex h-12 w-8 items-center justify-center rounded-2xl bg-[#fff700] shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </div>
+              </div>
+              {/* tweet card */}
+              <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
+                <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} />
+              </div>
+              {/* cursor is relative to this outer wrapper */}
               <TutCursor
                 visible={c1CursorOn}
                 style={
@@ -1778,9 +1807,8 @@ export default function LandingPage() {
                     ? { left: "52%", top: "58%" }
                     : c1CursorPos === "end"
                       ? { left: "16%", top: "22%" }
-                      : // "tab" — top-right corner of the tweet card, where the
-                        // yellow pill tab sits on the real app's screen edge
-                        { left: "88%", top: "8%" }
+                      : // "tab" — just over the pill on the right
+                        { left: "97%", top: "50%" }
                 }
               />
             </div>
@@ -1797,16 +1825,33 @@ export default function LandingPage() {
               <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">2</span>
               <span className="font-display text-xl text-black">Pick a tone(s)</span>
             </div>
-            <div className="h-[96px] mb-5">
-              {/* tone-bar box — Unpolished → Direct light up, Enter clicks; cursor lives here */}
+            <div className="h-[96px] mb-5 relative overflow-visible">
+              {/* yellow pill tab — always visible in col 2, cursor starts here */}
+              <div
+                aria-hidden="true"
+                className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center"
+                style={{
+                  right: "-2.25rem",
+                  pointerEvents: "none",
+                  zIndex: 10,
+                }}
+              >
+                <div className="flex h-12 w-8 items-center justify-center rounded-2xl bg-[#fff700] shadow-[0_4px_12px_rgba(0,0,0,0.2)]">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </div>
+              </div>
+              {/* tone-bar card + cursor */}
               <div className="relative rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit">
                 <ToneBar unpolished={c2Tone >= 1} direct={c2Tone >= 2} enter={c2Tone >= 3} />
                 <TutCursor
                   visible={c2Cursor !== "hidden" && c2Cursor !== "away"}
                   style={
                     c2Cursor === "tab"
-                      ? // fades in here — mirrors where the yellow tab sits in col 1
-                        { left: "100%", top: "52%" }
+                      ? // fades in at the tab (right of the slot, outside the tone bar card)
+                        { left: "130%", top: "52%" }
                       : c2Cursor === "unpolished"
                         ? { left: "30%", top: "52%" }
                         : c2Cursor === "direct"
