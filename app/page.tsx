@@ -41,6 +41,13 @@ const TUT_ORIGINAL =
 const TUT_REWRITTEN =
   "every platform is drowning in AI slop rn and honestly the only thing that actually cuts through is real human creativity, like stuff that actually sounds like a person wrote it bc they meant it";
 
+// Benefit-section Gmail demo — the original draft and the huumanity rewrite that
+// replaces it once the cursor clicks Accept.
+const BENEFIT_ORIGINAL =
+  "Hi Dimitri! We haven't met, but it's always great to connect with other executives. I'm Andrea from Acme, a Meta ads agency for professionals across Asia.\n\nIf you'd like 10 extra booked calls on your calendar, I'd love to introduce myself.";
+const BENEFIT_REWRITTEN =
+  "Dimitri, I'll skip the networking fluff and just say it.\n\nI'm Andrea from Acme — we run Meta ads for people across Asia who know what they're doing. If your calendar isn't full, that's a problem we fix. 10 booked calls with people who actually show up.";
+
 const NAV_LINKS = [
   { href: "#benefit", label: "How it Works" },
   { href: "#demo", label: "Demo" },
@@ -516,10 +523,15 @@ export default function LandingPage() {
   const [activeUseCase, setActiveUseCase] = useState<UseCase>(USE_CASES[0]);
   const [animStep, setAnimStep] = useState(0);
   const [arrowFlash, setArrowFlash] = useState(false);
-  const [cursorPos, setCursorPos] = useState(0);      // 0=email, 1=Unpolished, 2=Controversial, 3=Enter
+  const [acceptFlash, setAcceptFlash] = useState(false);
+  const [cursorPos, setCursorPos] = useState(0);      // 0=email · 1=tab · 2=Unpolished · 3=Controversial · 4=Enter · 5=Accept
   const [cursorVisible, setCursorVisible] = useState(false);
   const [cursorExiting, setCursorExiting] = useState(false);
-  const [btnLefts, setBtnLefts] = useState({ u: "19%", c: "32%", e: "50%" });
+  const [btnLefts, setBtnLefts] = useState({ u: "19%", c: "32%", e: "50%", a: "80%" });
+  // Measured vertical levels so the cursor lands exactly on the tone bar, the
+  // email body, and the result card's Accept button regardless of their rendered
+  // sizes. (The tab sits at the bar's level too, so it reuses `bar`.)
+  const [vizPos, setVizPos] = useState({ bar: "46%", email: "82%", accept: "12%" });
   // Feature section animation state
   const [featAnimStep, setFeatAnimStep] = useState(0);
   const [featArrowFlash, setFeatArrowFlash] = useState(false);
@@ -594,21 +606,32 @@ export default function LandingPage() {
   useEffect(() => {
     const el = benefitSectionRef.current;
     if (!el) return;
-    return attachScrollScrub(el, 10000, (T) => {
+    return attachScrollScrub(el, 12000, (T) => {
       setCursorVisible(T >= 600);
       setCursorExiting(false);
-      // pos 0=email body · 1=right-edge yellow tab · 2=Unpolished · 3=Controversial · 4=Enter
-      // Cursor leaves the tab (pos 1) at T=3800, 200ms after the tab "click" triggers the tone bar
-      // (animStep 3 at T=3600) — gives a natural beat before sweeping across to the buttons.
-      setCursorPos(T >= 6500 ? 4 : T >= 5400 ? 3 : T >= 3800 ? 2 : T >= 2800 ? 1 : 0);
-      setArrowFlash(T >= 7300);
+      // Bottom-up story: select the email (pos 0) → click the right-edge tab (1) →
+      // sweep up to the middle tone bar: Unpolished (2), Controversial (3), Enter (4)
+      // → the result generates at the top → cursor rises to Accept (5).
+      // Cursor leaves the tab (pos 1) at T=3800, 200ms after the tab "click" opens
+      // the tone bar (animStep 3 at T=3600) — a natural beat before the sweep.
+      setCursorPos(
+        T >= 9200 ? 5
+        : T >= 6500 ? 4
+        : T >= 5400 ? 3
+        : T >= 3800 ? 2
+        : T >= 2800 ? 1
+        : 0
+      );
+      setArrowFlash(T >= 7000);
+      setAcceptFlash(T >= 9900);
       setAnimStep(
-        T >= 9500 ? 7
-        : T >= 8500 ? 6
-        : T >= 5900 ? 5
-        : T >= 4600 ? 4
-        : T >= 3600 ? 3
-        : T >= 1800 ? 2
+        T >= 10400 ? 8   // Accept clicked → rewrite replaces the Gmail draft
+        : T >= 8600 ? 7  // result card's Back/Copy/Accept buttons appear
+        : T >= 7800 ? 6  // result card generates at the top
+        : T >= 5900 ? 5  // Controversial lights up
+        : T >= 4600 ? 4  // Unpolished lights up
+        : T >= 3600 ? 3  // tone bar opens
+        : T >= 1800 ? 2  // text selected + tab slides in
         : 0
       );
     });
@@ -622,6 +645,8 @@ export default function LandingPage() {
       const u = col.querySelector('[data-btn-id="unpolished"]') as HTMLElement | null;
       const c = col.querySelector('[data-btn-id="controversial"]') as HTMLElement | null;
       const e = col.querySelector('[data-btn-id="enter"]') as HTMLElement | null;
+      const a = col.querySelector('[data-btn-id="accept"]') as HTMLElement | null;
+      const email = col.querySelector('[data-viz="email"]') as HTMLElement | null;
       if (!u || !c || !e) return;
       const colRect = col.getBoundingClientRect();
       const pct = (el: HTMLElement) => {
@@ -629,7 +654,13 @@ export default function LandingPage() {
         const cx = r.left + r.width / 2 - 1; // -1 for cursor tip offset
         return `${(((cx - colRect.left) / colRect.width) * 100).toFixed(1)}%`;
       };
-      setBtnLefts({ u: pct(u), c: pct(c), e: pct(e) });
+      const topPct = (el: HTMLElement) => {
+        const r = el.getBoundingClientRect();
+        const cy = r.top + r.height / 2 - 2; // -2 for cursor tip offset
+        return `${(((cy - colRect.top) / colRect.height) * 100).toFixed(1)}%`;
+      };
+      setBtnLefts({ u: pct(u), c: pct(c), e: pct(e), a: a ? pct(a) : "80%" });
+      setVizPos({ bar: topPct(e), email: email ? topPct(email) : "82%", accept: a ? topPct(a) : "12%" });
     };
     compute();
     window.addEventListener("resize", compute);
@@ -1493,93 +1524,101 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* ── RIGHT COLUMN — animation ── */}
+            {/* ── RIGHT COLUMN — animation ──
+                Vertical story (top → bottom): RESULT appears at the top, the TONE
+                BAR sits in the middle with the yellow TAB at the right edge, and
+                the Gmail email is anchored at the bottom. The cursor clicks the tab
+                → tone bar opens → clicks Enter → result generates above. */}
             <div
               ref={rightColumnRef}
-              className="relative flex flex-col gap-4 p-6 sm:p-10 min-h-[540px]"
-              style={{ paddingTop: "84px" }}
+              className="relative flex flex-col justify-end p-6 sm:p-8 min-h-[520px]"
             >
 
-              {/* macOS cursor — position controlled by cursorPos, visibility by cursorVisible */}
+              {/* macOS cursor — position controlled by cursorPos, visibility by cursorVisible.
+                  pos 0=email body · 1=right-edge tab · 2=Unpolished · 3=Controversial · 4=Enter · 5=Accept */}
               <div
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  // pos 0=email body · 1=right-edge tab · 2-4=tone picker (34px from top)
-                  top: cursorPos === 0 ? "58%" : cursorPos === 1 ? "50%" : "34px",
-                  left: (["8%", "91%", btnLefts.u, btnLefts.c, btnLefts.e] as string[])[Math.min(cursorPos, 4)] ?? "8%",
+                  top: cursorPos === 0 ? vizPos.email : cursorPos === 5 ? vizPos.accept : vizPos.bar,
+                  left: (["10%", "89%", btnLefts.u, btnLefts.c, btnLefts.e, btnLefts.a] as string[])[Math.min(cursorPos, 5)] ?? "10%",
                   opacity: cursorVisible ? 1 : 0,
                   transform: cursorExiting ? "translateX(30px)" : "translateX(0)",
-                  // Position animates smoothly while visible; only fade in/out at start and end
-                  transition: "top 1.0s cubic-bezier(0.33,1,0.68,1), left 0.75s cubic-bezier(0.33,1,0.68,1), opacity 0.4s ease, transform 0.55s ease-in",
+                  transition: "top 0.9s cubic-bezier(0.33,1,0.68,1), left 0.75s cubic-bezier(0.33,1,0.68,1), opacity 0.4s ease, transform 0.55s ease-in",
                   pointerEvents: "none",
                   zIndex: 30,
                 }}
               >
                 {/* Classic macOS arrow cursor: white outline + black fill */}
                 <svg width="16" height="22" viewBox="0 0 22 30" fill="none">
-                  {/* Soft drop shadow */}
-                  <path
-                    d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z"
-                    fill="rgba(0,0,0,0.22)"
-                    transform="translate(1.5,1.5)"
-                  />
-                  {/* White outer border (stroke paints outside the black fill) */}
-                  <path
-                    d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z"
-                    fill="white"
-                    stroke="white"
-                    strokeWidth="4.5"
-                    strokeLinejoin="round"
-                    strokeLinecap="round"
-                  />
-                  {/* Black fill on top */}
-                  <path
-                    d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z"
-                    fill="black"
-                  />
+                  <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="rgba(0,0,0,0.22)" transform="translate(1.5,1.5)" />
+                  <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="white" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
+                  <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="black" />
                 </svg>
               </div>
 
-              {/* Grammarly-style yellow tab — slides in from the right edge when text is
-                  selected, disappears when the cursor clicks it and the tone bar opens. */}
+              {/* RESULT CARD — top, generates after Enter (step 6), fades once
+                  Accept is clicked (step 8) and the rewrite drops into the email. */}
               <div
-                aria-hidden="true"
+                className="absolute left-6 right-6 sm:left-8 sm:right-8 top-5 bg-white rounded-2xl p-4 border-2 border-[#fff700] shadow-[0_6px_24px_rgba(255,247,0,0.22)]"
                 style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "50%",
-                  zIndex: 25,
-                  pointerEvents: "none",
-                  transform: `translateY(-50%) translateX(${animStep >= 2 ? "0%" : "110%"})`,
-                  opacity: animStep >= 2 ? 1 : 0,
-                  transition: "transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease",
-                }}
-              >
-                <div className="flex h-12 w-7 items-center justify-center rounded-l-2xl rounded-r-none bg-[#fff700] shadow-[-3px_2px_10px_rgba(0,0,0,0.3)]">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="19" x2="12" y2="5" />
-                    <polyline points="5 12 12 5 19 12" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Tone picker — floats above Gmail card, slides in at step 3 */}
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  top: "22px",
-                  left: "1.5rem",
-                  right: "1.5rem",
-                  zIndex: 20,
-                  pointerEvents: "none",
-                  opacity: animStep >= 3 ? 1 : 0,
-                  transform: animStep >= 3 ? "translateY(0)" : "translateY(8px)",
+                  zIndex: 15,
+                  opacity: animStep >= 8 ? 0 : animStep >= 6 ? 1 : 0,
+                  transform: animStep >= 6 && animStep < 8 ? "translateY(0)" : "translateY(-10px)",
                   transition: "opacity 0.5s ease-out, transform 0.5s ease-out",
                 }}
               >
-                <div className="bg-white rounded-full px-3 py-2 flex items-center gap-1.5 w-fit shadow-lg">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#fff700]" aria-hidden="true" />
+                  <span className="font-sans text-[10px] uppercase tracking-wider font-semibold text-neutral-400">
+                    Rewritten by huumanity
+                  </span>
+                </div>
+                <p className="font-sans text-[12px] leading-[1.7] text-neutral-800 whitespace-pre-line">
+                  {BENEFIT_REWRITTEN}
+                </p>
+                <div
+                  className="flex items-center justify-between gap-2 mt-3"
+                  style={{ opacity: animStep >= 7 ? 1 : 0, transition: "opacity 0.5s ease-out" }}
+                >
+                  <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Back</button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      aria-label="Copy"
+                      className="flex items-center gap-1 bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-3 py-1.5"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                      </svg>
+                      Copy
+                    </button>
+                    <button
+                      data-btn-id="accept"
+                      className={`bg-[#fff700] text-black font-sans text-xs font-bold rounded-full px-4 py-1.5 border border-black transition-shadow duration-200 ${
+                        acceptFlash ? "shadow-[0_0_0_3px_rgba(255,247,0,0.55)]" : ""
+                      }`}
+                    >
+                      Accept
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* TONE BAR — middle, opens when the tab is clicked (step 3) */}
+              <div
+                aria-hidden="true"
+                className="absolute left-6 sm:left-8"
+                style={{
+                  top: "56%",
+                  zIndex: 20,
+                  pointerEvents: "none",
+                  opacity: animStep >= 3 ? 1 : 0,
+                  transform: animStep >= 3 ? "translateY(-50%)" : "translateY(calc(-50% + 8px))",
+                  transition: "opacity 0.45s ease-out, transform 0.45s ease-out",
+                }}
+              >
+                <div className="bg-white rounded-full px-3 py-2 flex items-center gap-1.5 w-fit shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
                   {[
                     { label: "Humanize", id: "", step: 99 },
                     { label: "Unpolished", id: "unpolished", step: 4 },
@@ -1599,9 +1638,7 @@ export default function LandingPage() {
                   <span
                     data-btn-id="enter"
                     className={`ml-1 w-7 h-7 rounded-full border flex-shrink-0 flex items-center justify-center transition-colors duration-300 ${
-                      arrowFlash
-                        ? "bg-[#fff700] border-[#fff700] text-black"
-                        : "border-neutral-300 text-neutral-400"
+                      arrowFlash ? "bg-[#fff700] border-[#fff700] text-black" : "border-neutral-300 text-neutral-400"
                     }`}
                   >
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -1612,13 +1649,35 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Gmail-format email card */}
+              {/* Grammarly-style YELLOW TAB — right edge, at the tone bar's level.
+                  Slides in from the right when text is selected (step 2). */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "56%",
+                  zIndex: 25,
+                  pointerEvents: "none",
+                  transform: `translateY(-50%) translateX(${animStep >= 2 ? "0%" : "110%"})`,
+                  opacity: animStep >= 2 ? 1 : 0,
+                  transition: "transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease",
+                }}
+              >
+                <div className="flex h-14 w-9 items-center justify-center rounded-l-2xl rounded-r-none bg-[#fff700] shadow-[-4px_2px_14px_rgba(0,0,0,0.35)]">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </div>
+              </div>
+
+              {/* Gmail-format email card — anchored at the bottom, compact */}
               <div className="bg-white rounded-2xl overflow-hidden">
-                {/* Gmail header */}
-                <div className="flex items-center px-4 py-3">
+                <div className="flex items-center px-4 py-2.5">
                   <span
                     aria-label="Gmail"
-                    className="font-black text-xl leading-none select-none"
+                    className="font-black text-lg leading-none select-none"
                     style={{
                       background: "linear-gradient(135deg, #EA4335 0%, #FBBC04 45%, #34A853 72%, #4285F4 100%)",
                       WebkitBackgroundClip: "text",
@@ -1630,59 +1689,18 @@ export default function LandingPage() {
                   </span>
                 </div>
                 <div className="h-px bg-neutral-200" />
-                {/* Email body */}
-                <div className="px-4 py-4 whitespace-pre-wrap min-h-[180px]">
+                <div data-viz="email" className="px-4 py-3 whitespace-pre-wrap">
                   <span
-                    className={`font-sans text-[12px] leading-[1.75] ${
-                      animStep >= 2 ? "huu-selecting" : "text-neutral-800"
+                    className={`font-sans text-[11.5px] leading-[1.65] transition-colors duration-500 ${
+                      animStep >= 8
+                        ? "rounded bg-[#fff700]/30 text-neutral-900"
+                        : animStep >= 2
+                        ? "huu-selecting"
+                        : "text-neutral-800"
                     }`}
                   >
-                    {`Hi Dimitri!\n\nWe haven't met but I'm reaching out to you because it's always great to network with other executives. I'm Andrea from Acme company, a Meta ads agency for discerning and successful professionals across Asia.\n\nIf you are looking to get 10 extra booked calls in your calendar, I'd like to introduce myself and connect with you, to see if you can benefit from our professional ads expertise.`}
+                    {animStep >= 8 ? BENEFIT_REWRITTEN : BENEFIT_ORIGINAL}
                   </span>
-                </div>
-              </div>
-
-              {/* Result card — slides in at step 6, offset right like a Grammarly popup */}
-              <div
-                className="bg-white rounded-2xl p-4 border-2 border-[#fff700] shadow-[0_4px_20px_rgba(255,247,0,0.18)]"
-                style={{
-                  marginLeft: "1rem",
-                  opacity: animStep >= 6 ? 1 : 0,
-                  transform: animStep >= 6 ? "translateY(0)" : "translateY(14px)",
-                  transition: "opacity 0.7s ease-out, transform 0.7s ease-out",
-                }}
-              >
-                <div className="flex items-center gap-1.5 mb-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#fff700]" aria-hidden="true" />
-                  <span className="font-sans text-[10px] uppercase tracking-wider font-semibold text-neutral-400">
-                    Rewritten by huumanity
-                  </span>
-                </div>
-                <p className="font-sans text-[12px] leading-[1.75] text-neutral-800 whitespace-pre-line">
-                  {`Dimitri, we haven't met but I'm gonna skip the networking bullshit and just say it.\n\nI'm Andrea from Acme. We run Meta ads for people across Asia who actually know what they're doing. If your calendar isn't full, that's a problem we fix. 10 extra booked calls, not leads that ghost you, actual calls with people who show up.`}
-                </p>
-                {/* Back on the left; Copy (icon) + Accept grouped on the right. */}
-                <div
-                  className="flex items-center justify-between gap-2 mt-3"
-                  style={{
-                    opacity: animStep >= 7 ? 1 : 0,
-                    transition: "opacity 0.5s ease-out",
-                  }}
-                >
-                  <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Back</button>
-                  <div className="flex items-center gap-2">
-                    <button
-                      aria-label="Copy"
-                      className="flex items-center gap-1 bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-3 py-1.5"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                      </svg>
-                      Copy
-                    </button>
-                    <button className="bg-[#fff700] text-black font-sans text-xs font-bold rounded-full px-4 py-1.5 border border-black">Accept</button>
-                  </div>
                 </div>
               </div>
 
