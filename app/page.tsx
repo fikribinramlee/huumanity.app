@@ -595,18 +595,19 @@ export default function LandingPage() {
     const el = benefitSectionRef.current;
     if (!el) return;
     return attachScrollScrub(el, 10000, (T) => {
-      // Cursor stays parked on the Enter button after the click; Enter keeps
-      // its yellow "clicked" state for the rest of the timeline.
       setCursorVisible(T >= 600);
       setCursorExiting(false);
-      setCursorPos(T >= 6500 ? 3 : T >= 5000 ? 2 : T >= 3400 ? 1 : 0);
+      // pos 0=email body · 1=right-edge yellow tab · 2=Unpolished · 3=Controversial · 4=Enter
+      // Cursor leaves the tab (pos 1) at T=3800, 200ms after the tab "click" triggers the tone bar
+      // (animStep 3 at T=3600) — gives a natural beat before sweeping across to the buttons.
+      setCursorPos(T >= 6500 ? 4 : T >= 5400 ? 3 : T >= 3800 ? 2 : T >= 2800 ? 1 : 0);
       setArrowFlash(T >= 7300);
       setAnimStep(
         T >= 9500 ? 7
         : T >= 8500 ? 6
         : T >= 5900 ? 5
-        : T >= 4400 ? 4
-        : T >= 3300 ? 3
+        : T >= 4600 ? 4
+        : T >= 3600 ? 3
         : T >= 1800 ? 2
         : 0
       );
@@ -1504,9 +1505,9 @@ export default function LandingPage() {
                 aria-hidden="true"
                 style={{
                   position: "absolute",
-                  // pos 0 = in email body; pos 1-3 = at tone picker (34px from column top)
-                  top: cursorPos === 0 ? "58%" : "34px",
-                  left: (["8%", btnLefts.u, btnLefts.c, btnLefts.e] as string[])[Math.min(cursorPos, 3)] ?? "8%",
+                  // pos 0=email body · 1=right-edge tab · 2-4=tone picker (34px from top)
+                  top: cursorPos === 0 ? "58%" : cursorPos === 1 ? "50%" : "34px",
+                  left: (["8%", "91%", btnLefts.u, btnLefts.c, btnLefts.e] as string[])[Math.min(cursorPos, 4)] ?? "8%",
                   opacity: cursorVisible ? 1 : 0,
                   transform: cursorExiting ? "translateX(30px)" : "translateX(0)",
                   // Position animates smoothly while visible; only fade in/out at start and end
@@ -1538,6 +1539,29 @@ export default function LandingPage() {
                     fill="black"
                   />
                 </svg>
+              </div>
+
+              {/* Grammarly-style yellow tab — slides in from the right edge when text is
+                  selected, disappears when the cursor clicks it and the tone bar opens. */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "50%",
+                  zIndex: 25,
+                  pointerEvents: "none",
+                  transform: `translateY(-50%) translateX(${animStep >= 2 && animStep < 3 ? "0%" : "110%"})`,
+                  opacity: animStep >= 2 && animStep < 3 ? 1 : 0,
+                  transition: "transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease",
+                }}
+              >
+                <div className="flex h-12 w-7 items-center justify-center rounded-l-2xl rounded-r-none bg-[#fff700] shadow-[-3px_2px_10px_rgba(0,0,0,0.3)]">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="12" y1="19" x2="12" y2="5" />
+                    <polyline points="5 12 12 5 19 12" />
+                  </svg>
+                </div>
               </div>
 
               {/* Tone picker — floats above Gmail card, slides in at step 3 */}
