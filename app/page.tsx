@@ -609,36 +609,37 @@ export default function LandingPage() {
     // gain 1.4 makes the animation complete a bit before the section reaches
     // viewport center, then holds. The key is the beat POSITIONS within the
     // 12000-unit timeline:
-    //   - T 0–7500: cursor dwells on the email while text highlights (first half
-    //     of visible scroll = just selecting the Gmail)
-    //   - T 7500–9900: cursor glides to tab → tone bar opens → Unpolished →
-    //     Controversial → Enter (the middle of the scroll)
-    //   - T 10100–11800: result generates → cursor rises to Accept and clicks it
-    //   - T 11800: text swap fires immediately after Accept — minimal extra scroll
+    // gain 0.85 — animation completes a bit after section center passes viewport
+    // center, giving a leisurely scroll-through feel. Beat layout:
+    //   T 0–7500:  cursor on email, text highlights (first half = just selecting)
+    //   T 7500–9500: cursor DWELLS on yellow tab (tab is clicked at T=8200,
+    //               tone bar opens, but cursor STAYS on tab so user sees the hover)
+    //   T 9500–10700: cursor sweeps to Unpolished → Controversial → Enter
+    //   T 10700–11900: result card → cursor rises to Accept → text swap
     return attachScrollScrub(el, 12000, (T) => {
       setCursorVisible(T >= 400 && T < 12000);
       setCursorExiting(false);
       setCursorPos(
-        T >= 11100 ? 5  // Accept
-        : T >= 9900 ? 4 // Enter
-        : T >= 9300 ? 3 // Controversial
-        : T >= 8700 ? 2 // Unpolished
-        : T >= 7500 ? 1 // tab
-        : 0             // email body (dwell through first half of scroll)
+        T >= 11400 ? 5  // Accept
+        : T >= 10500 ? 4 // Enter
+        : T >= 10000 ? 3 // Controversial
+        : T >= 9500 ? 2  // Unpolished — only leaves tab after a long dwell
+        : T >= 7500 ? 1  // tab — cursor stays here from T=7500 all the way to T=9500
+        : 0              // email body
       );
-      setArrowFlash(T >= 10100);
-      setAcceptFlash(T >= 11400);
+      setArrowFlash(T >= 10700);
+      setAcceptFlash(T >= 11700);
       setAnimStep(
-        T >= 11800 ? 8  // text swap — fires close on heels of Accept click
-        : T >= 10800 ? 7 // result card buttons appear
-        : T >= 10500 ? 6 // result card generates
-        : T >= 9500 ? 5  // Controversial lights up
-        : T >= 8900 ? 4  // Unpolished lights up
-        : T >= 8200 ? 3  // tone bar opens after tab click
-        : T >= 1800 ? 2  // text selected + tab slides in (holds for ~5700 T units)
+        T >= 11900 ? 8  // text swap — fires right after Accept
+        : T >= 11200 ? 7 // result card buttons appear
+        : T >= 10900 ? 6 // result card generates
+        : T >= 10200 ? 5 // Controversial lights up
+        : T >= 9700 ? 4  // Unpolished lights up
+        : T >= 8200 ? 3  // tone bar opens (cursor clicked tab, still hovering on it)
+        : T >= 1800 ? 2  // text selected + tab slides in
         : 0
       );
-    }, 1.1);
+    }, 0.85);
   }, []);
 
   // Compute cursor target positions from real DOM layout (updates on resize too).
