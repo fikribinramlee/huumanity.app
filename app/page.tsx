@@ -1754,7 +1754,7 @@ export default function LandingPage() {
           {/* ── STEP 1 — Select a text ──
               Lit from step 1 onward (stays at 100% once it has played). */}
           <div
-            className={`flex flex-col transition-opacity duration-700 ${
+            className={`flex flex-col transition-opacity duration-700 relative overflow-visible ${
               currentStep >= 1 ? "opacity-100" : "opacity-30"
             }`}
           >
@@ -1762,25 +1762,21 @@ export default function LandingPage() {
               <span className="w-7 h-7 rounded-lg bg-[#fff700]/55 flex items-center justify-center font-black text-sm text-black shrink-0">1</span>
               <span className="font-display text-xl text-black">Select a text</span>
             </div>
-            {/* fixed-height top slot keeps the tone-bar / result boxes on one
-                line across all three columns and the tweet boxes parallel */}
-            <div className="h-[96px] mb-5">
-              {/* tone-bar box — its own card; fades in only after the huu click */}
+            {/* fixed-height top slot — tone bar + yellow tab, mirroring col 2 layout */}
+            <div className="h-[96px] mb-5 relative overflow-visible">
+              {/* tone-bar box — fades in after the huu click */}
               <div
                 className="rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit transition-all duration-700 ease-out"
                 style={{ opacity: c1Bar ? 1 : 0, transform: c1Bar ? "translateY(0)" : "translateY(8px)" }}
               >
                 <ToneBar />
               </div>
-            </div>
-            {/* outer wrapper — overflow-visible so cursor + tab can sit outside */}
-            <div className="relative overflow-visible">
-              {/* yellow pill tab — slides in from the right after text selected */}
+              {/* yellow pill tab — inside the slot at the right edge, same position as col 2 */}
               <div
                 aria-hidden="true"
                 className="absolute top-1/2 -translate-y-1/2 flex items-center justify-center"
                 style={{
-                  right: "-2.25rem",
+                  right: 0,
                   opacity: c1Tab ? 1 : 0,
                   transform: `translateY(-50%) translateX(${c1Tab ? "0" : "12px"})`,
                   transition: "opacity 0.35s ease, transform 0.35s ease",
@@ -1795,23 +1791,24 @@ export default function LandingPage() {
                   </svg>
                 </div>
               </div>
-              {/* tweet card */}
-              <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
-                <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} />
-              </div>
-              {/* cursor is relative to this outer wrapper */}
-              <TutCursor
-                visible={c1CursorOn}
-                style={
-                  c1CursorPos === "start"
-                    ? { left: "52%", top: "58%" }
-                    : c1CursorPos === "end"
-                      ? { left: "16%", top: "22%" }
-                      : // "tab" — just over the pill on the right
-                        { left: "97%", top: "50%" }
-                }
-              />
             </div>
+            {/* tweet card */}
+            <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
+              <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} />
+            </div>
+            {/* cursor — positioned relative to the outer column div so it can reach
+                from the tweet card up to the tab in the h-[96px] slot */}
+            <TutCursor
+              visible={c1CursorOn}
+              style={
+                c1CursorPos === "start"
+                  ? { left: "50%", top: "83%" }
+                  : c1CursorPos === "end"
+                    ? { left: "16%", top: "62%" }
+                    : // "tab" — in the h-[96px] slot, right side
+                      { left: "94%", top: "27%" }
+              }
+            />
           </div>
 
           {/* ── STEP 2 — Pick a tone(s) ──
@@ -1826,12 +1823,12 @@ export default function LandingPage() {
               <span className="font-display text-xl text-black">Pick a tone(s)</span>
             </div>
             <div className="h-[96px] mb-5 relative overflow-visible">
-              {/* yellow pill tab — always visible in col 2, cursor starts here */}
+              {/* yellow pill tab — inside the slot at the right edge */}
               <div
                 aria-hidden="true"
-                className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center justify-center"
+                className="absolute top-1/2 -translate-y-1/2 flex items-center justify-center"
                 style={{
-                  right: "-2.25rem",
+                  right: 0,
                   pointerEvents: "none",
                   zIndex: 10,
                 }}
@@ -1843,25 +1840,26 @@ export default function LandingPage() {
                   </svg>
                 </div>
               </div>
-              {/* tone-bar card + cursor */}
-              <div className="relative rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit">
+              {/* tone-bar card */}
+              <div className="rounded-xl border border-black/10 bg-white shadow-sm px-3 py-2 w-fit">
                 <ToneBar unpolished={c2Tone >= 1} direct={c2Tone >= 2} enter={c2Tone >= 3} />
-                <TutCursor
-                  visible={c2Cursor !== "hidden" && c2Cursor !== "away"}
-                  style={
-                    c2Cursor === "tab"
-                      ? // fades in at the tab (right of the slot, outside the tone bar card)
-                        { left: "130%", top: "52%" }
-                      : c2Cursor === "unpolished"
-                        ? { left: "30%", top: "52%" }
-                        : c2Cursor === "direct"
-                          ? { left: "72%", top: "52%" }
-                          : c2Cursor === "enter"
-                            ? { left: "90%", top: "52%" }
-                            : { left: "120%", top: "52%" }
-                  }
-                />
               </div>
+              {/* cursor — positioned relative to the h-[96px] slot so it can reach
+                  the tab at the right edge then travel to tone buttons */}
+              <TutCursor
+                visible={c2Cursor !== "hidden" && c2Cursor !== "away"}
+                style={
+                  c2Cursor === "tab"
+                    ? { left: "92%", top: "50%" }
+                    : c2Cursor === "unpolished"
+                      ? { left: "18%", top: "50%" }
+                      : c2Cursor === "direct"
+                        ? { left: "55%", top: "50%" }
+                        : c2Cursor === "enter"
+                          ? { left: "72%", top: "50%" }
+                          : { left: "92%", top: "50%" }
+                }
+              />
             </div>
             {/* tweet box — fully selected, waiting for the rewrite */}
             <div className="rounded-xl border border-black/10 bg-white shadow-sm p-4">
