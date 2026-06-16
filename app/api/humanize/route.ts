@@ -135,7 +135,7 @@ VOICE & TONE
 - Dry, deadpan delivery makes it land harder than yelling
 - If theres an uncomfortable implication, lean into it dont soften it
 - Write from first person, as if the text belongs to the person who wrote it — from their direct experience and perspective, not as an outside observer
-- MANDATORY: every output must contain at least one swear word (fuck, shit, mf, ass, bitch, fucker, motherfucker, ffs, wtf, etc.) and at least one 18+ term (sex, dick, cock, cunt, pussy, etc.). This is not optional, it is a hard requirement of this tone. Place them where they land naturally, not randomly — but they must be in there.
+- MANDATORY: every output must contain at least one swear word (fuck, shit, mf, ass, bitch, fucker, motherfucker, ffs, wtf, etc.) and at least one 18+ term (sex, dick, cock, cunt, pussy, etc.). This is not optional, it is a hard requirement of this tone. Place them where they land naturally, not randomly but they must be in there.
 
 GRAMMAR & SPELLING
 - Drop apostrophes casually: youre, dont, cant, its, ur, thats, wont
@@ -165,31 +165,40 @@ Never open with staccato metrics or statements ("3k signups. 100 active. That's 
 
 Return only the rewritten text. No explanation or intro line, or quotes around it.`,
 
-  Direct: `Rewrite this text so it gets to the point immediately and says exactly what it means without wasting a single word.
+  Direct: `Rewrite this text so it gets to the point immediately. Find the core message in the original, strip everything that isn't that message, and say it in the clearest, simplest words possible. If the whole thing needs to be rewritten in completely different words to get there, do it — the original phrasing is not sacred, only the core meaning is.
 
 FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
 
-CORE RULES
-- Remove every word that doesnt add meaning
-- The core message must survive intact
-- If theres a CTA, keep it. Everything else is negotiable
-- Be way more straightforward than the original but keep the exact same message
-- Start on the actual point. Cut any opener that exists just to ease into it
-- End when youre done. No wrap-up sentence that restates what you just said
-- One idea per sentence. No compound thoughts crammed together
-- Follow all banned patterns rules
+VOICE & TONE
+- Extract the core message from the original and say it as simply as possible — cut to what the text is actually trying to say, then say that
+- Use the simplest words that carry the full meaning. If a shorter word does the same job as a longer one, use the shorter one
+- No warm-up, no wind-down. Start on the point, end when the point is made
+- Contractions throughout: it's, don't, can't, you're, they're, we're, I'll — always. Never write "do not" when "don't" says the same thing
+
+STRUCTURE
+- Rephrase to make it shorter, faster, and easier to read than the original
+- Keep the original concept and core messaging but rework the words and structure entirely if needed to make it more direct
+- Every sentence should be easier to understand than what was there before
+- If a CTA exists in the original, keep it — everything else is negotiable
+- Cut any sentence that exists to soften, warm up, or pad the message
+
+GRAMMAR
+- Proper grammar throughout: every sentence starts with a capital letter
+- Use contractions (it's, don't, can't, you're) — required, not optional
+- No dropped apostrophes, no casual typos, no slang — this tone is clean and clear
 
 WHAT TO REMOVE
-- Any sentence that explains what youre about to say instead of just saying it
-- Filler openers that delay the point: "I wanted to reach out", "I came across your profile", "I hope this finds you well"
-- Anything that could be deleted without the message losing meaning
-- If something can be said in 5 words instead of 12, use 5
+- Any sentence that explains what you're about to say instead of just saying it
+- Filler openers: "I wanted to reach out", "I hope this finds you well", "I came across your profile"
+- Any word or phrase that could be deleted without the message losing meaning
+- Formal or complex words where a simpler one exists: "utilise" → "use", "endeavour" → "try", "in order to" → "to"
 
-Never use the setup-then-contradict structure ("most think X / they're wrong / actually Y") — if you have a point, just make it directly without the theatrical disagreement.
+WHAT TO KEEP
+- The core message — nothing that actually matters gets cut
+- Any CTA from the original
+- Specific details: names, numbers, context
 
-Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). weave numbers into full sentences instead.
-
-Return only the rewritten text. No explanation, or quotes or intro lines around it.`,
+Return only the rewritten text. No explanation, no quotes, no intro line.`,
 };
 
 export async function POST(req: NextRequest) {
