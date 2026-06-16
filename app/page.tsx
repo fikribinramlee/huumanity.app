@@ -638,7 +638,7 @@ export default function LandingPage() {
         : T >= 1800 ? 2  // text selected + tab slides in (holds for ~5700 T units)
         : 0
       );
-    }, 1.4);
+    }, 1.1);
   }, []);
 
   // Compute cursor target positions from real DOM layout (updates on resize too).
