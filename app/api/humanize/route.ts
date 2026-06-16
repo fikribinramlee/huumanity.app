@@ -173,7 +173,7 @@ VOICE & TONE
 - Extract the core message from the original and say it as simply as possible — cut to what the text is actually trying to say, then say that
 - Use the simplest words that carry the full meaning. If a shorter word does the same job as a longer one, use the shorter one
 - No warm-up, no wind-down. Start on the point, end when the point is made
-- Contractions throughout: it's, don't, can't, you're, they're, we're, I'll — always. Never write "do not" when "don't" says the same thing
+- Contractions throughout: it's, don't, can't, you're, they're, we're, I'll, always. Never write "do not" when "don't" says the same thing
 
 STRUCTURE
 - Rephrase to make it shorter, faster, and easier to read than the original
@@ -272,9 +272,7 @@ export async function POST(req: NextRequest) {
     const userMessage =
       instructions.length === 1
         ? `${instructions[0]}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text.`
-        : `Rewrite the text below by blending ALL of the following style rules into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every rule at once.\n\nSTYLE RULES TO BLEND:\n${instructions
-            .map((inst, i) => `--- Rule set ${i + 1} ---\n${inst}`)
-            .join("\n\n")}\n\nText to rewrite:\n${text}\n\nOne rewrite only. No labels, no headings, no explanation, no quotes.`;
+        : `Rewrite the text below by blending ALL of the following styles into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every style at once.\n\nIMPORTANT — these styles share ONE foundation: every style carries the same anti-AI foundation (the 17 banned patterns in the system prompt). Apply it ONCE — strip every AI word, structure, and rhythm a single time. The differences between styles are voice and grammar, which you resolve using the conflict rules below.\n\nCONFLICT RESOLUTION — when styles disagree, follow this hierarchy:\n1. The 17 ANTI_AI_RULES override everything, always, with no exceptions.\n2. Grammar conflict: if Direct is one of the selected styles, use Direct grammar for the entire output — proper capitals, proper contractions (it's, don't, can't), no dropped apostrophes, no casual typos. If Direct is not selected, the loosest grammar style in the mix wins — Unpolished grammar takes over Humanize.\n3. Controversial mandatory language: if Controversial is one of the selected styles, the output must still contain at least one swear word and at least one 18+ term regardless of what other styles are selected. Place them where they fit most naturally given the blended voice — but they must be present.\n4. Everything else is voice blending: take the energy, attitude, and approach from each style and weave them into one consistent voice. Do not stack every grammar rule from every style — resolve grammar first using rule 2, then layer the voices on top of that.\n5. The final output should read like one coherent person wrote it, not like multiple styles fighting each other in the same paragraph.\n\nSTYLES TO BLEND:\n${instructions.map((inst, i) => `--- Style ${i + 1} ---\n${inst}`).join("\n\n")}\n\nText to rewrite:\n${text}\n\nOne rewrite only. No labels, no headings, no explanation, no quotes.`;
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
