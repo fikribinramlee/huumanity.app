@@ -60,28 +60,28 @@ BANNED PATTERNS. never do any of these:
 `.trim();
 
 const TONE_INSTRUCTIONS: Record<string, string> = {
-  Humanize: `Your job is to strip every AI pattern out of this text and rewrite it so it sounds like a real person wrote it. The 17 banned patterns in the system prompt are your primary tool. Go through the text and find every violation — every AI word, every AI sentence structure, every AI rhythm — and replace it with something a real person would actually write.
-
-If the entire text is full of AI patterns, rewrite the whole thing. Do not try to preserve AI-sounding sentences just because they carry meaning. The meaning can survive in a completely different structure, different words, different format. Change whatever needs to change to make it sound human. The only things that must survive intact are the core message, specific details like names and numbers, and the CTA if there is one.
+  Humanize: `Rephrase this text so it sounds like a real human wrote it. Keep the exact same meaning, tone intent, length and message. just strip out everything that makes it sound AI-generated.
 
 WHAT TO DO
-- Read the original and identify every AI pattern from the 17 rules — staccato rhythm, setup-then-contradict, throwaway endings, em dashes, repeated lead words, filler openers, buzzwords, everything
-- Rewrite sentence by sentence if needed. If a sentence violates a rule, rewrite that sentence completely — don't just swap one word
-- Change the structure if the original structure is what makes it sound AI. A different sentence order, a different paragraph break, a different way of connecting thoughts — all of that is fair game
-- Match the approximate length of the original unless the original is bloated with filler, in which case cut it
-- The output should read like something a normal person typed out, not a content writer, not a LinkedIn influencer, not a motivational speaker
+- Read the original and understand what it is actually trying to say
+- Rewrite it in plain natural language that a real person would use
+- Keep all the same messaging, context, names, numbers, and CTA
+- Match the approximate length of the original. dont make it significantly shorter or longer unless cutting obvious filler
+- importantly follow the banned patterns rules.
+- rephrase and change the words to make it sound more natural and human. not corporate, and not over-casual. just a normal person writing clearly
 
 WHAT TO REMOVE
-- Every pattern from the 17 banned rules — treat this list as a checklist and clear every single one
-- Hollow openers: "I hope this finds you well", "I wanted to reach out", "I am writing to", "I am reaching out"
-- Corporate buzzwords: synergies, leverage, circle back, touch base, deliverables, at your earliest convenience, moving forward, value proposition, actionable insights
+- Every phrase from the banned patterns list
+- Any word or sentence that exists purely to sound professional or sophisticated
+- Hollow openers: "I hope this finds you well", "I wanted to reach out", "I am writing to"
+- Any buzzwords: synergies, leverage, circle back, touch base, deliverables, at your earliest convenience, moving forward
 - Passive constructions that distance the writer from the message
-- Any sentence that exists purely to sound smart or sophisticated rather than to say something
 
 WHAT TO KEEP
-- The core meaning and message — nothing that matters gets stripped
-- All specific details: names, numbers, context, links, CTA
-- The approximate length — don't pad it, don't gut it
+- The meaning of the original text, nothing stripped that matters
+- The length of the original text, nothing added nor removed in the original text.
+- Any specific details: names, numbers, context, links
+- The original structure if it works. only restructure if the original is confusing
 
 Return only the rewritten text. No explanation, no intro line, no quotes around it.`,
 
@@ -95,10 +95,10 @@ VOICE & TONE
 - Opinionated. If theres a point, make it land without cushioning it
 - Feels like a voice note, a rant tweet, or a DM typed while walking
 - No warm-up or sign-offs. Just the message.
-- Use gen z slang (ngl, idk, idc, idgaf, icl, mf, ffs, tbh, tbf, bc, goated) mid-sentence as a reaction or modifier — never to open the piece or start a sentence. They belong inside the thought, not in front of it
+- Use gen z slang (ngl, idk, idc, idgaf, icl, mf, ffs, tbh, tbf, bc, goated) mid-sentence as a reaction or modifier. never to open the piece or start a sentence. They belong inside the thought, not in front of it
 - Throw in a swear word here and there where it adds punch: shit, fuck, ass, crap — not in every sentence, only where it lands right
 - Use ALL CAPS on a word or short phrase when the original has something worth emphasising — to show conviction or frustration, not randomly
-- Capitalization is inconsistent, like someone who types fast and doesnt always hit shift. About 80% of sentences and new paragraphs start with a capital first letter, 20% just dont. Let it slip naturally — not every sentence, not never, just uneven enough that it feels like a real person who sometimes cant be bothered
+- Capitalization is inconsistent, like someone who types fast and doesnt always hit shift. About 80% of sentences and new paragraphs start with a capital first letter, 20% just dont. Let it slip naturally. not every sentence, but not never, just uneven enough that it feels like a real person who sometimes cant be bothered
 
 GRAMMAR & SPELLING
 - Drop apostrophes casually: youre, dont, cant, its, ur, thats, wont
@@ -128,21 +128,18 @@ FOUNDATION (do this first, before anything else): Your first job is to strip eve
 VOICE & TONE
 - Say the thing everyone thinks but nobody says
 - Unpopular opinion energy. Not for shock value, bc its actually true and you know it
-- be borderline offensive, say fucked up shit, have a nsfw tonality and importantly dont give a fuck.
+- Be borderline offensive, have an NSFW tonality and importantly dont give a fuck
 - Slightly provocative but always backed by a real point
-- No hedging, no "this might just be me but..." just fucking say it
+- No hedging, no "this might just be me but..." just say it
 - Reads like a tweet that got 400 replies, half agreeing half losing their mind
 - Dry, deadpan delivery makes it land harder than yelling
 - If theres an uncomfortable implication, lean into it dont soften it
-- Use swear words where they add weight: fuck, shit, mf, ass, cock, cuck, not decorative, only where it punches
-- make it more about you, your experience, competence, and knowledge.
+- Write from first person, as if the text belongs to the person who wrote it — from their direct experience and perspective, not as an outside observer
+- MANDATORY: every output must contain at least one swear word (fuck, shit, mf, ass, bitch, fucker, motherfucker, ffs, wtf, etc.) and at least one 18+ term (sex, dick, cock, cunt, pussy, etc.). This is not optional, it is a hard requirement of this tone. Place them where they land naturally, not randomly — but they must be in there.
 
 GRAMMAR & SPELLING
-- Same rules as unpolished: dropped apostrophes, casual typos on filler words
-- Short lines when making a sharp point
-- Longer when building to something
-- use 18+ languages, swear words, and slangs. eg. sex, porn, pornhub, dick, cock, cunt, bitch, slut, whore, pussy, hoe, etc.(but not in every sentence, do it on the right occasion)
-- Let silence do work. say the point then stop. dont over-explain it.
+- Drop apostrophes casually: youre, dont, cant, its, ur, thats, wont
+- Slip in 1–2 natural typos on commonly misspelled words — the kind a fast typer makes: "jsut" instead of "just", "teh" instead of "the", "definately" instead of "definitely". Never misspell the key idea word, only small filler words
 - ALL CAPS on the one word that is the whole point of the sentence
 
 STRUCTURE
@@ -150,7 +147,7 @@ STRUCTURE
 - No warm-up, no "I've been thinking about this" just drop it
 - One sharp observation, one real example or proof, done
 - No conclusion that wraps it up neatly. let it sit.
-- use swear words at least once in the writing. Just make sure it lands right.
+- Let silence do work. say the point then stop. dont over-explain it.
 
 WHAT TO REMOVE
 - Any sentence that softens the take
@@ -158,18 +155,16 @@ WHAT TO REMOVE
 - Fake balance: "on the other hand..." pick a side
 - Corporate framing of any kind
 - Inspirational sign-offs
-- having a random break off line to just say: "this is wrong."
 
 WHAT TO KEEP
 - The core uncomfortable truth from the original
 - Any specific numbers or examples that make it real
 - The original intent, just stripped of all the politeness
-- 18+ languages, swear words, and slangs. eg. sex, porn, pornhub, dick, cock, cunt, bitch, slut, whore, pussy, hoe, etc. (but not in every sentence, do it on the right occasion)
-- curse words like fuck, shit, bitch, fucker, motherfucker, ffs, fuck off, wtf, ass, etc. 
 
-Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). weave numbers into full sentences instead.
+Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). Weave numbers into full sentences instead.
 
 Return only the rewritten text. No explanation or intro line, or quotes around it.`,
+
   Direct: `Rewrite this text so it gets to the point immediately and says exactly what it means without wasting a single word.
 
 FOUNDATION (do this first, before anything else): Your first job is to strip every AI pattern out of the text. The 17 banned patterns in the system prompt are non-negotiable and apply to this tone exactly like every other tone. Find every AI word, every AI sentence structure, every AI rhythm in the original and kill it. If the whole text reads AI-generated, rewrite all of it — change the words, the structure, the format, whatever it takes. The voice instructions below only shape HOW it sounds human. Passing the 17 rules comes first.
