@@ -46,7 +46,7 @@ const TUT_REWRITTEN =
 const BENEFIT_ORIGINAL =
   "Hi Dimitri! We haven't met, but it's always great to connect with other executives. I'm Andrea from Acme, a Meta ads agency for professionals across Asia.\n\nIf you'd like 10 extra booked calls on your calendar, I'd love to introduce myself.";
 const BENEFIT_REWRITTEN =
-  "Dimitri, I'll skip the networking fluff and just say it.\n\nI'm Andrea from Acme — we run Meta ads for people across Asia who know what they're doing. If your calendar isn't full, that's a problem we fix. 10 booked calls with people who actually show up.";
+  "Dimitri, I'll keep this short.\n\nI'm Andrea from Acme. We run Meta ads for clients across Asia, and if your calendar isn't as full as it should be, that's something we can fix.\n\nWe'll get you 10 booked calls with people who actually show up.";
 
 const NAV_LINKS = [
   { href: "#benefit", label: "How it Works" },
@@ -606,35 +606,40 @@ export default function LandingPage() {
   useEffect(() => {
     const el = benefitSectionRef.current;
     if (!el) return;
+    // gain < 1 stretches the timeline across MORE scroll distance, so the whole
+    // sequence isn't finished by the time the section reaches the viewport
+    // centre. The story now spans the full pass-through: selection done by a
+    // quarter scroll, tones/Enter through the middle, Accept once the section is
+    // fully in view, and the Gmail replacement only as you scroll past it.
     return attachScrollScrub(el, 12000, (T) => {
-      setCursorVisible(T >= 600);
+      // Cursor rides the whole sequence, then leaves shortly after it clicks
+      // Accept and the rewrite lands — so it never hovers over the empty top slot.
+      setCursorVisible(T >= 500 && T < 11400);
       setCursorExiting(false);
       // Bottom-up story: select the email (pos 0) → click the right-edge tab (1) →
-      // sweep up to the middle tone bar: Unpolished (2), Controversial (3), Enter (4)
-      // → the result generates at the top → cursor rises to Accept (5).
-      // Cursor leaves the tab (pos 1) at T=3800, 200ms after the tab "click" opens
-      // the tone bar (animStep 3 at T=3600) — a natural beat before the sweep.
+      // sweep up to the tone bar: Unpolished (2), Controversial (3), Enter (4)
+      // → the result generates → cursor rises to Accept (5).
       setCursorPos(
-        T >= 9200 ? 5
-        : T >= 6500 ? 4
+        T >= 8800 ? 5
+        : T >= 6600 ? 4
         : T >= 5400 ? 3
-        : T >= 3800 ? 2
-        : T >= 2800 ? 1
+        : T >= 4200 ? 2
+        : T >= 2600 ? 1
         : 0
       );
       setArrowFlash(T >= 7000);
-      setAcceptFlash(T >= 9900);
+      setAcceptFlash(T >= 9600);
       setAnimStep(
-        T >= 10400 ? 8   // Accept clicked → rewrite replaces the Gmail draft
-        : T >= 8600 ? 7  // result card's Back/Copy/Accept buttons appear
-        : T >= 7800 ? 6  // result card generates at the top
-        : T >= 5900 ? 5  // Controversial lights up
+        T >= 10600 ? 8   // Accept clicked → rewrite replaces the Gmail draft (no highlight)
+        : T >= 8200 ? 7  // result card's Back/Copy/Accept buttons appear
+        : T >= 7600 ? 6  // result card generates at the top
+        : T >= 5800 ? 5  // Controversial lights up
         : T >= 4600 ? 4  // Unpolished lights up
-        : T >= 3600 ? 3  // tone bar opens
-        : T >= 1800 ? 2  // text selected + tab slides in
+        : T >= 3400 ? 3  // tone bar opens
+        : T >= 1200 ? 2  // text selected + tab slides in
         : 0
       );
-    });
+    }, 0.62);
   }, []);
 
   // Compute cursor target positions from real DOM layout (updates on resize too).
@@ -1525,13 +1530,14 @@ export default function LandingPage() {
             </div>
 
             {/* ── RIGHT COLUMN — animation ──
-                Vertical story (top → bottom): RESULT appears at the top, the TONE
-                BAR sits in the middle with the yellow TAB at the right edge, and
-                the Gmail email is anchored at the bottom. The cursor clicks the tab
-                → tone bar opens → clicks Enter → result generates above. */}
+                Vertical story (top → bottom): RESULT card on top, TONE BAR in the
+                middle (right-aligned, hugging the yellow TAB on the screen edge),
+                Gmail email at the bottom. All three live in normal flow with EQUAL
+                gaps between them (justify-center + gap), so the white spacing reads
+                evenly; they animate via opacity/transform only, never reflowing. */}
             <div
               ref={rightColumnRef}
-              className="relative flex flex-col justify-end p-6 sm:p-8 min-h-[520px]"
+              className="relative flex flex-col justify-center gap-7 p-6 sm:p-8 min-h-[600px]"
             >
 
               {/* macOS cursor — position controlled by cursorPos, visibility by cursorVisible.
@@ -1557,10 +1563,12 @@ export default function LandingPage() {
                 </svg>
               </div>
 
-              {/* RESULT CARD — top, generates after Enter (step 6), fades once
-                  Accept is clicked (step 8) and the rewrite drops into the email. */}
+              {/* RESULT CARD — top slot, generates after Enter (step 6), fades once
+                  Accept is clicked (step 8) and the rewrite drops into the email.
+                  In normal flow so its slot stays reserved (the top goes empty/black
+                  after Accept, matching the end state). */}
               <div
-                className="absolute left-6 right-6 sm:left-8 sm:right-8 top-5 bg-white rounded-2xl p-4 border-2 border-[#fff700] shadow-[0_6px_24px_rgba(255,247,0,0.22)]"
+                className="w-full bg-white rounded-2xl p-4 border-2 border-[#fff700] shadow-[0_6px_24px_rgba(255,247,0,0.22)]"
                 style={{
                   zIndex: 15,
                   opacity: animStep >= 8 ? 0 : animStep >= 6 ? 1 : 0,
@@ -1605,16 +1613,16 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* TONE BAR — middle, opens when the tab is clicked (step 3) */}
+              {/* TONE BAR — middle slot, RIGHT-aligned so it sits right next to the
+                  yellow tab on the screen edge. Opens when the tab is clicked (step 3). */}
               <div
                 aria-hidden="true"
-                className="absolute left-6 sm:left-8"
+                className="self-end"
                 style={{
-                  top: "56%",
                   zIndex: 20,
                   pointerEvents: "none",
                   opacity: animStep >= 3 ? 1 : 0,
-                  transform: animStep >= 3 ? "translateY(-50%)" : "translateY(calc(-50% + 8px))",
+                  transform: animStep >= 3 ? "translateY(0)" : "translateY(8px)",
                   transition: "opacity 0.45s ease-out, transform 0.45s ease-out",
                 }}
               >
@@ -1649,14 +1657,14 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              {/* Grammarly-style YELLOW TAB — right edge, at the tone bar's level.
-                  Slides in from the right when text is selected (step 2). */}
+              {/* Grammarly-style YELLOW TAB — right edge, tracking the tone bar's
+                  measured vertical level. Slides in when text is selected (step 2). */}
               <div
                 aria-hidden="true"
                 style={{
                   position: "absolute",
                   right: 0,
-                  top: "56%",
+                  top: vizPos.bar,
                   zIndex: 25,
                   pointerEvents: "none",
                   transform: `translateY(-50%) translateX(${animStep >= 2 ? "0%" : "110%"})`,
@@ -1693,7 +1701,7 @@ export default function LandingPage() {
                   <span
                     className={`font-sans text-[11.5px] leading-[1.65] transition-colors duration-500 ${
                       animStep >= 8
-                        ? "rounded bg-[#fff700]/30 text-neutral-900"
+                        ? "text-neutral-800"
                         : animStep >= 2
                         ? "huu-selecting"
                         : "text-neutral-800"
