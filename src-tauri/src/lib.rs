@@ -256,12 +256,16 @@ fn paste_text_into_source(
     // window is visible (the time-window guard in the Reopen handler).
     mark_selector_activity(&state);
 
-    // ORDER MATTERS. Hand focus to the source app BEFORE hiding the selector.
-    // If we hid the selector while huu was still the frontmost app, macOS would
-    // promote huu's NEXT window — the editor — to the front, and the moment the
-    // panel vanishes the editor is revealed. That is the "desktop app pops up on
-    // Accept" bug. Activating the source first means huu is no longer the active
-    // app when its selector window hides, so nothing of huu's can surface.
+    // ORDER MATTERS, and it's a three-way constraint:
+    //  1. To REPLACE the text, the source app must be frontmost with its
+    //     selection still live when ⌘V fires.
+    //  2. To not POP the editor, we must not hide the selector while huu is the
+    //     frontmost app (macOS would promote huu's next window — the editor).
+    //  3. Hiding the selector right before the paste disrupts the source's focus
+    //     and the ⌘V misses (this was the "Accept doesn't replace" regression).
+    // So: activate the source FIRST, PASTE while it's focused, and hide the
+    // selector LAST — by then huu isn't frontmost, so the hide can't surface the
+    // editor, and the paste has already landed.
     if let Some(pid) = source_pid {
         if let Err(err) = activate_source_process(pid) {
             debug_log(&format!("source activation failed pid={pid}: {err}"));
@@ -270,11 +274,16 @@ fn paste_text_into_source(
         }
     }
 
+    // Replace the selection in the source app while it's frontmost.
+    let paste_result = paste_text(text);
+
+    // Now tear down the overlay. huu is in the background (source is frontmost),
+    // so hiding its selector window can't promote the editor to the front.
     if let Some(window) = app.get_webview_window("selector") {
         let _ = window.hide();
     }
-    // Belt-and-suspenders: if huu is somehow STILL frontmost (no source pid, or
-    // activation lost the race), order the editor out so it can't be revealed.
+    // Belt-and-suspenders for the no-source-pid path: if huu is somehow still
+    // frontmost, order the editor out so nothing of huu's can be revealed.
     #[cfg(target_os = "macos")]
     if platform_frontmost_pid() == Some(std::process::id() as i32) {
         if let Some(main) = app.get_webview_window("main") {
@@ -282,10 +291,7 @@ fn paste_text_into_source(
         }
     }
 
-    // Short settle so the focus change + hide land before we paste.
-    std::thread::sleep(Duration::from_millis(80));
-
-    paste_text(text)
+    paste_result
 }
 
 #[tauri::command]
