@@ -548,13 +548,12 @@ export default function LandingPage() {
   // we never animate the position while invisible. Without this the cursor
   // would teleport between cycles (and between right/left anchored states).
   const [c1Sel, setC1Sel] = useState(0); // # of words highlighted, counting from the END
-  const [c1CursorPos, setC1CursorPos] = useState<"start" | "end" | "button" | "after">("start");
+  const [c1CursorPos, setC1CursorPos] = useState<"start" | "end" | "tab" | "after">("start");
   const [c1CursorOn, setC1CursorOn] = useState(false);
-  const [c1Button, setC1Button] = useState(false); // yellow selector button
   const [c1Bar, setC1Bar] = useState(false); // tone-bar box faded in
   // Column 2 — pick tone(s)
   const [c2Tone, setC2Tone] = useState(0); // 0 none · 1 Unpolished · 2 +Direct · 3 Enter clicked
-  const [c2Cursor, setC2Cursor] = useState<"hidden" | "unpolished" | "direct" | "enter" | "away">("hidden");
+  const [c2Cursor, setC2Cursor] = useState<"hidden" | "tab" | "unpolished" | "direct" | "enter" | "away">("hidden");
   // Column 3 — accept the rewrite
   const [c3, setC3] = useState(0); // 0 idle · 1 shimmer · 2 result · 3 cursor→accept · 4 clicked · 5 replaced
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "annual">("annual");
@@ -809,11 +808,8 @@ export default function LandingPage() {
 
     const reset = () => {
       setC1Sel(0);
-      // Silently move the cursor back to the start position while invisible —
-      // the next loop will fade it in there with no slide.
       setC1CursorPos("start");
       setC1CursorOn(false);
-      setC1Button(false);
       setC1Bar(false);
       setC2Tone(0);
       setC2Cursor("hidden");
@@ -827,40 +823,36 @@ export default function LandingPage() {
         await sleep(1100);
         if (tok.cancelled) return;
 
-        // ── COLUMN 1 — cursor selects the text, then clicks the huu button ──
-        // Cursor fades IN at the "start" position (set by reset). Position
-        // changes only happen while it's visible, so it always glides — never
-        // teleports. Sequence:
-        //   appear at start → glide up-left while words highlight backward →
-        //   pause → yellow button pops in → cursor glides ONTO the button →
-        //   click → tone bar fades in above + cursor walks left and fades.
+        // ── COLUMN 1 — cursor selects text, moves to the yellow tab, fades ──
+        // Sequence: appear → glide while words highlight → pause → cursor
+        // glides to the yellow tab → hold 1s (the "click") → tone bar fades in
+        // above → cursor fades out at the tab.
         setC1CursorOn(true);
-        await sleep(800); // let the fade-in finish + read the start pose
+        await sleep(800);
         if (tok.cancelled) return;
-        setC1CursorPos("end"); // begin gliding to the start-of-text area
+        setC1CursorPos("end"); // glide to start-of-text while selecting
         for (let i = 1; i <= totalWords; i++) {
-          setC1Sel(i); // highlight words from the last back to the first
+          setC1Sel(i);
           await sleep(2200 / totalWords);
           if (tok.cancelled) return;
         }
-        await sleep(550);
+        await sleep(500);
         if (tok.cancelled) return;
-        setC1Button(true); // yellow huu button pops in beside "AI content"
-        await sleep(600); // wait out the pop-in before "clicking" it
+        setC1CursorPos("tab"); // glide to the yellow tab (top-right of tweet card)
+        await sleep(1000); // hold 1s on the tab — reads as a deliberate click
         if (tok.cancelled) return;
-        setC1CursorPos("button"); // cursor glides onto the button
-        await sleep(1000); // hold on the click so it reads as a press
+        setC1Bar(true); // tone bar fades in above (result of the tab click)
+        await sleep(400);
         if (tok.cancelled) return;
-        setC1Bar(true); // click → tone bar starts fading in above
-        setC1CursorPos("after"); // cursor glides slightly left of the button
-        await sleep(600);
-        if (tok.cancelled) return;
-        setC1CursorOn(false); // …then fades away softly at the "after" pose
+        setC1CursorOn(false); // cursor fades out while still on the tab
         await sleep(900);
         if (tok.cancelled) return;
 
-        // ── COLUMN 2 — pick Unpolished + Direct, click Enter, glide away ──
-        setCurrentStep(2); // attention moves to step 2; col 1 dims back
+        // ── COLUMN 2 — cursor fades in ON the tab, then sweeps to tones ──
+        setCurrentStep(2);
+        setC2Cursor("tab"); // cursor appears at the tab position (col 2 top-right)
+        await sleep(700); // brief moment to show it sitting on the tab
+        if (tok.cancelled) return;
         setC2Cursor("unpolished");
         await sleep(950);
         if (tok.cancelled) return;
@@ -1738,15 +1730,20 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* 3-step "how the selection tool works" visualization. All three
-            columns stay visible; the animation plays through them in sequence
-            (1 → 2 → 3), holds, and repeats while on screen. Spans the same
-            max-w-6xl width as the feature section's black box, so column 1 sits
-            at the far left and column 3 at the far right. Each column stacks a
-            separate tone-bar / result box above a separate tweet box. */}
+        {/* "How it Works" headline above the 3-step grid */}
+        <div className="max-w-6xl mx-auto mt-20 sm:mt-28 mb-10 sm:mb-14">
+          <h2
+            className="font-display text-black leading-tight tracking-tight"
+            style={{ fontSize: "clamp(2rem, 4vw, 3rem)" }}
+          >
+            How it Works
+          </h2>
+        </div>
+
+        {/* 3-step "how the selection tool works" visualization. */}
         <div
           ref={tutRef}
-          className="max-w-6xl mx-auto mt-20 sm:mt-28 grid grid-cols-1 md:grid-cols-3 gap-10 lg:gap-14 text-left"
+          className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-10 lg:gap-14 text-left"
         >
 
           {/* ── STEP 1 — Select a text ──
@@ -1771,28 +1768,19 @@ export default function LandingPage() {
                 <ToneBar />
               </div>
             </div>
-            {/* tweet box — its own card; cursor selects the text then clicks huu */}
+            {/* tweet box — cursor selects the text then glides to the yellow tab */}
             <div className="relative rounded-xl border border-black/10 bg-white shadow-sm p-4">
-              <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} huuButton={c1Button} />
-              {/* All step-1 positions use LEFT/TOP only (never right/bottom) —
-                  mixing the two snaps the un-set anchor to `auto`, which is
-                  not transitionable and was making the cursor teleport. */}
+              <TutTweet text={TUT_ORIGINAL} selCount={c1Sel} />
               <TutCursor
                 visible={c1CursorOn}
                 style={
                   c1CursorPos === "start"
-                    ? // end of the last line of text ("…truly resonate.")
-                      { left: "52%", top: "58%" }
+                    ? { left: "52%", top: "58%" }
                     : c1CursorPos === "end"
-                      ? // just left of "AI" at the start of the tweet text
-                        { left: "16%", top: "22%" }
-                      : c1CursorPos === "button"
-                        ? // tip directly on the yellow huu button (sits at
-                          // -left-5 top-4 over the avatar gap)
-                          { left: "13%", top: "27%" }
-                        : // "after" — slight left/down of the button as the
-                          // cursor walks away
-                          { left: "4%", top: "36%" }
+                      ? { left: "16%", top: "22%" }
+                      : // "tab" — top-right corner of the tweet card, where the
+                        // yellow pill tab sits on the real app's screen edge
+                        { left: "88%", top: "8%" }
                 }
               />
             </div>
@@ -1816,13 +1804,16 @@ export default function LandingPage() {
                 <TutCursor
                   visible={c2Cursor !== "hidden" && c2Cursor !== "away"}
                   style={
-                    c2Cursor === "unpolished"
-                      ? { left: "30%", top: "52%" }
-                      : c2Cursor === "direct"
-                        ? { left: "72%", top: "52%" }
-                        : c2Cursor === "enter"
-                          ? { left: "90%", top: "52%" }
-                          : { left: "120%", top: "52%" }
+                    c2Cursor === "tab"
+                      ? // fades in here — mirrors where the yellow tab sits in col 1
+                        { left: "100%", top: "52%" }
+                      : c2Cursor === "unpolished"
+                        ? { left: "30%", top: "52%" }
+                        : c2Cursor === "direct"
+                          ? { left: "72%", top: "52%" }
+                          : c2Cursor === "enter"
+                            ? { left: "90%", top: "52%" }
+                            : { left: "120%", top: "52%" }
                   }
                 />
               </div>
