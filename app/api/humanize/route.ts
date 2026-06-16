@@ -143,11 +143,10 @@ GRAMMAR & SPELLING
 - ALL CAPS on the one word that is the whole point of the sentence
 
 STRUCTURE
-- Open with the uncomfortable truth, not the context
-- No warm-up, no "I've been thinking about this" just drop it
-- One sharp observation, one real example or proof, done
-- No conclusion that wraps it up neatly. let it sit.
-- Let silence do work. say the point then stop. dont over-explain it.
+- Open with the uncomfortable truth instead of easing into the context
+- No warm-up, dont write "I've been thinking about this", just drop the point
+- Make one sharp observation and back it with one real example, then move on without a tidy wrap-up
+- Deadpan delivery comes from WHAT you say, not from chopping it into fragments. Every thought, including the final one, has to be a complete flowing sentence. Never end on or insert a clipped one-to-four-word line for punch (no "it works." "they did." "stupid." "significant more."). If a thought feels punchy, connect it to the sentence next to it with a comma or a connector (and, but, so, because, which means) so it still lands but reads like a person wrote it, not a slogan generator
 
 WHAT TO REMOVE
 - Any sentence that softens the take
@@ -200,6 +199,56 @@ WHAT TO KEEP
 
 Return only the rewritten text. No explanation, no quotes, no intro line.`,
 };
+
+// Appended to the very end of every prompt, right before the text to rewrite.
+// Recency matters: models weight the last instruction heaviest, so the two
+// failures that slip through most often (em dashes + staccato fragments) get a
+// dedicated self-check here on top of the system-prompt rules.
+const FINAL_PASS = `\n\nFINAL SELF-CHECK before you output. These two failures are the most common and the most important, so scan your own rewrite and fix every single instance:\n1. EM DASHES: there must be zero em dashes (—) and zero double hyphens (--) anywhere. If you wrote one, replace it with a comma, a connector word (and, but, so, because, which means), or split it into two clean sentences.\n2. STACCATO FRAGMENTS: there must be zero standalone short fragments used for punch or contradiction (e.g. "They did." "It works." "Significant more." "No." "Stupid."). Fold every one of them into the sentence next to it with a comma or a connector so the thought flows as one continuous sentence. Do not stack short clipped sentences in a row.`;
+
+// Deterministic guarantee that no em dash or spaced double hyphen ever ships,
+// regardless of what the model does. Runs as the last step on every result.
+function stripEmDashes(s: string): string {
+  return s
+    .replace(/\s*—\s*/g, ", ")
+    .replace(/\s+--\s+/g, ", ")
+    .replace(/,\s*,/g, ",")
+    .replace(/\s+,/g, ",");
+}
+
+// Cheap heuristic to decide whether the output still reads staccato and needs a
+// focused cleanup pass. Flags any standalone one-to-three-word sentence in a
+// multi-sentence text (the "They did." / "Significant more." pattern).
+function hasStaccato(s: string): boolean {
+  const sentences = s
+    .split(/(?<=[.!?])\s+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (sentences.length < 3) return false;
+  return sentences.some((sent) => {
+    const words = sent.replace(/[^\w\s']/g, "").split(/\s+/).filter(Boolean);
+    return words.length > 0 && words.length <= 3;
+  });
+}
+
+// Single-job second pass. Models are far more reliable at fixing ONE narrow
+// problem than at juggling every constraint in the first blended rewrite, so
+// when the first output trips the detectors we hand it back with the sole task
+// of scrubbing em dashes and staccato while preserving voice, swears and caps.
+function scrubberPrompt(draft: string): string {
+  return `You are doing a final cleanup pass on a piece of text. Its voice, meaning, swearing, capitalization, slang and intent are all correct and must be preserved exactly. Your ONLY job is to fix two specific mechanical problems and change nothing else:
+
+1. Remove every em dash (—) and double hyphen (--). Replace each with a comma, a connector word (and, but, so, because, which means), or split it into clean sentences, whichever reads most naturally.
+
+2. Remove every staccato fragment. A staccato fragment is a standalone short sentence (roughly one to four words) used for punch or contradiction, like "They did." "It works." "Significant more." "No." "Stupid." Fold each one into the sentence beside it using a comma or a connector so the thought reads as one continuous sentence. Also fix any run of short clipped sentences that reads like a list.
+
+Do not soften the tone, do not remove swear words or ALL CAPS, do not add new ideas, do not restructure anything that is not one of the two problems above. Keep the same length and the same voice.
+
+Return only the cleaned text. No explanation, no quotes, no intro line.
+
+Text to clean:
+${draft}`;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -278,13 +327,13 @@ export async function POST(req: NextRequest) {
         ? body.voiceInstructions.trim()
         : "";
     const voiceBlock = voiceInstructions
-      ? `\n\nAdditionally, the user has their own personal style preference. Layer this on top of the tone instructions above — do not override the banned patterns rules, just add this as a stylistic preference on top:\n${voiceInstructions}\n`
+      ? `\n\nAdditionally, the user has their own personal style preference. Layer this on top of the tone instructions above, do not override the banned patterns rules, just add this as a stylistic preference on top:\n${voiceInstructions}\n`
       : "";
 
     const userMessage =
       instructions.length === 1
-        ? `${instructions[0]}${voiceBlock}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text.`
-        : `Rewrite the text below by blending ALL of the following styles into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every style at once.\n\nIMPORTANT — these styles share ONE foundation: every style carries the same anti-AI foundation (the 17 banned patterns in the system prompt). Apply it ONCE — strip every AI word, structure, and rhythm a single time. The differences between styles are voice and grammar, which you resolve using the conflict rules below.\n\nCONFLICT RESOLUTION — when styles disagree, follow this hierarchy:\n1. The 17 ANTI_AI_RULES override everything, always, with no exceptions.\n2. Grammar conflict: if Direct is one of the selected styles, use Direct grammar for the entire output — proper capitals, proper contractions (it's, don't, can't), no dropped apostrophes, no casual typos. If Direct is not selected, the loosest grammar style in the mix wins — Unpolished grammar takes over Humanize.\n3. Controversial mandatory language: if Controversial is one of the selected styles, the output must still contain at least one swear word and at least one 18+ term regardless of what other styles are selected. Place them where they fit most naturally given the blended voice — but they must be present.\n4. Everything else is voice blending: take the energy, attitude, and approach from each style and weave them into one consistent voice. Do not stack every grammar rule from every style — resolve grammar first using rule 2, then layer the voices on top of that.\n5. The final output should read like one coherent person wrote it, not like multiple styles fighting each other in the same paragraph.\n\nSTYLES TO BLEND:\n${instructions.map((inst, i) => `--- Style ${i + 1} ---\n${inst}`).join("\n\n")}${voiceBlock}\n\nText to rewrite:\n${text}\n\nOne rewrite only. No labels, no headings, no explanation, no quotes.`;
+        ? `${instructions[0]}${voiceBlock}${FINAL_PASS}\n\nText to rewrite:\n${text}\n\nReturn only the rewritten text.`
+        : `Rewrite the text below by blending ALL of the following styles into ONE single output. Do not produce multiple versions. Do not label anything with "Style 1" or "Style 2" or any heading. Just return one rewritten text that satisfies every style at once.\n\nIMPORTANT — these styles share ONE foundation: every style carries the same anti-AI foundation (the 17 banned patterns in the system prompt). Apply it ONCE — strip every AI word, structure, and rhythm a single time. The differences between styles are voice and grammar, which you resolve using the conflict rules below.\n\nCONFLICT RESOLUTION — when styles disagree, follow this hierarchy:\n1. The 17 ANTI_AI_RULES override everything, always, with no exceptions.\n2. Grammar conflict: if Direct is one of the selected styles, use Direct grammar for the entire output — proper capitals, proper contractions (it's, don't, can't), no dropped apostrophes, no casual typos. If Direct is not selected, the loosest grammar style in the mix wins — Unpolished grammar takes over Humanize.\n3. Controversial mandatory language: if Controversial is one of the selected styles, the output must still contain at least one swear word and at least one 18+ term regardless of what other styles are selected. Place them where they fit most naturally given the blended voice — but they must be present.\n4. Everything else is voice blending: take the energy, attitude, and approach from each style and weave them into one consistent voice. Do not stack every grammar rule from every style — resolve grammar first using rule 2, then layer the voices on top of that.\n5. The final output should read like one coherent person wrote it, not like multiple styles fighting each other in the same paragraph.\n\nSTYLES TO BLEND:\n${instructions.map((inst, i) => `--- Style ${i + 1} ---\n${inst}`).join("\n\n")}${voiceBlock}${FINAL_PASS}\n\nText to rewrite:\n${text}\n\nOne rewrite only. No labels, no headings, no explanation, no quotes.`;
 
     const message = await client.messages.create({
       model: "claude-sonnet-4-6",
@@ -296,8 +345,33 @@ export async function POST(req: NextRequest) {
       messages: [{ role: "user", content: userMessage }],
     });
 
-    const result =
+    let result =
       message.content[0].type === "text" ? message.content[0].text : "";
+
+    // If the first pass still leaked an em dash or a staccato fragment, hand it
+    // back for a focused single-job cleanup. This catches what the blended
+    // first pass drops without making every request pay for a second call.
+    if (result && (/—|--/.test(result) || hasStaccato(result))) {
+      try {
+        const scrub = await client.messages.create({
+          model: "claude-sonnet-4-6",
+          max_tokens: 4096,
+          system: ANTI_AI_RULES,
+          messages: [{ role: "user", content: scrubberPrompt(result) }],
+        });
+        const scrubbed =
+          scrub.content[0].type === "text" ? scrub.content[0].text : "";
+        if (scrubbed.trim()) result = scrubbed;
+      } catch (scrubErr) {
+        // A failed cleanup pass must never fail the whole request; the
+        // deterministic strip below still guarantees no em dashes ship.
+        console.error("Scrubber pass failed:", scrubErr);
+      }
+    }
+
+    // Final hard guarantee: no em dash or spaced double hyphen can ever reach
+    // the user, no matter what either model pass produced.
+    result = stripEmDashes(result);
 
     // Increment daily usage for signed-in free users
     let newUsageCount: number | null = null;
