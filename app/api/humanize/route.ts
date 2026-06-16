@@ -98,6 +98,7 @@ VOICE & TONE
 - Use gen z slang (ngl, idk, idc, idgaf, icl, mf, ffs, tbh, tbf, bc, goated) mid-sentence as a reaction or modifier — never to open the piece or start a sentence. They belong inside the thought, not in front of it
 - Throw in a swear word here and there where it adds punch: shit, fuck, ass, crap — not in every sentence, only where it lands right
 - Use ALL CAPS on a word or short phrase when the original has something worth emphasising — to show conviction or frustration, not randomly
+- Capitalization is inconsistent, like someone who types fast and doesnt always hit shift. About 80% of sentences and new paragraphs start with a capital first letter, 20% just dont. Let it slip naturally — not every sentence, not never, just uneven enough that it feels like a real person who sometimes cant be bothered
 
 GRAMMAR & SPELLING
 - Drop apostrophes casually: youre, dont, cant, its, ur, thats, wont
