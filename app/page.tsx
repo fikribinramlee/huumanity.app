@@ -606,35 +606,36 @@ export default function LandingPage() {
   useEffect(() => {
     const el = benefitSectionRef.current;
     if (!el) return;
-    // gain < 1 stretches the timeline across more scroll distance; 0.7 keeps the
-    // whole sequence playing through the pass-through without dragging — it's
-    // fully done a bit before the section is halfway up the viewport, then holds.
+    // gain 1.4 makes the animation complete a bit before the section reaches
+    // viewport center, then holds. The key is the beat POSITIONS within the
+    // 12000-unit timeline:
+    //   - T 0–7500: cursor dwells on the email while text highlights (first half
+    //     of visible scroll = just selecting the Gmail)
+    //   - T 7500–9900: cursor glides to tab → tone bar opens → Unpolished →
+    //     Controversial → Enter (the middle of the scroll)
+    //   - T 10100–11800: result generates → cursor rises to Accept and clicks it
+    //   - T 11800: text swap fires immediately after Accept — minimal extra scroll
     return attachScrollScrub(el, 12000, (T) => {
-      // Cursor rides the whole sequence, then leaves shortly after it clicks
-      // Accept and the rewrite lands.
-      setCursorVisible(T >= 400 && T < 10800);
+      setCursorVisible(T >= 400 && T < 12000);
       setCursorExiting(false);
-      // Bottom-up story: select the email (pos 0) → click the right-edge tab (1) →
-      // sweep up to the tone bar: Unpolished (2), Controversial (3), Enter (4)
-      // → the result generates → cursor rises to Accept (5).
       setCursorPos(
-        T >= 8000 ? 5
-        : T >= 6000 ? 4
-        : T >= 4900 ? 3
-        : T >= 3800 ? 2
-        : T >= 2200 ? 1
-        : 0
+        T >= 11100 ? 5  // Accept
+        : T >= 9900 ? 4 // Enter
+        : T >= 9300 ? 3 // Controversial
+        : T >= 8700 ? 2 // Unpolished
+        : T >= 7500 ? 1 // tab
+        : 0             // email body (dwell through first half of scroll)
       );
-      setArrowFlash(T >= 6400);
-      setAcceptFlash(T >= 8800);
+      setArrowFlash(T >= 10100);
+      setAcceptFlash(T >= 11400);
       setAnimStep(
-        T >= 9800 ? 8   // Accept clicked → rewrite replaces the Gmail draft (no highlight)
-        : T >= 7400 ? 7  // result card's Back/Copy/Accept buttons appear
-        : T >= 6800 ? 6  // result card generates at the top
-        : T >= 5200 ? 5  // Controversial lights up
-        : T >= 4100 ? 4  // Unpolished lights up
-        : T >= 2900 ? 3  // tone bar opens
-        : T >= 1000 ? 2  // text selected + tab slides in
+        T >= 11800 ? 8  // text swap — fires close on heels of Accept click
+        : T >= 10800 ? 7 // result card buttons appear
+        : T >= 10500 ? 6 // result card generates
+        : T >= 9500 ? 5  // Controversial lights up
+        : T >= 8900 ? 4  // Unpolished lights up
+        : T >= 8200 ? 3  // tone bar opens after tab click
+        : T >= 1800 ? 2  // text selected + tab slides in (holds for ~5700 T units)
         : 0
       );
     }, 1.4);
