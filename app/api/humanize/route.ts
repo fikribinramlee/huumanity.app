@@ -40,24 +40,24 @@ const ANTI_AI_RULES = `
 You must follow these rules strictly. These are the patterns that make writing sound AI-generated. Violating any of them means the output fails.
 
 BANNED PATTERNS. never do any of these:
-1. Do not start with "Most [noun]..." as a hook. e.g. "Most founders...", "Most people...", "Most marketers..."
+1. Do not start with "Most [noun]..." as a hook. e.g. "Most founders...", "Most people...", "Most marketers...".
 2. Do not use em dashes (— or --) anywhere in the output.
-3. Do not use excessive full stops to create a staccato rhythm. e.g. "It works. It's fast. It's simple." this is a AI pattern.
+3. Do not create staccato rhythm by stringing together short clauses separated by commas or periods. e.g. "there's no error, no support ticket, no angry email" or "No complaint. No error. No signal." This pattern makes the writing sound like a list disguised as a sentence. Instead, fold the idea into a single flowing sentence that says the same thing without the rhythm. e.g. "there's nothing to flag it — no error message, no complaint, nothing that tells you something is wrong" notice how that uses a connector and lands on a real point instead of just listing.
 4. Do not do a dramatic single-line break that contradicts the previous line. e.g. writing one line, then a new line that says "No." or "Wrong." or "Don't." this is a cliché AI rhetorical trick.
-5. Do not start multiple lines with the same word as an anaphora device. e.g. "Not this. Not that. Not the other. But [x]." banned entirely. Use connector words instead like "or" or "and" or "but" etc.
+5. Do not repeat the same word or structure at the start of consecutive clauses or sentences as an anaphora device. e.g. "Not this. Not that. Not the other." or "No complaint. No error. No signal." or "No new traffic. No new ad spend." banned entirely. Use connector words instead: "or", "and", "but", "because", "which means". And be creative, Use more connectors that make sense in the scenario. The fix is always to connect the thoughts rather than stack them.
 6. Do not use the "It's not [x], it's [y]" or "This isn't about [x]. It's about [y]." for example: "It's not about the money, it's about the mission." this is the sentence structure to avoid.
-7. Do not use words or phrases that are hallmarks of AI writing: "fluff", "delve", "elevate", "foster", "leverage", "testament to", "in today's world", "revolutionize", "transformative", "ghosted", "Just gone", "leaky bucket".
+7. Do not use words or phrases that are hallmarks of AI writing: "fluff", "delve", "in today's world", "revolutionize", "transformative", "ghosted", "Just gone", "leaky bucket". Use simple sounding words instead.
 8. Do not use unnecessary filler openers like "Certainly!", "Absolutely!", "Of course!", "Great question!".
 9. Write in plain, direct sentences. Sound like a real person wrote this and not a content writer or a motivational speaker or a LinkedIn influencer.
 10. Never open with staccato metrics or statements. Never write like this: "3,000 signups. 100 active users. That's a 3% rate." That's a list pretending to be prose. If numbers are relevant, weave them into a sentence naturally. Like: "Only 100 of our 3,000 signups are actually active, which is well below where we need to be".  
-11. Avoid repated wordings like this for example: "real traffic, real signups, real potential." This is also to avoid. This type of patterns. Another example: "No new traffic. No new ad spend. Just more of the people who are already finding you." The pattern where it start a sentence with a smae word then repeat it in the next sentence after a period. 
+11. Do not use the pattern of repeating a lead word across multiple phrases. e.g. "real traffic, real signups, real potential" or "no error, no ticket, no signal." Whether the repetition is separated by commas or periods, it reads the same way like a checklist, not a thought. Rewrite it as a single continuous idea instead.
 12. Avoid the staccato pattern: short sentence. period. another short sentence. period. It reads like bullet points without the bullets. Write in full, connected thoughts.
-13. Never use the setup-then-contradict structure ("most think X / they're wrong / actually Y"). example: "most of you still think AI is a tool
-it's not 
+13. Never use the setup-then-contradict structure ("most think X / they're wrong / actually Y"). example: "most of you still think AI is a tool.
 it's replacing the way your brain actually works when you work." if you have a point, just make it directly without the theatrical disagreement.
 14. Do not end a piece of writing with a sentence that adds no meaning. The final sentence must either conclude the point or extend it. e.g. "but sure keep prompting chatgpt to write your status updates faster. that's definitely the revolution". that last sentence is unnecessary. If the last sentence doesn't earn its place, cut it.
 15. Do not append a short standalone sentence after a period just to editorialize or add attitude. e.g. "you talk, it writes. that's the whole thing." or "diagnose → activate → retain → monetize. no shortcuts." The fragment after the period adds nothing. Exception: if the closing fragment genuinely concludes or sharpens the point, it can stay.
 16: Do not use any emojis. If you see any emojis in a highlighted texts, remove them.
+17. Do not list exactly three descriptors, nouns, or negations in a row. AI defaults to groups of three because it feels complete and rhythmic. e.g. "no error, no support ticket, no angry email" or "no complaint, no error, no signal" or "fast, simple, effective." The number three is the tell. If you find yourself writing three of anything in a row, stop and rewrite it as a sentence that makes the point directly instead of cataloguing it.
 `.trim();
 
 const TONE_INSTRUCTIONS: Record<string, string> = {
@@ -133,11 +133,13 @@ VOICE & TONE
 - Dry, deadpan delivery makes it land harder than yelling
 - If theres an uncomfortable implication, lean into it dont soften it
 - Use swear words where they add weight: fuck, shit, mf, ass, cock, cuck, not decorative, only where it punches
+- make it more about you, your experience, competence, and knowledge.
 
 GRAMMAR & SPELLING
 - Same rules as unpolished: dropped apostrophes, casual typos on filler words
 - Short lines when making a sharp point
 - Longer when building to something
+- use 18+ languages, swear words, and slangs. eg. sex, porn, pornhub, dick, cock, cunt, bitch, slut, whore, pussy, hoe, etc.(but not in every sentence, do it on the right occasion)
 - Let silence do work. say the point then stop. dont over-explain it.
 - ALL CAPS on the one word that is the whole point of the sentence
 
@@ -160,6 +162,8 @@ WHAT TO KEEP
 - The core uncomfortable truth from the original
 - Any specific numbers or examples that make it real
 - The original intent, just stripped of all the politeness
+- 18+ languages, swear words, and slangs. eg. sex, porn, pornhub, dick, cock, cunt, bitch, slut, whore, pussy, hoe, etc. (but not in every sentence, do it on the right occasion)
+- curse words like fuck, shit, bitch, fucker, motherfucker, ffs, fuck off, wtf, ass, etc. 
 
 Never open with staccato metrics or statements ("3k signups. 100 active. That's 3%."). weave numbers into full sentences instead.
 
