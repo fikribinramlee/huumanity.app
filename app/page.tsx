@@ -1551,8 +1551,8 @@ export default function LandingPage() {
                   top: "50%",
                   zIndex: 25,
                   pointerEvents: "none",
-                  transform: `translateY(-50%) translateX(${animStep >= 2 && animStep < 3 ? "0%" : "110%"})`,
-                  opacity: animStep >= 2 && animStep < 3 ? 1 : 0,
+                  transform: `translateY(-50%) translateX(${animStep >= 2 ? "0%" : "110%"})`,
+                  opacity: animStep >= 2 ? 1 : 0,
                   transition: "transform 0.35s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease",
                 }}
               >
