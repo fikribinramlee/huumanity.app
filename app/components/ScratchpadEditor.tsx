@@ -7,9 +7,6 @@ const TONES = ["Humanize", "Unpolished", "Controversial", "Direct"] as const;
 const POPUP_MAX_WIDTH = 480;
 const POPUP_MIN_WIDTH = 280;
 
-/** Delay (ms) between mouseup and the button appearing */
-const SHOW_DELAY_MS = 350;
-
 type SelectionAnchor = {
   tabTop: number;
   popupTop: number;
@@ -27,6 +24,34 @@ Would love to chat with you. I'm free this afternoon at 4pm if you're available,
 
 Best regards,
 Alex`;
+
+// Copy that survives focus loss. navigator.clipboard.writeText rejects with
+// "Document is not focused" when another app (e.g. the desktop selector) grabs
+// focus mid-rewrite — that's the intermittent "Copy didn't work". Fall back to
+// the old execCommand path, which doesn't require document focus.
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    window.focus();
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.top = "0";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+}
 
 interface ScratchpadEditorProps {
   /** Called when the user hits the usage limit — parent opens upgrade modal */
@@ -54,138 +79,119 @@ export function ScratchpadEditor({ onUpgradeRequired, limitReached = false }: Sc
   const popupStageRef = useRef<PopupStage>("select");
   const expandedRef   = useRef(false);
 
-  // Pending anchor: calculated on selectionchange, committed on mouseup
-  const pendingAnchorRef = useRef<SelectionAnchor>(null);
-  const showTimerRef     = useRef<number | null>(null);
-
   useEffect(() => { popupStageRef.current = popupStage; }, [popupStage]);
   useEffect(() => { expandedRef.current   = expanded;   }, [expanded]);
 
-  // ── Main selection + mouseup logic ────────────────────────────────────────
+  // ── Selection → show / hide the yellow tab ────────────────────────────────
+  // Deterministic model: read the LIVE selection at the moment a gesture
+  // finishes (mouseup / dblclick / keyboard select) and show immediately if
+  // it's real rephrasable text inside the editor. Hide the instant the
+  // selection collapses. The old version stored a "pending anchor" on
+  // selectionchange and committed it 350ms later on mouseup — that cross-event
+  // hand-off raced (double-click never fired a second mouseup, fast selects
+  // beat the timer), which is exactly why the tab showed inconsistently.
   useEffect(() => {
-    const clearShowTimer = () => {
-      if (showTimerRef.current !== null) {
-        window.clearTimeout(showTimerRef.current);
-        showTimerRef.current = null;
-      }
-    };
-
-    // Called on every selectionchange — just stores the position, shows nothing yet.
-    const handleSelectionChange = () => {
-      // Don't interfere while rewrite is in progress
-      if (popupStageRef.current !== "select") return;
-
+    const computeAnchor = (): SelectionAnchor => {
       const selection = window.getSelection();
       const editor = editorRef.current;
       const body   = bodyRef.current;
-
-      if (!selection || !editor || !body || selection.rangeCount === 0) {
-        clearShowTimer();
-        pendingAnchorRef.current = null;
-        setAnchor(null);
-        return;
-      }
+      if (!selection || !editor || !body || selection.rangeCount === 0) return null;
 
       const range        = selection.getRangeAt(0);
       const selectedText = selection.toString();
-
       if (
         range.collapsed ||
         selectedText.trim().length === 0 ||
-        !editor.contains(range.commonAncestorContainer)
+        !editor.contains(range.commonAncestorContainer) ||
+        !isRephrashable(selectedText)
       ) {
-        clearShowTimer();
-        pendingAnchorRef.current = null;
-        setAnchor(null);
-        return;
+        return null;
       }
 
-      // Smart gate
-      if (!isRephrashable(selectedText)) {
-        clearShowTimer();
-        pendingAnchorRef.current = null;
-        setAnchor(null);
-        return;
-      }
-
-      // Calculate anchor relative to bodyRef
       const bodyRect       = body.getBoundingClientRect();
       const containerWidth = body.offsetWidth;
+      const rects          = range.getClientRects();
+      if (rects.length === 0) return null;
 
-      const rects = range.getClientRects();
-      if (rects.length === 0) {
-        pendingAnchorRef.current = null;
-        return;
-      }
-      const firstRect  = rects[0];
-      const rangeRect  = range.getBoundingClientRect();
-      const relLeft    = rangeRect.left  - bodyRect.left;
-      const relRight   = rangeRect.right - bodyRect.left;
-      const relFirstTop = firstRect.top  - bodyRect.top;
-      const tabTop     = relFirstTop + firstRect.height / 2 - 18;
-
+      const firstRect   = rects[0];
+      const rangeRect   = range.getBoundingClientRect();
+      const relLeft     = rangeRect.left  - bodyRect.left;
+      const relRight    = rangeRect.right - bodyRect.left;
+      const relFirstTop = firstRect.top   - bodyRect.top;
+      const tabTop      = relFirstTop + firstRect.height / 2 - 18;
       const popupWidth  = Math.max(POPUP_MIN_WIDTH, Math.min(POPUP_MAX_WIDTH, containerWidth - 16));
       const rangeCenter = (relLeft + relRight) / 2;
       const desiredLeft = rangeCenter - popupWidth / 2;
       const popupLeft   = Math.min(Math.max(8, desiredLeft), Math.max(8, containerWidth - popupWidth - 8));
 
-      savedRangeRef.current     = range.cloneRange();
-      pendingAnchorRef.current  = { tabTop, popupTop: relFirstTop, popupLeft, popupWidth };
-
-      // Bug-fix #2: if the popup is open from a previous selection, dismiss it
-      // so the user starts fresh. The button will re-appear on mouseup.
-      if (expandedRef.current) {
-        setExpanded(false);
-        setAnchor(null);
-        setPopupStage("select");
-        setSelectedTones([]);
-        setResultText("");
-        setError("");
-        clearShowTimer();
-      }
+      savedRangeRef.current = range.cloneRange();
+      return { tabTop, popupTop: relFirstTop, popupLeft, popupWidth };
     };
 
-    // Called on mouseup — user finished selecting, now show the button.
-    const handleMouseUp = () => {
-      if (!pendingAnchorRef.current) return;
-      if (expandedRef.current) return; // popup already open, leave it
-
-      clearShowTimer();
-      const snapshot = pendingAnchorRef.current;
-      showTimerRef.current = window.setTimeout(() => {
-        setAnchor(snapshot);
-        showTimerRef.current = null;
-      }, SHOW_DELAY_MS) as unknown as number;
+    // A selection gesture finished — show the tab from the live selection.
+    const tryShow = () => {
+      if (popupStageRef.current !== "select") return; // mid-rewrite, leave it
+      if (expandedRef.current) return;                // popup already open
+      const next = computeAnchor();
+      // Don't clobber an existing tab on a null read — the collapse handler
+      // owns hiding. Only update when there's a real selection to show.
+      if (next) setAnchor(next);
     };
 
-    // Keyboard selection (Shift+arrows, Ctrl+A, etc.) — trigger on keyup
+    // Defer one tick so the browser has finalized the selection for the gesture
+    // (mouseup boundary, double-click word expansion, etc.) before we read it.
+    const settleThenShow = () => window.setTimeout(tryShow, 0);
+
+    // Selection collapsed or cleared → hide the tab immediately. This is what
+    // kills the "stuck tab" bug: the moment the highlight is gone, so is the tab.
+    const handleSelectionChange = () => {
+      if (popupStageRef.current !== "select") return;
+      if (expandedRef.current) return; // popup keeps its own saved range
+      const selection = window.getSelection();
+      const editor    = editorRef.current;
+      const collapsed =
+        !selection ||
+        selection.rangeCount === 0 ||
+        selection.getRangeAt(0).collapsed ||
+        selection.toString().trim().length === 0 ||
+        !editor?.contains(selection.getRangeAt(0).commonAncestorContainer);
+      if (collapsed) setAnchor(null);
+    };
+
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.shiftKey || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a")) {
-        handleMouseUp();
+        settleThenShow();
       }
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
-    document.addEventListener("mouseup",         handleMouseUp);
-    document.addEventListener("keyup",           handleKeyUp);
+    document.addEventListener("mouseup",  settleThenShow);
+    document.addEventListener("dblclick", settleThenShow);
+    document.addEventListener("keyup",    handleKeyUp);
 
     return () => {
       document.removeEventListener("selectionchange", handleSelectionChange);
-      document.removeEventListener("mouseup",         handleMouseUp);
-      document.removeEventListener("keyup",           handleKeyUp);
-      clearShowTimer();
+      document.removeEventListener("mouseup",  settleThenShow);
+      document.removeEventListener("dblclick", settleThenShow);
+      document.removeEventListener("keyup",    handleKeyUp);
     };
   }, []);
 
-  // ── Outside-click closes popup ────────────────────────────────────────────
+  // ── Click-away dismiss ────────────────────────────────────────────────────
+  // A mousedown outside both the editor and the popup tears everything down.
+  // Bound whenever the tab OR the popup is visible. This is the safety net for
+  // the "stuck tab" case where clicking a non-editable region doesn't reliably
+  // fire selectionchange, so the tab would otherwise linger.
   useEffect(() => {
-    if (!expanded) return;
+    if (!anchor && !expanded) return;
     const handleMouseDown = (e: MouseEvent) => {
       const target = e.target as Node;
       if (popupRef.current?.contains(target))  return;
       if (editorRef.current?.contains(target)) return;
-      closePopup();
+      if (expanded) closePopup();
+      else setAnchor(null);
     };
+    // Defer binding so we don't catch the same click that opened the popup.
     const id = window.setTimeout(() => {
       document.addEventListener("mousedown", handleMouseDown);
     }, 0);
@@ -193,7 +199,17 @@ export function ScratchpadEditor({ onUpgradeRequired, limitReached = false }: Sc
       window.clearTimeout(id);
       document.removeEventListener("mousedown", handleMouseDown);
     };
-  }, [expanded]);
+  }, [anchor, expanded]);
+
+  // Escape always dismisses, whatever stage we're in.
+  useEffect(() => {
+    if (!anchor && !expanded) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { closePopup(); }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [anchor, expanded]);
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function closePopup() {
@@ -205,12 +221,7 @@ export function ScratchpadEditor({ onUpgradeRequired, limitReached = false }: Sc
     setGeneratedSignature("");
     setCopied(false);
     setError("");
-    savedRangeRef.current    = null;
-    pendingAnchorRef.current = null;
-    if (showTimerRef.current !== null) {
-      window.clearTimeout(showTimerRef.current);
-      showTimerRef.current = null;
-    }
+    savedRangeRef.current = null;
   }
 
   const openPopup = () => {
@@ -277,18 +288,30 @@ export function ScratchpadEditor({ onUpgradeRequired, limitReached = false }: Sc
   const handleAccept = () => {
     const range = savedRangeRef.current;
     if (!range || !resultText) { closePopup(); return; }
-    range.deleteContents();
-    range.insertNode(document.createTextNode(resultText));
-    editorRef.current?.normalize();
+    try {
+      // Re-focus the editor first. If another app (the desktop selector) grabbed
+      // focus, the saved range can be detached from the live selection; bringing
+      // focus back makes the DOM mutation below stick.
+      editorRef.current?.focus();
+      range.deleteContents();
+      range.insertNode(document.createTextNode(resultText));
+      editorRef.current?.normalize();
+    } catch {
+      // Range went stale (selection cleared by focus loss). Never lose the
+      // rewrite — drop it on the clipboard so the user can paste it.
+      void copyToClipboard(resultText);
+    }
     window.getSelection()?.removeAllRanges();
     closePopup();
   };
 
   const handleCopy = async () => {
     if (!resultText) return;
-    await navigator.clipboard.writeText(resultText);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    const ok = await copyToClipboard(resultText);
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    }
   };
 
   const handleBack = () => {
