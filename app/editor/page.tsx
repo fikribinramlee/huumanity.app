@@ -34,6 +34,9 @@ type SelectorHealth = {
   hasSelection: boolean;
   canReplace: boolean;
   selectionLen: number;
+  updateStatus: string;
+  appVersion: string;
+  inputHookActive: boolean;
 };
 
 // ─── Icons ────────────────────────────────────────────────────────────────────
@@ -204,6 +207,9 @@ export default function EditorPage() {
   );
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const [pendingUpdateVersion, setPendingUpdateVersion] = useState<string | null>(
+    null
+  );
 
   // Capture
   const [capturedText, setCapturedText] = useState("");
@@ -367,11 +373,21 @@ export default function EditorPage() {
       const health = await invoke<SelectorHealth>("get_selector_health");
       setSelectorHealth(health);
       setAccessibilityAllowed(health.accessibilityAllowed);
-      setDetectorStatus(
-        health.accessibilityAllowed
-          ? health.status
-          : "Allow huumanity in macOS Accessibility to enable desktop selection."
-      );
+      if (isWindows) {
+        setDetectorStatus(
+          health.inputHookActive && health.watcherRunning
+            ? "Selector is running. Drag or double-click to select text — the yellow tab appears on the right edge of your screen."
+            : health.watcherRunning
+              ? "Selector worker is running but the mouse hook failed. Restart huumanity; if it persists, check antivirus or run without admin elevation."
+              : "Selector watcher not running — restart huumanity."
+        );
+      } else if (health.accessibilityAllowed) {
+        setDetectorStatus(health.status);
+      } else {
+        setDetectorStatus(
+          "Allow huumanity in macOS Accessibility to enable desktop selection."
+        );
+      }
       await refreshApiConnection();
       return health;
     } catch (err) {
@@ -381,7 +397,7 @@ export default function EditorPage() {
     } finally {
       setIsCheckingHealth(false);
     }
-  }, [refreshApiConnection]);
+  }, [refreshApiConnection, isWindows]);
 
   // ── Effects ────────────────────────────────────────────────────────────────
 
@@ -497,6 +513,21 @@ export default function EditorPage() {
       unlisten?.();
     };
   }, [authState, getToken]);
+
+  // Surface silent background updates — Rust emits this after download+install.
+  useEffect(() => {
+    if (authState !== "app" || !isTauriRuntime()) return;
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<string>("huu-update-ready", (event) => {
+        setPendingUpdateVersion(event.payload);
+      });
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, [authState]);
 
   // After a successful Stripe checkout, Stripe redirects to /editor?upgraded=true.
   // Immediately show the Pro UI optimistically, then do a real fetch to confirm.
@@ -1282,9 +1313,13 @@ useEffect(() => {
                       Desktop selector
                     </p>
                     <p className="text-sm font-bold text-white leading-6">
-                      {isWindows || accessibilityAllowed
-                        ? "Running. Highlight text in any app to see the yellow huumanity button."
-                        : "Accessibility permission needed to use huumanity on your desktop."}
+                      {isWindows
+                        ? accessibilityAllowed && selectorHealth?.inputHookActive
+                          ? "Running. Drag to select text — the yellow tab appears on the right edge of your screen."
+                          : "Selector hook not active. Restart huumanity or check antivirus."
+                        : accessibilityAllowed
+                          ? "Running. Highlight text in any app to see the yellow huumanity button."
+                          : "Accessibility permission needed to use huumanity on your desktop."}
                     </p>
                     <p className="mt-0.5 text-xs text-white/40">
                       {detectorStatus}
@@ -1300,6 +1335,57 @@ useEffect(() => {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Updater banner — shows current version + update status so the
+                user can see whether the background updater ran and what it
+                found. Without this the updater is a black box. */}
+            {pendingUpdateVersion ? (
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#fff700] bg-[#fff700]/15 px-5 py-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-black">
+                    Update v{pendingUpdateVersion} is ready
+                  </p>
+                  <p className="mt-1 text-xs text-neutral-700">
+                    Restart huumanity to finish installing. Until you restart,
+                    you&apos;re still on the old build.
+                  </p>
+                </div>
+                <button
+                  onClick={() => void invoke("restart_app")}
+                  className="shrink-0 rounded-full bg-black px-5 py-2 text-xs font-black text-[#fff700] transition hover:bg-neutral-900"
+                >
+                  Restart now
+                </button>
+              </div>
+            ) : null}
+            <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-black/[0.07] bg-[#fafaf8] px-5 py-3">
+              <div className="min-w-0">
+                <p className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
+                  App version
+                </p>
+                <p className="mt-0.5 truncate text-sm font-bold text-black">
+                  v{selectorHealth?.appVersion ?? "—"}
+                  {selectorHealth?.updateStatus ? (
+                    <span className="ml-2 font-medium text-neutral-500">
+                      · {selectorHealth.updateStatus}
+                    </span>
+                  ) : null}
+                </p>
+              </div>
+              <button
+                onClick={async () => {
+                  try {
+                    await invoke("check_for_updates");
+                  } catch {
+                    /* status is surfaced via SelectorHealth.updateStatus */
+                  }
+                  await refreshSelectorHealth();
+                }}
+                className="shrink-0 rounded-full border-2 border-black/10 px-4 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:text-black"
+              >
+                Check for updates
+              </button>
             </div>
 
 

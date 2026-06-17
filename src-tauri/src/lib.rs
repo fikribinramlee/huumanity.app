@@ -52,6 +52,15 @@ struct SelectorState {
     // on-demand `refresh_session_token` command watches this to detect when the
     // editor has responded to a mint request with a fresh token.
     token_generation: std::sync::atomic::AtomicU64,
+    // Latest auto-updater status, surfaced to the frontend so the user can see
+    // whether the background check succeeded, found an update, or failed. The
+    // background task at startup AND the manual `check_for_updates` command
+    // both write to this string.
+    update_status: Mutex<String>,
+    // Whether the platform input hook (macOS event tap / Windows WH_MOUSE_LL)
+    // actually installed. The worker thread may be running even when the hook
+    // failed — without this flag the health card falsely reports "running".
+    input_hook_active: Mutex<bool>,
 }
 
 struct SelectionProbe {
@@ -68,6 +77,14 @@ struct SelectorHealth {
     has_selection: bool,
     can_replace: bool,
     selection_len: usize,
+    // Snapshot of the auto-updater status string (e.g. "idle", "checking",
+    // "no update", "downloading 50%", "update installed, restart to apply",
+    // "error: …"). Lets the editor surface the updater state in the UI.
+    update_status: String,
+    // Currently installed app version (CARGO_PKG_VERSION at build time).
+    app_version: String,
+    // macOS event tap / Windows low-level mouse hook — false when install failed.
+    input_hook_active: bool,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -95,7 +112,9 @@ pub fn run() {
             open_billing,
             set_session_token,
             get_session_token,
-            refresh_session_token
+            refresh_session_token,
+            check_for_updates,
+            restart_app
         ])
         .on_window_event(|window, event| {
             if window.label() != "main" {
@@ -131,17 +150,23 @@ pub fn run() {
 
             // Background auto-updater: check for a new release ~5 seconds after
             // launch, download and install silently, restart on next open.
+            // ALL steps are mirrored into `state.update_status` and the debug log
+            // so the in-app health card can surface failures (silent updater
+            // bugs are otherwise invisible — the user can't tell whether the
+            // check ran, found nothing, or errored).
             {
-                use tauri_plugin_updater::UpdaterExt;
                 let handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(Duration::from_secs(5)).await;
-                    if let Ok(updater) = handle.updater() {
-                        if let Ok(Some(update)) = updater.check().await {
-                            let _ = update
-                                .download_and_install(|_chunk, _total| {}, || {})
-                                .await;
-                        }
+                    run_updater_check(handle.clone(), false).await;
+
+                    // Re-check every 6 hours while the app stays open. The initial
+                    // check only runs once at launch — without this, users who
+                    // leave huumanity running for days never pick up new builds
+                    // until they manually reinstall from the website.
+                    loop {
+                        tokio::time::sleep(Duration::from_secs(6 * 3600)).await;
+                        run_updater_check(handle.clone(), false).await;
                     }
                 });
             }
@@ -367,7 +392,10 @@ fn get_selector_payload(
 }
 
 #[tauri::command]
-fn get_selector_health(state: State<'_, SelectorState>) -> Result<SelectorHealth, String> {
+fn get_selector_health(
+    app: tauri::AppHandle,
+    state: State<'_, SelectorState>,
+) -> Result<SelectorHealth, String> {
     let probe = platform_current_selection_probe();
     let fallback_selection = state.selection.lock().map_err(|e| e.to_string())?.clone();
     let active_selection = probe.selection.clone().or(fallback_selection);
@@ -386,6 +414,16 @@ fn get_selector_health(state: State<'_, SelectorState>) -> Result<SelectorHealth
         .map(|selection| selection.can_replace)
         .unwrap_or(false);
 
+    let update_status = state
+        .update_status
+        .lock()
+        .map(|s| s.clone())
+        .unwrap_or_default();
+    let input_hook_active = *state
+        .input_hook_active
+        .lock()
+        .map_err(|e| e.to_string())?;
+
     Ok(SelectorHealth {
         accessibility_allowed: platform_accessibility_permission(),
         watcher_running,
@@ -393,6 +431,9 @@ fn get_selector_health(state: State<'_, SelectorState>) -> Result<SelectorHealth
         has_selection: selection_len > 0,
         can_replace,
         selection_len,
+        update_status,
+        app_version: app.package_info().version.to_string(),
+        input_hook_active,
     })
 }
 
@@ -492,10 +533,12 @@ const SELECTOR_TAB_H: f64 = 68.0;
 
 /// The FIXED on-screen rect (logical points, window top-left + size) for the
 /// collapsed dot tab: flush to the RIGHT edge, vertically centered — Grammarly
-/// style. Completely independent of the selection, so the dot never moves.
+/// style. Uses the monitor under the cursor so multi-monitor setups don't hide
+/// the tab on a different display's edge.
 fn fixed_dot_window_rect(app: &tauri::AppHandle) -> (f64, f64, f64, f64) {
     let (w, h) = (SELECTOR_TAB_W, SELECTOR_TAB_H);
-    if let Ok(Some(monitor)) = app.primary_monitor() {
+    let monitor = monitor_at_cursor(app).or_else(|| app.primary_monitor().ok().flatten());
+    if let Some(monitor) = monitor {
         let scale = monitor.scale_factor();
         let position = monitor.position();
         let size = monitor.size();
@@ -510,6 +553,42 @@ fn fixed_dot_window_rect(app: &tauri::AppHandle) -> (f64, f64, f64, f64) {
         (x, y, w, h)
     } else {
         (0.0, 0.0, w, h)
+    }
+}
+
+/// Pick the display the user is actually working on (cursor position). Without
+/// this, the tab always lands on the primary monitor's right edge — invisible on
+/// secondary displays, which was a common Windows report.
+fn monitor_at_cursor(app: &tauri::AppHandle) -> Option<tauri::Monitor> {
+    let (x, y) = cursor_physical_position()?;
+    app.monitor_from_point(x as f64, y as f64).ok().flatten()
+}
+
+fn cursor_physical_position() -> Option<(i32, i32)> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::GetCursorPos;
+        unsafe {
+            let mut pt = POINT::default();
+            if GetCursorPos(&mut pt).is_ok() {
+                return Some((pt.x, pt.y));
+            }
+        }
+        None
+    }
+    #[cfg(target_os = "macos")]
+    {
+        use core_graphics::event::CGEvent;
+        use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+        let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState).ok()?;
+        let event = CGEvent::new(source).ok()?;
+        let loc = event.location();
+        Some((loc.x as i32, loc.y as i32))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    {
+        None
     }
 }
 
@@ -791,6 +870,122 @@ fn handle_deep_link(app: &tauri::AppHandle, urls: Vec<tauri::Url>) {
             Err(err) => debug_log(&format!("deep link: bad target url: {err}")),
         }
     }
+}
+
+// Drives the Tauri updater: check → (if update) download+install → status.
+// Writes a human-readable status into `SelectorState::update_status` at every
+// step AND mirrors it to the debug log. `manual` only changes the leading
+// status verb ("Manual check…" vs "Background check…") so the UI can tell
+// where the result came from.
+async fn run_updater_check(handle: tauri::AppHandle, manual: bool) {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let set_status = |msg: &str| {
+        if let Some(state) = handle.try_state::<SelectorState>() {
+            if let Ok(mut s) = state.update_status.lock() {
+                *s = msg.to_string();
+            }
+        }
+        debug_log(&format!("updater: {msg}"));
+    };
+
+    let prefix = if manual { "Manual check" } else { "Background check" };
+    set_status(&format!("{prefix}: starting"));
+
+    let updater = match handle.updater() {
+        Ok(u) => u,
+        Err(e) => {
+            set_status(&format!("{prefix}: updater unavailable ({e})"));
+            return;
+        }
+    };
+
+    let maybe_update = match updater.check().await {
+        Ok(u) => u,
+        Err(e) => {
+            // Common reasons: no internet, GitHub rate limit, malformed
+            // `latest.json`, signature mismatch with the pubkey baked into
+            // tauri.conf.json. The error string tells us which.
+            set_status(&format!("{prefix}: check failed ({e})"));
+            return;
+        }
+    };
+
+    let update = match maybe_update {
+        Some(u) => u,
+        None => {
+            set_status(&format!(
+                "{prefix}: up to date (v{})",
+                handle.package_info().version
+            ));
+            return;
+        }
+    };
+
+    let new_version = update.version.clone();
+    set_status(&format!(
+        "{prefix}: downloading v{new_version} → v{}",
+        handle.package_info().version
+    ));
+
+    let dl_handle = handle.clone();
+    let download_result = {
+        let new_version = new_version.clone();
+        let prefix = prefix.to_string();
+        update
+            .download_and_install(
+                move |chunk, total| {
+                    // Progress percentage; we update at most every ~5% to avoid
+                    // hammering the mutex on every chunk.
+                    static LAST_PCT: std::sync::atomic::AtomicU64 =
+                        std::sync::atomic::AtomicU64::new(0);
+                    if let Some(total) = total {
+                        let pct = ((chunk as u128 * 100) / total as u128) as u64;
+                        let last =
+                            LAST_PCT.load(std::sync::atomic::Ordering::Relaxed);
+                        if pct >= last + 5 || pct >= 100 {
+                            LAST_PCT.store(pct, std::sync::atomic::Ordering::Relaxed);
+                            if let Some(state) = dl_handle.try_state::<SelectorState>() {
+                                if let Ok(mut s) = state.update_status.lock() {
+                                    *s = format!(
+                                        "{prefix}: downloading v{new_version} ({pct}%)"
+                                    );
+                                }
+                            }
+                        }
+                    }
+                },
+                || {},
+            )
+            .await
+    };
+
+    match download_result {
+        Ok(_) => {
+            set_status(&format!(
+                "Update v{new_version} installed — restart huumanity to apply"
+            ));
+            // Notify the editor window so it can show a "Restart now" banner.
+            let _ = handle.emit_to("main", "huu-update-ready", new_version);
+        }
+        Err(e) => {
+            set_status(&format!("{prefix}: install failed ({e})"));
+        }
+    }
+}
+
+// Manual "Check for updates" — exposed to the editor UI so the user can
+// trigger the same flow on demand and watch the status field change.
+#[tauri::command]
+async fn check_for_updates(app: tauri::AppHandle) -> Result<(), String> {
+    run_updater_check(app, true).await;
+    Ok(())
+}
+
+/// Restart after a silent background update so the new build actually runs.
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
 }
 
 fn show_main_window(app: &tauri::AppHandle) -> Result<(), String> {
@@ -1135,6 +1330,10 @@ fn ensure_selector_window(app: &tauri::AppHandle) -> Result<tauri::WebviewWindow
         .visible_on_all_workspaces(true)
         .accept_first_mouse(true);
 
+    // Windows: don't steal keyboard focus from the app the user is writing in.
+    #[cfg(target_os = "windows")]
+    let builder = builder.focusable(false);
+
     builder.build().map_err(|e| e.to_string())
 }
 
@@ -1409,6 +1608,7 @@ fn start_selection_watcher(app: tauri::AppHandle) {
     }
 
     // Event-tap thread: a dedicated CFRunLoop forwarding left mouse up/down.
+    let hook_app = app.clone();
     std::thread::spawn(move || {
         use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
         use core_graphics::event::{
@@ -1448,6 +1648,11 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                         CFRunLoop::get_current().add_source(&source, kCFRunLoopCommonModes);
                         tap.enable();
                         debug_log("mouse event tap installed");
+                        if let Ok(mut hook) =
+                            hook_app.state::<SelectorState>().input_hook_active.lock()
+                        {
+                            *hook = true;
+                        }
                         CFRunLoop::run_current();
                     }
                     Err(_) => debug_log("event tap: failed to create runloop source"),
@@ -1602,6 +1807,7 @@ fn start_selection_watcher(app: tauri::AppHandle) {
     // Hook thread: installs WH_MOUSE_LL and pumps the Windows message loop.
     // The hook callback is an extern "system" fn (no closure) and reads from
     // the module-level statics above.
+    let hook_app = app.clone();
     std::thread::spawn(move || {
         unsafe extern "system" fn mouse_hook_proc(
             code: i32,
@@ -1637,6 +1843,9 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 }
             };
             debug_log("windows low-level mouse hook installed");
+            if let Ok(mut hook) = hook_app.state::<SelectorState>().input_hook_active.lock() {
+                *hook = true;
+            }
             let mut msg = MSG::default();
             while GetMessageW(&mut msg, None, 0, 0).as_bool() {
                 let _ = windows::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
@@ -1844,7 +2053,25 @@ fn platform_frontmost_pid() -> Option<i32> {
     macos_accessibility::frontmost_app_pid()
 }
 
-#[cfg(not(target_os = "macos"))]
+#[cfg(target_os = "windows")]
+fn platform_frontmost_pid() -> Option<i32> {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return None;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&mut pid));
+        if pid == 0 {
+            None
+        } else {
+            Some(pid as i32)
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn platform_frontmost_pid() -> Option<i32> {
     None
 }
@@ -2721,54 +2948,70 @@ mod windows_accessibility {
 
     fn try_get_selection() -> windows::core::Result<Option<DesktopSelection>> {
         unsafe {
-            // Get the UI Automation instance (in-process COM server).
             let automation: IUIAutomation = CoCreateInstance(
                 &CUIAutomation,
                 None,
                 CLSCTX_INPROC_SERVER,
             )?;
 
-            // Get the element that currently has keyboard focus.
             let element = automation.GetFocusedElement()?;
+            let walker = automation.ControlViewWalker()?;
+            let mut current = element;
 
-            // Ignore focus on our own process (selector window is focused).
-            let pid = element.CurrentProcessId()? as u32;
-            if pid == std::process::id() {
-                return Ok(None);
+            // Walk up from the focused element — browsers and rich editors often
+            // put focus on a leaf node while the Text pattern lives on a parent.
+            for _ in 0..12 {
+                let pid = current.CurrentProcessId()? as u32;
+                if pid == std::process::id() {
+                    return Ok(None);
+                }
+
+                if let Some(sel) = read_text_selection(&current, pid)? {
+                    return Ok(Some(sel));
+                }
+
+                current = match walker.GetParentElement(&current) {
+                    Ok(parent) => parent,
+                    Err(_) => break,
+                };
             }
 
-            // Check if the focused element supports the Text pattern.
-            let pattern_unk = match element.GetCurrentPattern(UIA_TextPatternId) {
-                Ok(p) => p,
-                Err(_) => return Ok(None),
-            };
-            let text_pattern: IUIAutomationTextPattern = pattern_unk.cast()?;
-
-            // Get the current text selection (array of ranges).
-            let selection_array = text_pattern.GetSelection()?;
-            if selection_array.Length()? == 0 {
-                return Ok(None);
-            }
-
-            let range = selection_array.GetElement(0)?;
-            let text = range.GetText(-1)?.to_string();
-            if text.trim().is_empty() {
-                return Ok(None);
-            }
-
-            // Bounding rect of the first selected range (for button placement).
-            let (x, y, width, height) = get_range_bounds(&range);
-
-            Ok(Some(DesktopSelection {
-                text,
-                x,
-                y,
-                width,
-                height,
-                source_pid: Some(pid as i32),
-                can_replace: true,
-            }))
+            Ok(None)
         }
+    }
+
+    unsafe fn read_text_selection(
+        element: &windows::Win32::UI::Accessibility::IUIAutomationElement,
+        pid: u32,
+    ) -> windows::core::Result<Option<DesktopSelection>> {
+        let pattern_unk = match element.GetCurrentPattern(UIA_TextPatternId) {
+            Ok(p) => p,
+            Err(_) => return Ok(None),
+        };
+        let text_pattern: IUIAutomationTextPattern = pattern_unk.cast()?;
+
+        let selection_array = text_pattern.GetSelection()?;
+        if selection_array.Length()? == 0 {
+            return Ok(None);
+        }
+
+        let range = selection_array.GetElement(0)?;
+        let text = range.GetText(-1)?.to_string();
+        if text.trim().is_empty() {
+            return Ok(None);
+        }
+
+        let (x, y, width, height) = get_range_bounds(&range);
+
+        Ok(Some(DesktopSelection {
+            text,
+            x,
+            y,
+            width,
+            height,
+            source_pid: Some(pid as i32),
+            can_replace: true,
+        }))
     }
 
     unsafe fn get_range_bounds(

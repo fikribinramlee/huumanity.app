@@ -11,10 +11,12 @@ export const metadata: Metadata = {
 // The client component also fetches the GitHub API on mount to resolve the
 // real latest URLs, so stale fallbacks only matter if GitHub API is down.
 // When bumping the app version, update both filenames here + tauri.conf.json.
+// Fallback URLs — DownloadPageClient resolves the real latest assets from GitHub
+// on mount. Keep these in sync with src-tauri/tauri.conf.json when bumping version.
 const RELEASES_BASE =
-  "https://github.com/fikribinramlee/huumanity.app/releases/download/v0.2.9";
-const MAC_URL = `${RELEASES_BASE}/huumanity_0.2.9_aarch64.dmg`;
-const WIN_URL = `${RELEASES_BASE}/huumanity_0.2.9_x64-setup.exe`;
+  "https://github.com/fikribinramlee/huumanity.app/releases/download/v0.3.0";
+const MAC_URL = `${RELEASES_BASE}/huumanity_0.3.0_aarch64.dmg`;
+const WIN_URL = `${RELEASES_BASE}/huumanity_0.3.0_x64-setup.exe`;
 
 // Static page: the OS is detected client-side (navigator.userAgent) so this
 // route stays prerendered. The desktop app's Tauri build copies the prerendered

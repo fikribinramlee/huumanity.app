@@ -26,4 +26,6 @@ commands.allow = [
   "set_session_token",
   "get_session_token",
   "refresh_session_token",
+  "check_for_updates",
+  "restart_app",
 ]
