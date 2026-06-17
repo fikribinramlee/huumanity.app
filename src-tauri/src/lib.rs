@@ -1266,9 +1266,16 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                             // just-cleared selection for a beat (stale), and trusting it
                             // is exactly what left the tab floating over un-highlighted
                             // text. The mouse-up itself is the reliable "unselected" cue.
-                            // A click in any OTHER app can't clear this app's selection,
-                            // so there the tab keeps floating.
-                            if armed_pid.is_some() && platform_frontmost_pid() == armed_pid {
+                            //
+                            // We only KEEP the tab when we can POSITIVELY confirm the
+                            // click landed in a DIFFERENT app (that can't clear this
+                            // app's selection — the intended cross-app float). Hide when
+                            // the click is in the same app (front == armed) OR when the
+                            // frontmost pid can't be resolved (AX briefly flaky) — a
+                            // stuck tab over nothing is the bug we're killing, so an
+                            // occasional beat-early hide is the right trade.
+                            let front = platform_frontmost_pid();
+                            if armed_pid.is_some() && (front == armed_pid || front.is_none()) {
                                 hide_selector_dot(&app, &state);
                                 armed_pid = None;
                             }
@@ -1347,7 +1354,15 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                         // Position is FIXED (right-edge tab) — show_selector_for_selection
                         // ignores sel's coordinates entirely. Arm the tab for this
                         // app so it persists across focus changes (see Focus arm).
-                        armed_pid = sel.source_pid.or_else(platform_frontmost_pid);
+                        //
+                        // CRITICAL: arm with the FRONTMOST APPLICATION pid, computed the
+                        // SAME way the deselect check is (`platform_frontmost_pid()` =
+                        // AXFocusedApplication). `sel.source_pid` is the focused UI
+                        // ELEMENT's pid, which in multi-process apps (browsers) differs
+                        // from the application pid — so arming with it made the deselect
+                        // comparison never match and the tab floated forever. Fall back
+                        // to the element pid only if the app pid can't be read.
+                        armed_pid = platform_frontmost_pid().or(sel.source_pid);
                         if let Err(err) = show_selector_for_selection(&app, &state, sel) {
                             debug_log(&format!("show selector failed: {err}"));
                         }
