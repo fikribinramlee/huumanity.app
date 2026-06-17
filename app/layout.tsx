@@ -65,7 +65,7 @@ export default function RootLayout({
       <body className="min-h-screen bg-white text-black">
         <ClerkProvider
           signInFallbackRedirectUrl="/download"
-          signUpFallbackRedirectUrl="/download"
+          signUpForceRedirectUrl="/download"
         >
           {children}
         </ClerkProvider>
