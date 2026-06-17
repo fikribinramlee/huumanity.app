@@ -1538,22 +1538,36 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                             // read looks like the armed app, CONFIRM with a second read
                             // after a short delay: on a real switch it flips to B (keep);
                             // on a real deselect both reads agree on A (hide).
-                            if armed_pid.is_some() && platform_frontmost_pid() == armed_pid {
-                                std::thread::sleep(Duration::from_millis(220));
-                                if seq.load(Ordering::Relaxed) != up_seq {
-                                    // A newer gesture arrived — let it take over.
+                            //
+                            // NONE case: AX occasionally returns None (flaky read, not an
+                            // app switch). A None on the first check means we can't tell —
+                            // treat it like "might be same app" and enter the confirm window.
+                            // After 220ms, if AX STILL returns None, hiding is correct: a
+                            // real app-switch would have had AX recover to show the new app,
+                            // so persistent None means AX is broken and the tab would float
+                            // forever if we kept it.
+                            if armed_pid.is_some() {
+                                let first = platform_frontmost_pid();
+                                // Positively a DIFFERENT app — user switched, tab stays.
+                                if first.is_some() && first != armed_pid {
                                     continue;
                                 }
-                                // Re-check once more in case the panel opened during
-                                // this confirm window (slow JS round-trip clicking the
-                                // dot): never hide a panel that's now open.
+                                // first == armed_pid OR first is None — wait for confirm.
+                                std::thread::sleep(Duration::from_millis(220));
+                                if seq.load(Ordering::Relaxed) != up_seq {
+                                    continue;
+                                }
                                 if state.popup_open.lock().map(|o| *o).unwrap_or(false) {
                                     continue;
                                 }
-                                if platform_frontmost_pid() == armed_pid {
-                                    hide_selector_dot(&app, &state);
-                                    armed_pid = None;
+                                let confirmed = platform_frontmost_pid();
+                                // AX caught up and shows a different app → real switch, keep.
+                                if confirmed.is_some() && confirmed != armed_pid {
+                                    continue;
                                 }
+                                // confirmed == armed_pid OR still None → hide.
+                                hide_selector_dot(&app, &state);
+                                armed_pid = None;
                             }
                             continue;
                         }
@@ -1736,10 +1750,12 @@ fn start_selection_watcher(app: tauri::AppHandle) {
 // counter in module-level statics).
 #[cfg(target_os = "windows")]
 static WIN_HOOK_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-// payload: (kind, x, y, seq) where kind 0 = mouse-down, 1 = mouse-up
+// payload: (kind, x, y, seq, shift) where kind 0 = mouse-down, 1 = mouse-up
+// shift = true when the Shift key is held at event time (shift-click extends a
+// selection — should show the tab, not hide it, unlike a plain single click).
 #[cfg(target_os = "windows")]
 static WIN_HOOK_TX: std::sync::OnceLock<
-    std::sync::mpsc::SyncSender<(u8, f64, f64, u64)>,
+    std::sync::mpsc::SyncSender<(u8, f64, f64, u64, bool)>,
 > = std::sync::OnceLock::new();
 
 // Windows: event-driven selector using WH_MOUSE_LL — the Win32 equivalent of
@@ -1753,7 +1769,7 @@ fn start_selection_watcher(app: tauri::AppHandle) {
         MSLLHOOKSTRUCT, MSG, WH_MOUSE_LL, WM_LBUTTONDOWN, WM_LBUTTONUP,
     };
 
-    let (tx, rx) = std::sync::mpsc::sync_channel::<(u8, f64, f64, u64)>(64);
+    let (tx, rx) = std::sync::mpsc::sync_channel::<(u8, f64, f64, u64, bool)>(64);
     let _ = WIN_HOOK_TX.set(tx);
 
     // Worker thread — mirrors the macOS worker verbatim.
@@ -1773,7 +1789,7 @@ fn start_selection_watcher(app: tauri::AppHandle) {
             // multi-click word/line/paragraph selection.
             let mut last_up: Option<(Instant, f64, f64)> = None;
 
-            while let Ok((kind, ex, ey, up_seq)) = rx.recv() {
+            while let Ok((kind, ex, ey, up_seq, shift)) = rx.recv() {
                 let popup_open = state.popup_open.lock().map(|o| *o).unwrap_or(false);
 
                 if kind == 0 {
@@ -1817,7 +1833,7 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 let dx = ex - last_down.0;
                 let dy = ey - last_down.1;
                 let was_drag = (dx * dx + dy * dy).sqrt() > 6.0;
-                let is_selection_gesture = was_drag || was_multi_click;
+                let is_selection_gesture = was_drag || was_multi_click || shift;
 
                 // HARD PRECONDITION (mirrors macOS): the dot only ever appears in
                 // response to a selection the user JUST made. It must NEVER respawn
@@ -1895,7 +1911,12 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 if let Some(kind) = kind {
                     let v = WIN_HOOK_SEQ.fetch_add(1, Ordering::Relaxed) + 1;
                     if let Some(tx) = WIN_HOOK_TX.get() {
-                        let _ = tx.try_send((kind, x, y, v));
+                        use windows::Win32::UI::Input::KeyboardAndMouse::GetKeyState;
+                        // VK_SHIFT = 0x10; high bit set means key is down at event time.
+                        // Shift-click extends a selection — must be treated as a selection
+                        // gesture, not a plain click, or the tab hides on shift-click.
+                        let shift = (GetKeyState(0x10) & -128i16) != 0;
+                        let _ = tx.try_send((kind, x, y, v, shift));
                     }
                 }
             }
