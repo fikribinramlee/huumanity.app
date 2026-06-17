@@ -578,17 +578,24 @@ fn looks_like_code_or_data(s: &str) -> bool {
             return true;
         }
     }
-    // language keywords (word-boundary via alnum tokenization)
+    // Language keywords (word-boundary via alnum tokenization) — but ONLY count
+    // them as code when real code punctuation ({ } = ;) is also present. The bare
+    // words are everyday English ("let me know", "in return", "world class",
+    // "public holiday", "the static on the line") and must NEVER disqualify
+    // prose. (This was the bug that hid the tab on the email sample: "let me know
+    // what time works" tripped the `let` keyword.) MIRRORS app/lib/isRephrashable.ts.
     let keywords = [
         "function", "const", "let", "var", "return", "import", "export", "class", "def",
         "public", "private", "static", "void", "null", "undefined", "async", "await", "elif",
         "println", "console", "printf",
     ];
     let lower = s.to_lowercase();
-    if lower
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|t| !t.is_empty())
-        .any(|t| keywords.contains(&t))
+    let has_code_punct = s.contains('{') || s.contains('}') || s.contains('=') || s.contains(';');
+    if has_code_punct
+        && lower
+            .split(|c: char| !c.is_alphanumeric())
+            .filter(|t| !t.is_empty())
+            .any(|t| keywords.contains(&t))
     {
         return true;
     }

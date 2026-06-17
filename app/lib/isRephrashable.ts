@@ -50,10 +50,16 @@ function looksLikeCodeOrData(s: string): boolean {
   // 4. Explicit code / markup token patterns.
   if (/=>|===|!==|==|!=|<=|>=|&&|\|\||::|\/>|<\/|<\w|\/\*|\*\//.test(s)) return true;
   if (/;\s*$|^\s*[{}[\]]|[{}[\]]\s*$/.test(s)) return true;
+  // Code KEYWORDS only count as code when they sit next to real code
+  // punctuation ({ } = ;). The bare words are everyday English — "let me know",
+  // "in return", "world class", "public holiday", "the static on the line" — and
+  // must NEVER disqualify prose. (This was the bug that hid the tab on the email
+  // sample: "let me know what time works" tripped the `let` keyword.)
   if (
     /\b(function|const|let|var|return|import|export|class|def|public|private|static|void|null|undefined|async|await|elif|println|console|printf)\b/.test(
       s
-    )
+    ) &&
+    /[{}=;]/.test(s)
   ) {
     return true;
   }
