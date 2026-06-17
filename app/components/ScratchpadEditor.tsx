@@ -346,23 +346,43 @@ export function ScratchpadEditor({ onUpgradeRequired, limitReached = false }: Sc
           {SAMPLE}
         </div>
 
-        {/* Yellow huu button — far-left, fades in after mouseup */}
+        {/* Grammarly-style fixed PILL TAB — flush to the center-right of the
+            viewport, vertically centered. Mirrors the desktop app's right-edge
+            tab and the website demo's tab (app/page.tsx) instead of a floating
+            dot chasing the selection. position:fixed so it stays put while
+            scrolling. Same trigger/logic as before. */}
         {anchor && !expanded && (
           <button
             type="button"
-            onMouseDown={(e) => {
+            // pointerDown (not mouseDown) so a finger tap on touch devices opens
+            // the popup too — and preventDefault keeps the text selection intact
+            // when the tab steals the press.
+            onPointerDown={(e) => {
               e.preventDefault();
               openPopup();
             }}
-            className="absolute z-20 flex h-9 w-9 items-center justify-center rounded-full border-2 border-black bg-[#fff700] text-black shadow-md"
+            className="fixed z-[60] flex h-14 w-9 items-center justify-center rounded-l-2xl rounded-r-none bg-[#fff700] text-black shadow-[-4px_2px_14px_rgba(0,0,0,0.35)] hover:brightness-95"
             style={{
-              top:  anchor.tabTop,
-              left: 4,
-              animation: "huu-btn-fadein 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards",
+              right: 0,
+              top: "50%",
+              transform: "translateY(-50%)",
+              animation: "huu-tab-slidein 0.4s cubic-bezier(0.22,0.61,0.36,1) forwards",
             }}
             aria-label="Open rewrite options"
           >
-            ↑
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="12" y1="19" x2="12" y2="5" />
+              <polyline points="5 12 12 5 19 12" />
+            </svg>
           </button>
         )}
 
