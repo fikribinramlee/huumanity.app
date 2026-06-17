@@ -216,6 +216,8 @@ export default function EditorPage() {
   const [pendingUpdateVersion, setPendingUpdateVersion] = useState<string | null>(
     null
   );
+  const [updateStatus, setUpdateStatus] = useState<string>("");
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
 
   // Capture
   const [capturedText, setCapturedText] = useState("");
@@ -1380,25 +1382,41 @@ useEffect(() => {
                 </p>
                 <p className="mt-0.5 truncate text-sm font-bold text-black">
                   v{appVersion ?? selectorHealth?.appVersion ?? "—"}
-                  {selectorHealth?.updateStatus ? (
+                  {(updateStatus || selectorHealth?.updateStatus) ? (
                     <span className="ml-2 font-medium text-neutral-500">
-                      · {selectorHealth.updateStatus}
+                      · {updateStatus || selectorHealth?.updateStatus}
                     </span>
                   ) : null}
                 </p>
               </div>
               <button
                 onClick={async () => {
+                  if (isCheckingUpdate) return;
+                  setIsCheckingUpdate(true);
+                  setUpdateStatus("Checking…");
+                  // Poll get_selector_health every 500ms so progress is visible
+                  const poll = setInterval(() => {
+                    void invoke<{ update_status: string }>("get_selector_health")
+                      .then((h) => { if (h?.update_status) setUpdateStatus(h.update_status); })
+                      .catch(() => {});
+                  }, 500);
                   try {
                     await invoke("check_for_updates");
                   } catch {
-                    /* status is surfaced via SelectorHealth.updateStatus */
+                    setUpdateStatus("Update check failed — check your connection.");
+                  } finally {
+                    clearInterval(poll);
+                    setIsCheckingUpdate(false);
+                    // One final read to capture the terminal status
+                    void invoke<{ update_status: string }>("get_selector_health")
+                      .then((h) => { if (h?.update_status) setUpdateStatus(h.update_status); })
+                      .catch(() => {});
                   }
-                  await refreshSelectorHealth();
                 }}
-                className="shrink-0 rounded-full border-2 border-black/10 px-4 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:text-black"
+                disabled={isCheckingUpdate}
+                className="shrink-0 rounded-full border-2 border-black/10 px-4 py-1.5 text-xs font-bold text-neutral-700 transition hover:border-black hover:text-black disabled:opacity-50"
               >
-                Check for updates
+                {isCheckingUpdate ? "Checking…" : "Check for updates"}
               </button>
             </div>
 
