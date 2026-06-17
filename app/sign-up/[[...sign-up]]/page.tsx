@@ -1,15 +1,26 @@
 "use client";
 
-import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
-import { SignUp } from "@clerk/nextjs";
+import { Suspense, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useUser, SignUp } from "@clerk/nextjs";
 import { HuuLogo } from "../../components/HuuLogo";
 import { clerkAppearance } from "../../lib/clerkAppearance";
 
 function SignUpForm() {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const { isSignedIn, isLoaded } = useUser();
   const next = searchParams.get("next");
   const redirectUrl = next && next.startsWith("/") ? next : "/download";
+
+  // Belt-and-suspenders: if Clerk's own redirect doesn't fire (e.g. after
+  // Google OAuth where dashboard settings can override forceRedirectUrl),
+  // detect the signed-in state change and navigate manually.
+  useEffect(() => {
+    if (isLoaded && isSignedIn) {
+      router.replace(redirectUrl);
+    }
+  }, [isLoaded, isSignedIn, redirectUrl, router]);
 
   return (
     <SignUp
