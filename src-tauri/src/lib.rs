@@ -1690,6 +1690,20 @@ fn start_selection_watcher(app: tauri::AppHandle) {
     }
 
     // Event-tap thread: a dedicated CFRunLoop forwarding left mouse up/down.
+    //
+    // CRITICAL — this is a RETRY LOOP, not a one-shot. The event tap can only be
+    // created once Accessibility/Input-Monitoring permission is granted. A NEW
+    // USER has NEITHER on first launch, so `CGEventTap::new()` fails. The old code
+    // logged the failure and let the thread EXIT — so even after the user granted
+    // permission in System Settings, the tap was never recreated and the yellow
+    // tab stayed dead until a full quit+relaunch (which users don't know to do).
+    // This is why it "worked on the dev's machine" (permission long since granted)
+    // "but not for new users" (permission absent at the one moment we tried).
+    //
+    // Now we retry every ~1.5s until creation succeeds, so the tab starts working
+    // within a second or two of the user flipping the toggle — no restart. And if
+    // the OS ever tears the tap down mid-session (`run_current` returns), we loop
+    // and rebuild it. `input_hook_active` tracks the live state for the health UI.
     let hook_app = app.clone();
     std::thread::spawn(move || {
         use core_foundation::runloop::{kCFRunLoopCommonModes, CFRunLoop};
@@ -1698,49 +1712,81 @@ fn start_selection_watcher(app: tauri::AppHandle) {
             CGEventType, EventField,
         };
 
-        let tap = CGEventTap::new(
-            CGEventTapLocation::HID,
-            CGEventTapPlacement::HeadInsertEventTap,
-            CGEventTapOptions::ListenOnly,
-            vec![CGEventType::LeftMouseDown, CGEventType::LeftMouseUp],
-            move |_proxy, etype, event| {
-                let p = event.location();
-                let v = seq.fetch_add(1, Ordering::Relaxed) + 1;
-                let _ = match etype {
-                    CGEventType::LeftMouseDown => tx.send(MouseSignal::Down(p.x, p.y)),
-                    CGEventType::LeftMouseUp => {
-                        // macOS reports the click multiplicity directly on the
-                        // event (double-click = 2, triple = 3). Combined with the
-                        // Shift flag, this is how we detect a no-drag selection.
-                        let clicks =
-                            event.get_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE);
-                        let shift = event.get_flags().contains(CGEventFlags::CGEventFlagShift);
-                        tx.send(MouseSignal::Up(p.x, p.y, v, clicks, shift))
-                    }
-                    _ => Ok(()),
-                };
-                None
-            },
-        );
+        let set_active = |active: bool| {
+            if let Ok(mut hook) = hook_app.state::<SelectorState>().input_hook_active.lock() {
+                *hook = active;
+            }
+        };
+        let mut logged_waiting = false;
 
-        match tap {
-            Ok(tap) => unsafe {
-                match tap.mach_port.create_runloop_source(0) {
-                    Ok(source) => {
-                        CFRunLoop::get_current().add_source(&source, kCFRunLoopCommonModes);
-                        tap.enable();
-                        debug_log("mouse event tap installed");
-                        if let Ok(mut hook) =
-                            hook_app.state::<SelectorState>().input_hook_active.lock()
-                        {
-                            *hook = true;
+        loop {
+            // Fresh per attempt: the closure moves `tx`/`seq`, so clone them so a
+            // failed attempt doesn't consume the originals we need next iteration.
+            let tx = tx.clone();
+            let seq = seq.clone();
+            let tap = CGEventTap::new(
+                CGEventTapLocation::HID,
+                CGEventTapPlacement::HeadInsertEventTap,
+                CGEventTapOptions::ListenOnly,
+                vec![CGEventType::LeftMouseDown, CGEventType::LeftMouseUp],
+                move |_proxy, etype, event| {
+                    let p = event.location();
+                    let v = seq.fetch_add(1, Ordering::Relaxed) + 1;
+                    let _ = match etype {
+                        CGEventType::LeftMouseDown => tx.send(MouseSignal::Down(p.x, p.y)),
+                        CGEventType::LeftMouseUp => {
+                            // macOS reports the click multiplicity directly on the
+                            // event (double-click = 2, triple = 3). Combined with the
+                            // Shift flag, this is how we detect a no-drag selection.
+                            let clicks =
+                                event.get_integer_value_field(EventField::MOUSE_EVENT_CLICK_STATE);
+                            let shift = event.get_flags().contains(CGEventFlags::CGEventFlagShift);
+                            tx.send(MouseSignal::Up(p.x, p.y, v, clicks, shift))
                         }
-                        CFRunLoop::run_current();
+                        _ => Ok(()),
+                    };
+                    None
+                },
+            );
+
+            match tap {
+                Ok(tap) => unsafe {
+                    match tap.mach_port.create_runloop_source(0) {
+                        Ok(source) => {
+                            CFRunLoop::get_current().add_source(&source, kCFRunLoopCommonModes);
+                            tap.enable();
+                            debug_log("mouse event tap installed");
+                            set_active(true);
+                            logged_waiting = false;
+                            // Blocks here while the tap is live. Returns only if the
+                            // runloop is stopped or the OS invalidates the tap.
+                            CFRunLoop::run_current();
+                            // Fell through → tap is no longer delivering. Mark dead
+                            // and rebuild on the next iteration.
+                            set_active(false);
+                            debug_log("event tap runloop exited — rebuilding");
+                        }
+                        Err(_) => {
+                            set_active(false);
+                            debug_log("event tap: failed to create runloop source — retrying");
+                        }
                     }
-                    Err(_) => debug_log("event tap: failed to create runloop source"),
+                },
+                Err(_) => {
+                    // Almost always: permission not granted YET. Stay quiet after
+                    // the first log (we retry every 1.5s, no need to spam) and keep
+                    // trying so the tab lights up the instant permission lands.
+                    set_active(false);
+                    if !logged_waiting {
+                        debug_log(
+                            "event tap: creation failed (waiting for Accessibility / Input Monitoring permission) — will retry until granted",
+                        );
+                        logged_waiting = true;
+                    }
                 }
-            },
-            Err(_) => debug_log("event tap: creation failed (accessibility not granted?)"),
+            }
+
+            std::thread::sleep(Duration::from_millis(1500));
         }
     });
 }
