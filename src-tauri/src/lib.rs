@@ -1779,6 +1779,14 @@ fn recover_selection_via_clipboard() -> Option<String> {
         return None;
     }
 
+    // Give the target app (especially browsers) time to process the synthetic
+    // Ctrl+C / ⌘C key event and write to the clipboard before we start reading.
+    // Browsers are async — they receive the key event, dispatch it through their
+    // event loop, serialise the selection, and only then write to the OS
+    // clipboard. On Windows this can take 80–150 ms; starting the poll
+    // immediately races against that write and reliably loses.
+    std::thread::sleep(Duration::from_millis(120));
+
     // Canvas/rich editors (Google Docs, Notion, Slides) serialize the selection
     // onto the pasteboard at wildly different speeds depending on how much was
     // selected: a single sentence lands in well under 100ms, but a full
@@ -2599,7 +2607,39 @@ mod macos_accessibility {
     }
 }
 
-#[cfg(not(target_os = "macos"))]
+// Windows: bypass enigo entirely and use Win32 SendInput directly.
+// enigo creates its own internal state that can misbehave when called from a
+// background worker thread that has no window handle. SendInput has no such
+// constraint — it injects into the foreground window's thread regardless of
+// which thread calls it.
+#[cfg(target_os = "windows")]
+fn send_shortcut(key: &str) -> Result<(), String> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        SendInput, INPUT, INPUT_0, INPUT_KEYBOARD, KEYBDINPUT, KEYBD_EVENT_FLAGS, KEYEVENTF_KEYUP,
+        VIRTUAL_KEY, VK_CONTROL,
+    };
+
+    let vk: u16 = match key {
+        "c" => 0x43,
+        "v" => 0x56,
+        other => return Err(format!("unsupported shortcut key: {other}")),
+    };
+    let none = KEYBD_EVENT_FLAGS(0);
+    let inputs = [
+        INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VK_CONTROL, wScan: 0, dwFlags: none, time: 0, dwExtraInfo: 0 } } },
+        INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VIRTUAL_KEY(vk), wScan: 0, dwFlags: none, time: 0, dwExtraInfo: 0 } } },
+        INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VIRTUAL_KEY(vk), wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } } },
+        INPUT { r#type: INPUT_KEYBOARD, Anonymous: INPUT_0 { ki: KEYBDINPUT { wVk: VK_CONTROL, wScan: 0, dwFlags: KEYEVENTF_KEYUP, time: 0, dwExtraInfo: 0 } } },
+    ];
+    let sent = unsafe { SendInput(&inputs, std::mem::size_of::<INPUT>() as i32) };
+    if sent == 0 {
+        Err("SendInput returned 0 — may be blocked by UIPI".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 fn send_shortcut(key: &str) -> Result<(), String> {
     use enigo::{Direction, Enigo, Key, Keyboard, Settings};
 
