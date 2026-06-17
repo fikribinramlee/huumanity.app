@@ -37,6 +37,13 @@ export default function SelectorPage() {
   // The visible panel box — measured so the native window can sit exactly on top
   // of the selected text for whatever stage is showing.
   const panelRef = useRef<HTMLElement>(null);
+  // Timestamp (ms) of the most recent expand. Opening the tone bar resizes the
+  // window, shifts it leftward off the right edge, and gives it focus — which
+  // briefly fires a `blur` AND can leave the cursor over the transparent
+  // backdrop where the dot used to be. Both dismiss paths ignore events inside a
+  // short guard after this so the panel can never vanish on the very click that
+  // opened it.
+  const openedAtRef = useRef(0);
 
   const refreshSelection = useCallback(async () => {
     try {
@@ -94,7 +101,17 @@ export default function SelectorPage() {
     if (!expanded) return;
 
     const handleBlur = () => {
-      void closeSelector();
+      // The window takes focus as it expands, which fires a blur on the
+      // just-unfocused webview. Ignore blurs inside the open guard so the panel
+      // never closes on the same click that opened it.
+      if (Date.now() - openedAtRef.current < 450) return;
+      // Confirm focus actually left huu before closing. A transient blur from an
+      // internal focus shift (the window resizing between stages, the OS settling
+      // key state) hands focus straight back, so re-check on the next tick and
+      // only dismiss when the document genuinely no longer has focus.
+      window.setTimeout(() => {
+        if (!document.hasFocus()) void closeSelector();
+      }, 120);
     };
 
     window.addEventListener("blur", handleBlur);
@@ -129,6 +146,7 @@ export default function SelectorPage() {
     // that used to sit in front of this very click (the ~2s "bar takes a moment
     // to appear" lag). We refresh the payload in the background below so
     // handleGenerate still has the freshest selected text.
+    openedAtRef.current = Date.now();
     setExpanded(true);
     setPopupStage("select");
     setSelectedTones([]);
@@ -397,9 +415,12 @@ export default function SelectorPage() {
     <main
       className="flex h-screen w-screen flex-col items-end justify-center bg-transparent p-3"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          void closeSelector();
-        }
+        if (event.target !== event.currentTarget) return;
+        // Ignore the opening click: right after expand the cursor can sit over
+        // this transparent backdrop (the panel shifted left of where the dot
+        // was), which would otherwise dismiss the panel the instant it opens.
+        if (Date.now() - openedAtRef.current < 450) return;
+        void closeSelector();
       }}
     >
       {/* Mirrors the website's tone bar EXACTLY: white box, bright yellow

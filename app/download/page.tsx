@@ -14,9 +14,9 @@ export const metadata: Metadata = {
 // Fallback URLs — DownloadPageClient resolves the real latest assets from GitHub
 // on mount. Keep these in sync with src-tauri/tauri.conf.json when bumping version.
 const RELEASES_BASE =
-  "https://github.com/fikribinramlee/huumanity.app/releases/download/v0.3.0";
-const MAC_URL = `${RELEASES_BASE}/huumanity_0.3.0_aarch64.dmg`;
-const WIN_URL = `${RELEASES_BASE}/huumanity_0.3.0_x64-setup.exe`;
+  "https://github.com/fikribinramlee/huumanity.app/releases/download/v0.3.1";
+const MAC_URL = `${RELEASES_BASE}/huumanity_0.3.1_aarch64.dmg`;
+const WIN_URL = `${RELEASES_BASE}/huumanity_0.3.1_x64-setup.exe`;
 
 // Static page: the OS is detected client-side (navigator.userAgent) so this
 // route stays prerendered. The desktop app's Tauri build copies the prerendered

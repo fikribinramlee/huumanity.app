@@ -1517,6 +1517,23 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                                 continue;
                             }
                             probe = platform_current_selection_probe();
+                            // Second retry: browsers, Electron apps, and slower
+                            // web editors often still haven't published
+                            // AXSelectedText after the first wait, so a genuine
+                            // selection read as empty here and the dot silently
+                            // never appeared. One more read before we fall back to
+                            // the clipboard copy strictly improves the odds of
+                            // showing the dot, at the cost of ~150ms only when the
+                            // first two reads come back empty.
+                            if probe.status != "huu-self-focused"
+                                && !is_probe_rephrashable(&probe)
+                            {
+                                std::thread::sleep(Duration::from_millis(150));
+                                if seq.load(Ordering::Relaxed) != up_seq {
+                                    continue;
+                                }
+                                probe = platform_current_selection_probe();
+                            }
                         }
 
                         if let Ok(mut last_status) = state.last_status.lock() {
