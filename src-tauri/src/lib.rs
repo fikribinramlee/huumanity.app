@@ -1267,15 +1267,13 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                             // is exactly what left the tab floating over un-highlighted
                             // text. The mouse-up itself is the reliable "unselected" cue.
                             //
-                            // We only KEEP the tab when we can POSITIVELY confirm the
-                            // click landed in a DIFFERENT app (that can't clear this
-                            // app's selection — the intended cross-app float). Hide when
-                            // the click is in the same app (front == armed) OR when the
-                            // frontmost pid can't be resolved (AX briefly flaky) — a
-                            // stuck tab over nothing is the bug we're killing, so an
-                            // occasional beat-early hide is the right trade.
-                            let front = platform_frontmost_pid();
-                            if armed_pid.is_some() && (front == armed_pid || front.is_none()) {
+                            // Hide ONLY when the click is positively in the SAME app the
+                            // tab is armed for. A click in any OTHER app (switching apps)
+                            // can't clear this app's selection, so the tab floats on —
+                            // the intended cross-app behavior. We must NOT hide on an
+                            // unresolved (None) frontmost pid: that happens mid app-switch,
+                            // exactly the moment we need to keep the tab.
+                            if armed_pid.is_some() && platform_frontmost_pid() == armed_pid {
                                 hide_selector_dot(&app, &state);
                                 armed_pid = None;
                             }
@@ -1345,7 +1343,17 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                                     }
                                 }
                                 _ => {
-                                    hide_selector_dot(&app, &state);
+                                    // A selection gesture that produced no rephrasable
+                                    // text. Only hide if it happened IN the armed app
+                                    // (e.g. a drag-to-nothing that collapsed the source
+                                    // selection). A gesture in a DIFFERENT app leaves the
+                                    // armed selection untouched, so the tab must persist —
+                                    // hiding here was a second reason switching apps wiped
+                                    // the tab.
+                                    if armed_pid.is_some() && platform_frontmost_pid() == armed_pid {
+                                        hide_selector_dot(&app, &state);
+                                        armed_pid = None;
+                                    }
                                     continue;
                                 }
                             }
