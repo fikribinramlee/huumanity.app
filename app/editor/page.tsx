@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { useUser, useClerk, useAuth } from "@clerk/nextjs";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { ExternalRewritePanel } from "../components/ExternalRewritePanel";
@@ -205,6 +206,11 @@ export default function EditorPage() {
   const [selectorHealth, setSelectorHealth] = useState<SelectorHealth | null>(
     null
   );
+  // App version read DIRECTLY from Tauri's built-in `getVersion()`, independent
+  // of get_selector_health (which returns null whenever its selection probe
+  // fails — that was the "App version shows v—" bug on macOS). This core command
+  // exists in every Tauri build, so it resolves on every installed version.
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const [apiConnected, setApiConnected] = useState<boolean | null>(null);
   const [isCheckingHealth, setIsCheckingHealth] = useState(false);
   const [pendingUpdateVersion, setPendingUpdateVersion] = useState<string | null>(
@@ -435,6 +441,14 @@ export default function EditorPage() {
     window.location.assign(
       `/sign-in?__clerk_ticket=${encodeURIComponent(ticket)}&next=${encodeURIComponent(next)}`
     );
+  }, []);
+
+  // Read the running app version once on mount, straight from Tauri. Decoupled
+  // from selector health so it always shows even if the selection probe fails.
+  useEffect(() => {
+    void getVersion()
+      .then((v) => setAppVersion(v))
+      .catch(() => setAppVersion(null));
   }, []);
 
   // Seed name fields when Clerk user loads
@@ -1365,7 +1379,7 @@ useEffect(() => {
                   App version
                 </p>
                 <p className="mt-0.5 truncate text-sm font-bold text-black">
-                  v{selectorHealth?.appVersion ?? "—"}
+                  v{appVersion ?? selectorHealth?.appVersion ?? "—"}
                   {selectorHealth?.updateStatus ? (
                     <span className="ml-2 font-medium text-neutral-500">
                       · {selectorHealth.updateStatus}
