@@ -18,14 +18,37 @@ function detectOs(): DetectedOs {
   return "other";
 }
 
-export function DownloadPageClient({ macUrl, winUrl }: Props) {
+export function DownloadPageClient({ macUrl: macUrlProp, winUrl: winUrlProp }: Props) {
   // Default to mac on the server render; correct it on mount once we can read
   // the real user agent. Avoids a hydration mismatch by only switching after
   // the first client effect.
   const [os, setOs] = useState<DetectedOs>("mac");
+  const [macUrl, setMacUrl] = useState(macUrlProp);
+  const [winUrl, setWinUrl] = useState(winUrlProp);
 
   useEffect(() => {
     setOs(detectOs());
+  }, []);
+
+  // Resolve the real download URLs from the GitHub API on mount so the page
+  // always serves the correct latest-release assets regardless of what's
+  // hardcoded in page.tsx as a fallback.
+  useEffect(() => {
+    fetch("https://api.github.com/repos/fikribinramlee/huumanity.app/releases/latest", {
+      headers: { Accept: "application/vnd.github+json" },
+    })
+      .then((r) => r.json())
+      .then((release) => {
+        const assets: Array<{ name: string; browser_download_url: string }> =
+          release.assets ?? [];
+        const mac = assets.find((a) => a.name.endsWith("aarch64.dmg"))?.browser_download_url;
+        const win = assets.find((a) => a.name.endsWith("x64-setup.exe"))?.browser_download_url;
+        if (mac) setMacUrl(mac);
+        if (win) setWinUrl(win);
+      })
+      .catch(() => {
+        // Keep props as fallback — the hardcoded URLs in page.tsx serve as a backup.
+      });
   }, []);
 
   const isWindows = os === "windows";
