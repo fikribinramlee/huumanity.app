@@ -1268,14 +1268,27 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                             // text. The mouse-up itself is the reliable "unselected" cue.
                             //
                             // Hide ONLY when the click is positively in the SAME app the
-                            // tab is armed for. A click in any OTHER app (switching apps)
-                            // can't clear this app's selection, so the tab floats on —
-                            // the intended cross-app behavior. We must NOT hide on an
-                            // unresolved (None) frontmost pid: that happens mid app-switch,
-                            // exactly the moment we need to keep the tab.
+                            // tab is armed for — that's the user un-highlighting the text.
+                            // A click in any OTHER app (switching apps) leaves the
+                            // selection intact, so the tab floats on.
+                            //
+                            // THE TRAP: macOS's AXFocusedApplication LAGS an app switch.
+                            // Right after you click into app B it still reports the old
+                            // app A for a beat. A single read would then see "still A ==
+                            // armed" and wrongly hide on an app switch. So when the first
+                            // read looks like the armed app, CONFIRM with a second read
+                            // after a short delay: on a real switch it flips to B (keep);
+                            // on a real deselect both reads agree on A (hide).
                             if armed_pid.is_some() && platform_frontmost_pid() == armed_pid {
-                                hide_selector_dot(&app, &state);
-                                armed_pid = None;
+                                std::thread::sleep(Duration::from_millis(220));
+                                if seq.load(Ordering::Relaxed) != up_seq {
+                                    // A newer gesture arrived — let it take over.
+                                    continue;
+                                }
+                                if platform_frontmost_pid() == armed_pid {
+                                    hide_selector_dot(&app, &state);
+                                    armed_pid = None;
+                                }
                             }
                             continue;
                         }
