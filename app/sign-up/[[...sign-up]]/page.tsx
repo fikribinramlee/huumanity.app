@@ -1,17 +1,26 @@
+"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { SignUp } from "@clerk/nextjs";
 import { HuuLogo } from "../../components/HuuLogo";
 import { clerkAppearance } from "../../lib/clerkAppearance";
 
-export default async function SignUpPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
-  // `next` lets the desktop flow route to /app-verified after sign-up; website
-  // visitors fall through to /download. Only allow same-site relative paths.
-  const { next } = await searchParams;
+function SignUpForm() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const redirectUrl = next && next.startsWith("/") ? next : "/download";
 
+  return (
+    <SignUp
+      appearance={clerkAppearance}
+      forceRedirectUrl={redirectUrl}
+      signInUrl={`/sign-in?next=${encodeURIComponent(redirectUrl)}`}
+    />
+  );
+}
+
+export default function SignUpPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-white px-6 py-12">
       <div className="mb-9 flex flex-col items-center text-center">
@@ -23,11 +32,9 @@ export default async function SignUpPage({
           Sound human in every app on your Mac.
         </p>
       </div>
-      <SignUp
-        appearance={clerkAppearance}
-        forceRedirectUrl={redirectUrl}
-        signInUrl={`/sign-in?next=${encodeURIComponent(redirectUrl)}`}
-      />
+      <Suspense>
+        <SignUpForm />
+      </Suspense>
     </div>
   );
 }

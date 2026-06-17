@@ -1,17 +1,26 @@
+"use client";
+
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { SignIn } from "@clerk/nextjs";
 import { HuuLogo } from "../../components/HuuLogo";
 import { clerkAppearance } from "../../lib/clerkAppearance";
 
-export default async function SignInPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
-  // `next` carries the desktop handoff target (/app-verified). Default to
-  // /download for website visitors. Only allow same-site relative paths.
-  const { next } = await searchParams;
+function SignInForm() {
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next");
   const redirectUrl = next && next.startsWith("/") ? next : "/download";
 
+  return (
+    <SignIn
+      appearance={clerkAppearance}
+      forceRedirectUrl={redirectUrl}
+      signUpUrl={`/sign-up?next=${encodeURIComponent(redirectUrl)}`}
+    />
+  );
+}
+
+export default function SignInPage() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-white px-6 py-12">
       <div className="mb-9 flex flex-col items-center text-center">
@@ -23,11 +32,9 @@ export default async function SignInPage({
           Sign in to keep your writing human.
         </p>
       </div>
-      <SignIn
-        appearance={clerkAppearance}
-        forceRedirectUrl={redirectUrl}
-        signUpUrl={`/sign-up?next=${encodeURIComponent(redirectUrl)}`}
-      />
+      <Suspense>
+        <SignInForm />
+      </Suspense>
     </div>
   );
 }

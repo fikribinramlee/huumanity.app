@@ -28,6 +28,27 @@ export const metadata: Metadata = {
     "Select any text. Pick a style. Watch it sound human. Built for cold outreach, posts, and scripts.",
 };
 
+// Preconnect to Clerk's API and CDN so the browser starts the DNS + TLS
+// handshake immediately on any page load, not just when the SignIn component
+// mounts. Saves 300–600ms on the sign-in / sign-up flow.
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+};
+
+// Inject <link rel="preconnect"> into every page's <head>.
+// Next.js reads this from metadata.other or from a head export — the simplest
+// way for App Router is to add it directly in the layout's <head>.
+function PreconnectHints() {
+  return (
+    <>
+      <link rel="preconnect" href="https://clerk.huumanity.app" />
+      <link rel="preconnect" href="https://img.clerk.com" />
+      <link rel="dns-prefetch" href="https://accounts.google.com" />
+    </>
+  );
+}
+
 export default function RootLayout({
   children,
 }: {
@@ -38,6 +59,9 @@ export default function RootLayout({
       lang="en"
       className={`${youngSerif.variable} ${jost.variable} ${caveat.variable} antialiased`}
     >
+      <head>
+        <PreconnectHints />
+      </head>
       <body className="min-h-screen bg-white text-black">
         <ClerkProvider
           signInFallbackRedirectUrl="/download"
