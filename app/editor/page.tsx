@@ -545,6 +545,25 @@ export default function EditorPage() {
     };
   }, [authState]);
 
+  // Live updater progress. Rust emits "huu-update-status" at every step of a
+  // check/download so the "Check for updates" line updates instantly — no
+  // polling the heavy get_selector_health selection probe (which made the
+  // Windows check feel stuck on "Checking…"). Older binaries don't emit this;
+  // the button's fallback get_selector_health read covers them.
+  useEffect(() => {
+    if (authState !== "app" || !isTauriRuntime()) return;
+    let unlisten: (() => void) | undefined;
+    void (async () => {
+      const { listen } = await import("@tauri-apps/api/event");
+      unlisten = await listen<string>("huu-update-status", (event) => {
+        if (event.payload) setUpdateStatus(event.payload);
+      });
+    })();
+    return () => {
+      unlisten?.();
+    };
+  }, [authState]);
+
   // After a successful Stripe checkout, Stripe redirects to /editor?upgraded=true.
   // Immediately show the Pro UI optimistically, then do a real fetch to confirm.
   // Clean the query param from the URL so refreshing doesn't re-trigger.
@@ -1394,22 +1413,22 @@ useEffect(() => {
                   if (isCheckingUpdate) return;
                   setIsCheckingUpdate(true);
                   setUpdateStatus("Checking…");
-                  // Poll get_selector_health every 500ms so progress is visible
-                  const poll = setInterval(() => {
-                    void invoke<{ update_status: string }>("get_selector_health")
-                      .then((h) => { if (h?.update_status) setUpdateStatus(h.update_status); })
-                      .catch(() => {});
-                  }, 500);
                   try {
+                    // Rust emits "huu-update-status" events at every step (see the
+                    // listener effect) so progress is live without polling the
+                    // heavy get_selector_health probe. This await resolves when the
+                    // whole check/download finishes.
                     await invoke("check_for_updates");
                   } catch {
                     setUpdateStatus("Update check failed — check your connection.");
                   } finally {
-                    clearInterval(poll);
                     setIsCheckingUpdate(false);
-                    // One final read to capture the terminal status
+                    // Fallback for older binaries that don't emit status events:
+                    // read the terminal status once so the line isn't left blank.
                     void invoke<{ update_status: string }>("get_selector_health")
-                      .then((h) => { if (h?.update_status) setUpdateStatus(h.update_status); })
+                      .then((h) => {
+                        if (h?.update_status) setUpdateStatus(h.update_status);
+                      })
                       .catch(() => {});
                   }
                 }}

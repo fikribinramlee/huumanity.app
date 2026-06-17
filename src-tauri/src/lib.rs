@@ -90,6 +90,19 @@ struct SelectorHealth {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // MUST be the FIRST plugin. The main window HIDES (not quits) on close, so
+        // huu keeps running invisibly in the background. Without this guard, a user
+        // who thinks the app is closed and clicks the icon again spawns a SECOND
+        // process that fights the first over the global mouse hook, deep-link
+        // registration, and the singleton window — one of them crashes, which the
+        // user experiences as "the app just closes when I try to open it". With the
+        // guard, the second launch instead routes here and we surface the existing
+        // window, so clicking the icon reliably reopens the running instance.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Err(err) = show_main_window(app) {
+                debug_log(&format!("single-instance reopen failed: {err}"));
+            }
+        }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
@@ -886,6 +899,11 @@ async fn run_updater_check(handle: tauri::AppHandle, manual: bool) {
                 *s = msg.to_string();
             }
         }
+        // Push the status to the editor live so the "Check for updates" UI shows
+        // progress the instant it changes — the frontend listens for this instead
+        // of polling get_selector_health (a heavy synchronous selection probe that
+        // made the Windows check feel stuck on "Checking…").
+        let _ = handle.emit_to("main", "huu-update-status", msg.to_string());
         debug_log(&format!("updater: {msg}"));
     };
 
@@ -900,7 +918,22 @@ async fn run_updater_check(handle: tauri::AppHandle, manual: bool) {
         }
     };
 
-    let maybe_update = match updater.check().await {
+    // Hard timeout: GitHub's latest.json redirect chain can stall (cold edge,
+    // rate limit, flaky network) and `check()` has no built-in deadline — that
+    // left the UI hanging on "Checking…" forever. Cap it so we always resolve to
+    // a definite status the user can act on.
+    let check_result =
+        match tokio::time::timeout(Duration::from_secs(20), updater.check()).await {
+            Ok(r) => r,
+            Err(_) => {
+                set_status(&format!(
+                    "{prefix}: timed out reaching the update server — try again."
+                ));
+                return;
+            }
+        };
+
+    let maybe_update = match check_result {
         Ok(u) => u,
         Err(e) => {
             // Common reasons: no internet, GitHub rate limit, malformed
