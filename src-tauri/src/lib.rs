@@ -1461,6 +1461,18 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                             continue;
                         }
 
+                        // The user may have just clicked our OWN dot to open the
+                        // tone bar. That click reads as a plain click here, and the
+                        // deselect-hide path below would then yank the panel away the
+                        // instant it opens — the "tone bar flashes for a split second
+                        // then disappears" bug. `expand_selector_window` flips
+                        // popup_open within tens of ms of the click, well inside the
+                        // 250ms settle, so if it's set now the gesture was an
+                        // interaction with our overlay: leave the window alone.
+                        if state.popup_open.lock().map(|o| *o).unwrap_or(false) {
+                            continue;
+                        }
+
                         // Classify the gesture FIRST, straight off the mouse (no probe
                         // needed). A text selection is made three ways and we must catch
                         // ALL of them: a DRAG (>6px), a MULTI-CLICK (double = word,
@@ -1497,6 +1509,12 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                                 std::thread::sleep(Duration::from_millis(220));
                                 if seq.load(Ordering::Relaxed) != up_seq {
                                     // A newer gesture arrived — let it take over.
+                                    continue;
+                                }
+                                // Re-check once more in case the panel opened during
+                                // this confirm window (slow JS round-trip clicking the
+                                // dot): never hide a panel that's now open.
+                                if state.popup_open.lock().map(|o| *o).unwrap_or(false) {
                                     continue;
                                 }
                                 if platform_frontmost_pid() == armed_pid {
@@ -2124,23 +2142,49 @@ fn activate_source_process(_pid: i32) -> Result<(), String> {
 
 #[cfg(target_os = "macos")]
 fn send_shortcut(key: &str) -> Result<(), String> {
-    // Send a real ⌘-chord through System Events using the physical KEY CODE.
+    // ⌘C (the selection-probe COPY) is injected with a synthetic CGEvent that
+    // sets the Command flag at the OS level. ⌘V (paste/Accept) stays on the
+    // osascript path below, which the Accept flow already depends on — we don't
+    // touch a working path here.
     //
-    // Both enigo paths we tried before failed: `enigo.text("v")` posts a Unicode
-    // INSERTION (ignores modifiers entirely), and `enigo.key(Key::Unicode('v'))`
-    // with Meta held still didn't set the Command flag on the key event — so the
-    // app received a plain "v" keystroke, which the field auto-capitalized to
-    // "V". That was the "Accept replaces my text with V" bug.
-    //
-    // `key code N using command down` sets the modifier on the event at the OS
-    // level, so the frontmost app interprets it as ⌘V (paste) / ⌘C (copy).
-    // macOS ANSI key codes: V = 9, C = 8.
+    // Why CGEvent for copy: the old ⌘C also went through `osascript ... tell
+    // "System Events" to key code N`, which needs the SEPARATE "Automation:
+    // control System Events" TCC permission on top of Accessibility and spawns a
+    // process per call. When that automation path was missing, flaky, or slow,
+    // the synthetic ⌘C silently did nothing, so the clipboard fallback never
+    // recovered a selection. Apps that expose the selection through the
+    // accessibility tree (Notes, TextEdit) still worked, but apps that rely on
+    // the ⌘C fallback (Discord and other Electron / Chromium web apps, Google
+    // Docs) showed no yellow tab at all. A posted CGEvent needs only the
+    // Accessibility capability we already hold (the mouse event tap proves it),
+    // works without any Automation grant, and is faster (no process spawn).
+    if key == "c" {
+        use core_graphics::event::{CGEvent, CGEventFlags, CGEventTapLocation};
+        use core_graphics::event_source::{CGEventSource, CGEventSourceStateID};
+
+        let source = CGEventSource::new(CGEventSourceStateID::CombinedSessionState)
+            .map_err(|_| "failed to create CGEventSource".to_string())?;
+        // macOS ANSI key code for C is 8.
+        let key_down = CGEvent::new_keyboard_event(source.clone(), 8, true)
+            .map_err(|_| "failed to create key-down event".to_string())?;
+        key_down.set_flags(CGEventFlags::CGEventFlagCommand);
+        key_down.post(CGEventTapLocation::HID);
+
+        let key_up = CGEvent::new_keyboard_event(source, 8, false)
+            .map_err(|_| "failed to create key-up event".to_string())?;
+        key_up.set_flags(CGEventFlags::CGEventFlagCommand);
+        key_up.post(CGEventTapLocation::HID);
+
+        return Ok(());
+    }
+
+    // ⌘V paste: System Events `key code 9 using command down`. This sets the
+    // modifier on the event at the OS level (enigo's Unicode path didn't, which
+    // pasted a literal "v" — the "Accept replaces my text with V" bug).
     let key_code = match key {
         "v" => 9,
-        "c" => 8,
         other => return Err(format!("unsupported shortcut key: {other}")),
     };
-
     let script =
         format!("tell application \"System Events\" to key code {key_code} using command down");
     let status = std::process::Command::new("osascript")
