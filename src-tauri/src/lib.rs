@@ -256,6 +256,16 @@ fn paste_text_into_source(
     // window is visible (the time-window guard in the Reopen handler).
     mark_selector_activity(&state);
 
+    // Order the editor window OUT first (if huu is frontmost) so it can't be
+    // promoted to the front when the selector hides below — deterministic, no
+    // dependence on source-app reactivation timing. See hide_selector_window.
+    #[cfg(target_os = "macos")]
+    if platform_frontmost_pid() == Some(std::process::id() as i32) {
+        if let Some(main) = app.get_webview_window("main") {
+            let _ = main.hide();
+        }
+    }
+
     // ORDER MATTERS, and it's a three-way constraint:
     //  1. To REPLACE the text, the source app must be frontmost with its
     //     selection still live when ⌘V fires.
@@ -959,33 +969,31 @@ fn hide_selector_window(
     }
     mark_selector_activity(&state);
 
-    // If huu is STILL the frontmost app (i.e. the user closed from within the
-    // overlay — Copy, cross, backdrop — rather than by switching to another
-    // app), hand focus BACK to the source app FIRST, before hiding. Hiding the
-    // selector while huu is active promotes huu's editor window to the front,
-    // and during the 235ms fade it would flash into view. Refocusing the source
-    // first means huu isn't active when the selector hides, so the editor can't
-    // surface. If the user closed by clicking INTO another app, that app is
-    // already frontmost (not huu), so we leave their focus exactly where it is.
-    #[cfg(target_os = "macos")]
-    if platform_frontmost_pid() == Some(std::process::id() as i32) {
-        if let Some(pid) = source_pid {
-            let _ = activate_source_process(pid);
-            std::thread::sleep(Duration::from_millis(140));
-        }
-    }
-
-    if let Some(window) = app.get_webview_window("selector") {
-        fade_and_hide_selector(&window);
-    }
-
-    // Final guard for the no-source-pid case: if huu remained frontmost, order
-    // the editor out so the fade can't reveal it.
+    // Closing from within the overlay (✕, Copy, backdrop) makes huu the active
+    // app, because the click landed on huu's selector window. If we then hid the
+    // selector, macOS would promote huu's NEXT window — the editor — to the
+    // front, popping it into view. The earlier attempt (re-activate the source
+    // app first, THEN hide) was RACY: activating another app goes through
+    // osascript, which routinely hadn't finished before the 235ms fade ran, so
+    // the editor still flashed up.
+    //
+    // DETERMINISTIC FIX: when huu is frontmost, order the editor window OUT
+    // FIRST. Then there is simply no huu window left to promote, no matter how
+    // slowly the source app re-activates. Then hand focus back to the source app
+    // and fade the selector. If the user closed by clicking INTO another app,
+    // that app is already frontmost (not huu), so we touch nothing.
     #[cfg(target_os = "macos")]
     if platform_frontmost_pid() == Some(std::process::id() as i32) {
         if let Some(main) = app.get_webview_window("main") {
             let _ = main.hide();
         }
+        if let Some(pid) = source_pid {
+            let _ = activate_source_process(pid);
+        }
+    }
+
+    if let Some(window) = app.get_webview_window("selector") {
+        fade_and_hide_selector(&window);
     }
     Ok(())
 }
