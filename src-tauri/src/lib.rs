@@ -1396,14 +1396,16 @@ fn hide_selector_dot(app: &tauri::AppHandle, state: &SelectorState) {
 }
 
 /// Is the point (global display points) on top of the currently-shown dot? Used
-/// to keep a click on the dot from being treated as a "click elsewhere" dismiss.
-/// (Windows only — the macOS worker no longer hides on click, so it doesn't need
-/// to special-case clicks on the dot.)
-#[cfg(target_os = "windows")]
+/// to keep a click on the dot from being treated as a "click elsewhere" dismiss —
+/// on BOTH platforms, a click on our own tab opens the panel and must never be
+/// read as a deselect. The pad is generous because the tab is the only
+/// interactive thing flush against the right edge, so a near-miss is still a
+/// dot click, not a click in the user's document.
+#[cfg(any(target_os = "macos", target_os = "windows"))]
 fn point_in_dot_frame(state: &SelectorState, x: f64, y: f64) -> bool {
     if let Ok(frame) = state.dot_frame.lock() {
         if let Some((fx, fy, fw, fh)) = *frame {
-            let pad = 6.0;
+            let pad = 12.0;
             return x >= fx - pad && x <= fx + fw + pad && y >= fy - pad && y <= fy + fh + pad;
         }
     }
@@ -1518,6 +1520,14 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                         let is_selection_gesture = was_drag || was_multi_click || shift;
 
                         if !is_selection_gesture {
+                            // INSTANT GUARD: the mouse-up landed on our own tab. That's
+                            // the user opening the panel, never a deselect — bail before
+                            // any hide logic can run. (Strictly safe: this can only
+                            // PREVENT a hide, never cause one.)
+                            if point_in_dot_frame(&state, up_x, up_y) {
+                                continue;
+                            }
+
                             // A plain click. In the app the tab is armed for, a plain
                             // click collapses the selection — the user just UN-HIGHLIGHTED
                             // the text — so hide the tab promptly. We deliberately do NOT
@@ -1527,37 +1537,51 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                             // text. The mouse-up itself is the reliable "unselected" cue.
                             //
                             // Hide ONLY when the click is positively in the SAME app the
-                            // tab is armed for — that's the user un-highlighting the text.
-                            // A click in any OTHER app (switching apps) leaves the
-                            // selection intact, so the tab floats on.
+                            // tab is armed for. A click in any OTHER app (switching apps)
+                            // leaves the selection intact, so the tab floats on.
                             //
-                            // THE TRAP: macOS's AXFocusedApplication LAGS an app switch.
-                            // Right after you click into app B it still reports the old
-                            // app A for a beat. A single read would then see "still A ==
-                            // armed" and wrongly hide on an app switch. So when the first
-                            // read looks like the armed app, CONFIRM with a second read
-                            // after a short delay: on a real switch it flips to B (keep);
-                            // on a real deselect both reads agree on A (hide).
+                            // THE TRAP (app-switch lag): macOS's AXFocusedApplication
+                            // LAGS an app switch — right after you click into app B it
+                            // still reports the old app A for a beat. So a single read
+                            // can't distinguish "deselect in A" from "switched to B".
                             //
-                            // NONE case: AX occasionally returns None (flaky read, not an
-                            // app switch). A None on the first check means we can't tell —
-                            // treat it like "might be same app" and enter the confirm window.
-                            // After 220ms, if AX STILL returns None, hiding is correct: a
-                            // real app-switch would have had AX recover to show the new app,
-                            // so persistent None means AX is broken and the tab would float
-                            // forever if we kept it.
+                            // THE OTHER TRAP (panel-open race — the "flash then vanish"
+                            // bug): clicking our dot ALSO reads as a plain click here. It
+                            // opens the panel by calling expand_selector_window from JS,
+                            // which sets popup_open — but that round-trip can take a few
+                            // hundred ms on a slower machine or a busy webview. If we
+                            // hide before it lands, the panel is torn down the instant it
+                            // appears. The dot-frame guard above catches most of these;
+                            // this POLL is the coordinate-free backstop. We watch
+                            // popup_open for a grace window before hiding: a genuine
+                            // deselect NEVER sets it (so we still hide, just a touch
+                            // later — imperceptible), but a dot-click flips it and we
+                            // bail. AX is re-read at the end so a real app-switch (B) or
+                            // a flaky None is handled correctly.
                             if armed_pid.is_some() {
                                 let first = platform_frontmost_pid();
                                 // Positively a DIFFERENT app — user switched, tab stays.
                                 if first.is_some() && first != armed_pid {
                                     continue;
                                 }
-                                // first == armed_pid OR first is None — wait for confirm.
-                                std::thread::sleep(Duration::from_millis(220));
-                                if seq.load(Ordering::Relaxed) != up_seq {
-                                    continue;
+                                // Same app (or AX flaky). Poll popup_open for up to
+                                // ~700ms: bail the moment the panel opens or a newer
+                                // gesture supersedes this one.
+                                let deadline = Instant::now() + Duration::from_millis(700);
+                                let mut panel_opened = false;
+                                let mut superseded = false;
+                                while Instant::now() < deadline {
+                                    if state.popup_open.lock().map(|o| *o).unwrap_or(false) {
+                                        panel_opened = true;
+                                        break;
+                                    }
+                                    if seq.load(Ordering::Relaxed) != up_seq {
+                                        superseded = true;
+                                        break;
+                                    }
+                                    std::thread::sleep(Duration::from_millis(40));
                                 }
-                                if state.popup_open.lock().map(|o| *o).unwrap_or(false) {
+                                if panel_opened || superseded {
                                     continue;
                                 }
                                 let confirmed = platform_frontmost_pid();
@@ -1565,7 +1589,7 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                                 if confirmed.is_some() && confirmed != armed_pid {
                                     continue;
                                 }
-                                // confirmed == armed_pid OR still None → hide.
+                                // confirmed == armed_pid OR still None → genuine deselect, hide.
                                 hide_selector_dot(&app, &state);
                                 armed_pid = None;
                             }
@@ -1849,6 +1873,9 @@ fn start_selection_watcher(app: tauri::AppHandle) {
 
                 // Mouse-up (kind == 1)
                 if popup_open { continue; }
+                // INSTANT GUARD: a mouse-up on our own tab is the user opening the
+                // panel, never a deselect — bail before any hide logic runs.
+                if point_in_dot_frame(&state, ex, ey) { continue; }
                 // Detect a multi-click BEFORE the settle sleep, comparing this up to
                 // the previous one (same spot, <500ms apart = double/triple-click).
                 let now = Instant::now();
@@ -1887,6 +1914,22 @@ fn start_selection_watcher(app: tauri::AppHandle) {
                 // window fires a plain refocus click whose accessibility data is
                 // stale/garbage. A refocus click is not a selection gesture, so bail.
                 if !is_selection_gesture {
+                    // Panel-open race backstop (mirrors macOS): clicking the dot
+                    // reads as a plain click and opens the panel via a JS round-trip
+                    // that sets popup_open after a delay. Poll for it before hiding so
+                    // a slow machine can't tear the panel down the instant it appears.
+                    // A genuine deselect never sets popup_open, so it still hides.
+                    let deadline = Instant::now() + Duration::from_millis(700);
+                    let mut panel_opened = false;
+                    while Instant::now() < deadline {
+                        if state.popup_open.lock().map(|o| *o).unwrap_or(false) {
+                            panel_opened = true;
+                            break;
+                        }
+                        if WIN_HOOK_SEQ.load(Ordering::Relaxed) != up_seq { break; }
+                        std::thread::sleep(Duration::from_millis(40));
+                    }
+                    if panel_opened { continue; }
                     hide_selector_dot(&app, &state);
                     continue;
                 }
