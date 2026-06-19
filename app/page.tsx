@@ -1433,12 +1433,12 @@ export default function LandingPage() {
         {/* Big hero card — contains everything */}
         <div className="huu-hero-card w-full min-h-[78vh] rounded-3xl border border-black/[0.08] shadow-[0_4px_32px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center px-8 py-16 sm:py-20">
 
-          <h1 className="font-display text-6xl sm:text-7xl md:text-8xl leading-[1.02] text-black max-w-4xl">
-            Stop writing like a f*cking robot.
+          <h1 className="font-display text-5xl sm:text-6xl md:text-7xl leading-[1.02] text-black max-w-4xl">
+            Fix your f*cking copy on the spot
           </h1>
 
-          <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-lg">
-            the text selection tool that rephrases AI copy into unpolished-human sounding words across every app.
+          <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-2xl">
+            The rephrasing tool that makes copy sound unpolishly human, right where you&apos;re working,<br className="hidden sm:block" /> without switching tabs or losing your flow.
           </p>
 
           {/* Download CTA — same routing as the header. */}
@@ -1470,7 +1470,7 @@ export default function LandingPage() {
               <path d="M9 28C9 28 7 18 9 2M9 2L3 10M9 2L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
             <p className="font-handwritten text-2xl sm:text-3xl text-neutral-400 -rotate-2">
-              &ldquo;because anyone can tell you use AI to write, you lazy f*ck&rdquo;
+              Grammarly corrects your grammar. Huumanity makes it sound like you.
             </p>
           </div>
 
@@ -1507,12 +1507,11 @@ export default function LandingPage() {
               </div>
 
               <h2 className="font-display text-4xl sm:text-5xl text-white leading-[1.05]">
-                Select any text and pick any of the four tones
+                Highlight anything and get a rewrite on the spot
               </h2>
 
               <p className="font-sans text-white/55 text-base leading-7">
-                Rephrase your AI copy right inside whatever you&apos;re working
-                in without opening another AI chat to do it
+                Pick from four tones to rephrase your copy that works on every app.
               </p>
 
               <div>
@@ -1741,7 +1740,7 @@ export default function LandingPage() {
               className="font-display text-black leading-[1.02] tracking-tight mb-5"
               style={{ fontSize: "clamp(2rem, 4.8vw, 3.75rem)" }}
             >
-              People know it&apos;s written by AI
+              You&apos;re losing your flow every time you switch tabs to fix your copy
             </h2>
             <p className="font-sans text-black/60 text-base sm:text-lg leading-7 max-w-xl mx-auto">
               The way AI writes is instantly recognizable. And it&apos;s quietly killing your replies, your engagement, and your credibility.
@@ -2386,7 +2385,7 @@ export default function LandingPage() {
             {/* LEFT: Headline + description + tags */}
             <div>
               <h2 className="font-display text-5xl sm:text-6xl lg:text-[4.5rem] leading-[1.0] tracking-tight">
-                Write for every room
+                Works inside every app you&apos;re already using
               </h2>
               <p className="text-neutral-400 text-base sm:text-lg mt-6 leading-7 max-w-md">
                 One tool for 4 ways to sound human. Whether you&apos;re closing a deal,
@@ -2732,8 +2731,8 @@ export default function LandingPage() {
       {/* 8. FINAL CTA (yellow) */}
       <section className="bg-[#fff700] px-6 py-24 sm:py-32 border-y-2 border-black">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-black leading-[1.02] whitespace-nowrap">
-            Start sounding human.
+          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-black leading-[1.02]">
+            Humanize your copy on the spot.
           </h2>
           <p className="text-black/80 text-base sm:text-lg mt-6 mb-10 max-w-xl mx-auto leading-7">
             Every cold email, DM, and post you send deserves to sound like you and not some AI slop. Free to start now.
