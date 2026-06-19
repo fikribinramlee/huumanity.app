@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Young_Serif, Jost, Caveat } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
-import { Analytics } from "@vercel/analytics/react";
+import Script from "next/script";
 import "./globals.css";
 
 const youngSerif = Young_Serif({
@@ -69,7 +69,7 @@ export default function RootLayout({
           signUpForceRedirectUrl="/download"
         >
           {children}
-          <Analytics />
+          <Script src="https://va.vercel-scripts.com/v1/script.js" strategy="afterInteractive" />
         </ClerkProvider>
       </body>
     </html>
