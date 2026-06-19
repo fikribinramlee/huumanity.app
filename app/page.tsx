@@ -41,13 +41,6 @@ const TUT_ORIGINAL =
 const TUT_REWRITTEN =
   "every platform is drowning in AI slop rn and honestly the only thing that actually cuts through is real human creativity, like stuff that actually sounds like a person wrote it bc they meant it";
 
-// Benefit-section Gmail demo — the original draft and the huumanity rewrite that
-// replaces it once the cursor clicks Accept.
-const BENEFIT_ORIGINAL =
-  "Hi Dimitri! We haven't met, but it's always great to connect with other executives. I'm Andrea from Acme, a Meta ads agency for professionals across Asia.\n\nIf you'd like 10 extra booked calls on your calendar, I'd love to introduce myself.";
-const BENEFIT_REWRITTEN =
-  "Dimitri, I'll keep this short.\n\nI'm Andrea from Acme. We run Meta ads for clients across Asia, and if your calendar isn't as full as it should be, that's something we can fix.\n\nWe'll get you 10 booked calls with people who actually show up.";
-
 const NAV_LINKS = [
   { href: "#benefit", label: "How it Works" },
   { href: "#demo", label: "Demo" },
@@ -535,17 +528,6 @@ export default function LandingPage() {
   const [scrolled, setScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState<string>("");
   const [activeUseCase, setActiveUseCase] = useState<UseCase>(USE_CASES[0]);
-  const [animStep, setAnimStep] = useState(0);
-  const [arrowFlash, setArrowFlash] = useState(false);
-  const [acceptFlash, setAcceptFlash] = useState(false);
-  const [cursorPos, setCursorPos] = useState(0);      // 0=email · 1=tab · 2=Unpolished · 3=Controversial · 4=Enter · 5=Accept
-  const [cursorVisible, setCursorVisible] = useState(false);
-  const [cursorExiting, setCursorExiting] = useState(false);
-  const [btnLefts, setBtnLefts] = useState({ u: "19%", c: "32%", e: "50%", a: "80%" });
-  // Measured vertical levels so the cursor lands exactly on the tone bar, the
-  // email body, and the result card's Accept button regardless of their rendered
-  // sizes. (The tab sits at the bar's level too, so it reuses `bar`.)
-  const [vizPos, setVizPos] = useState({ bar: "46%", email: "82%", accept: "12%" });
   // Feature section animation state
   const [featAnimStep, setFeatAnimStep] = useState(0);
   const [featArrowFlash, setFeatArrowFlash] = useState(false);
@@ -610,80 +592,6 @@ export default function LandingPage() {
     handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // Benefit-section demo animation — scrubbed by scroll. The timeline keeps
-  // the same beats as the old timer version (cursor in → select → tone bar →
-  // hover tones → enter → result), but progress is tied to how far the
-  // section has scrolled into view: it completes once the section is halfway
-  // past the viewport center, and scrolling back up reverses it.
-  useEffect(() => {
-    const el = benefitSectionRef.current;
-    if (!el) return;
-    // gain 1.4 makes the animation complete a bit before the section reaches
-    // viewport center, then holds. The key is the beat POSITIONS within the
-    // 12000-unit timeline:
-    // gain 0.85 — animation completes a bit after section center passes viewport
-    // center, giving a leisurely scroll-through feel. Beat layout:
-    //   T 0–7500:  cursor on email, text highlights (first half = just selecting)
-    //   T 7500–9500: cursor DWELLS on yellow tab (tab is clicked at T=8200,
-    //               tone bar opens, but cursor STAYS on tab so user sees the hover)
-    //   T 9500–10700: cursor sweeps to Unpolished → Controversial → Enter
-    //   T 10700–11900: result card → cursor rises to Accept → text swap
-    return attachScrollScrub(el, 12000, (T) => {
-      setCursorVisible(T >= 400 && T < 12000);
-      setCursorExiting(false);
-      setCursorPos(
-        T >= 11400 ? 5  // Accept
-        : T >= 10500 ? 4 // Enter
-        : T >= 10000 ? 3 // Controversial
-        : T >= 9500 ? 2  // Unpolished — only leaves tab after a long dwell
-        : T >= 7500 ? 1  // tab — cursor stays here from T=7500 all the way to T=9500
-        : 0              // email body
-      );
-      setArrowFlash(T >= 10700);
-      setAcceptFlash(T >= 11700);
-      setAnimStep(
-        T >= 11900 ? 8  // text swap — fires right after Accept
-        : T >= 11200 ? 7 // result card buttons appear
-        : T >= 10900 ? 6 // result card generates
-        : T >= 10200 ? 5 // Controversial lights up
-        : T >= 9700 ? 4  // Unpolished lights up
-        : T >= 8200 ? 3  // tone bar opens (cursor clicked tab, still hovering on it)
-        : T >= 1800 ? 2  // text selected + tab slides in
-        : 0
-      );
-    }, 0.95);
-  }, []);
-
-  // Compute cursor target positions from real DOM layout (updates on resize too).
-  useEffect(() => {
-    const compute = () => {
-      const col = rightColumnRef.current;
-      if (!col) return;
-      const u = col.querySelector('[data-btn-id="unpolished"]') as HTMLElement | null;
-      const c = col.querySelector('[data-btn-id="controversial"]') as HTMLElement | null;
-      const e = col.querySelector('[data-btn-id="enter"]') as HTMLElement | null;
-      const a = col.querySelector('[data-btn-id="accept"]') as HTMLElement | null;
-      const email = col.querySelector('[data-viz="email"]') as HTMLElement | null;
-      if (!u || !c || !e) return;
-      const colRect = col.getBoundingClientRect();
-      const pct = (el: HTMLElement) => {
-        const r = el.getBoundingClientRect();
-        const cx = r.left + r.width / 2 - 1; // -1 for cursor tip offset
-        return `${(((cx - colRect.left) / colRect.width) * 100).toFixed(1)}%`;
-      };
-      const topPct = (el: HTMLElement) => {
-        const r = el.getBoundingClientRect();
-        const cy = r.top + r.height / 2 - 2; // -2 for cursor tip offset
-        return `${(((cy - colRect.top) / colRect.height) * 100).toFixed(1)}%`;
-      };
-      setBtnLefts({ u: pct(u), c: pct(c), e: pct(e), a: a ? pct(a) : "80%" });
-      setVizPos({ bar: topPct(e), email: email ? topPct(email) : "82%", accept: a ? topPct(a) : "12%" });
-    };
-    compute();
-    window.addEventListener("resize", compute);
-    return () => window.removeEventListener("resize", compute);
   }, []);
 
   // Feature-section animation — scrubbed by scroll, same approach as the
@@ -1539,189 +1447,20 @@ export default function LandingPage() {
               </div>
             </div>
 
-            {/* ── RIGHT COLUMN — animation ──
-                Vertical story (top → bottom): RESULT card on top, TONE BAR in the
-                middle (right-aligned, hugging the yellow TAB on the screen edge),
-                Gmail email at the bottom. All three live in normal flow with EQUAL
-                gaps between them (justify-center + gap), so the white spacing reads
-                evenly; they animate via opacity/transform only, never reflowing. */}
+            {/* ── RIGHT COLUMN — demo video ── */}
             <div
               ref={rightColumnRef}
-              className="relative flex flex-col justify-center gap-7 p-6 sm:p-8 min-h-[640px]"
+              className="relative flex items-center justify-center p-6 sm:p-8 lg:p-10"
             >
-
-              {/* macOS cursor — position controlled by cursorPos, visibility by cursorVisible.
-                  pos 0=email body · 1=right-edge tab · 2=Unpolished · 3=Controversial · 4=Enter · 5=Accept */}
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  top: cursorPos === 0 ? vizPos.email : cursorPos === 5 ? vizPos.accept : vizPos.bar,
-                  left: (["10%", "96%", btnLefts.u, btnLefts.c, btnLefts.e, btnLefts.a] as string[])[Math.min(cursorPos, 5)] ?? "10%",
-                  opacity: cursorVisible ? 1 : 0,
-                  transform: cursorExiting ? "translateX(30px)" : "translateX(0)",
-                  transition: "top 0.9s cubic-bezier(0.33,1,0.68,1), left 0.75s cubic-bezier(0.33,1,0.68,1), opacity 0.4s ease, transform 0.55s ease-in",
-                  pointerEvents: "none",
-                  zIndex: 30,
-                }}
-              >
-                {/* Classic macOS arrow cursor: white outline + black fill */}
-                <svg width="16" height="22" viewBox="0 0 22 30" fill="none">
-                  <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="rgba(0,0,0,0.22)" transform="translate(1.5,1.5)" />
-                  <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="white" stroke="white" strokeWidth="4.5" strokeLinejoin="round" strokeLinecap="round" />
-                  <path d="M3 2L3 25L9 19.5L13.5 29L17.5 27.5L13 18L21 18L3 2Z" fill="black" />
-                </svg>
-              </div>
-
-              {/* RESULT CARD — top slot, generates after Enter (step 6) and STAYS
-                  put once Accept is clicked (the rewrite also drops into the email).
-                  Only scrolling back up reverses it. */}
-              <div
-                className="w-full bg-white rounded-2xl p-4 border-2 border-[#fff700] shadow-[0_6px_24px_rgba(255,247,0,0.22)]"
-                style={{
-                  zIndex: 15,
-                  opacity: animStep >= 6 ? 1 : 0,
-                  transform: animStep >= 6 ? "translateY(0)" : "translateY(-10px)",
-                  transition: "opacity 0.5s ease-out, transform 0.5s ease-out",
-                }}
-              >
-                <div className="flex items-center gap-1.5 mb-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#fff700]" aria-hidden="true" />
-                  <span className="font-sans text-[10px] uppercase tracking-wider font-semibold text-neutral-400">
-                    Rewritten by huumanity
-                  </span>
-                </div>
-                <p className="font-sans text-[12px] leading-[1.7] text-neutral-800 whitespace-pre-line">
-                  {BENEFIT_REWRITTEN}
-                </p>
-                <div
-                  className="flex items-center justify-between gap-2 mt-3"
-                  style={{ opacity: animStep >= 7 ? 1 : 0, transition: "opacity 0.5s ease-out" }}
-                >
-                  <button className="bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-4 py-1.5">Back</button>
-                  <div className="flex items-center gap-2">
-                    <button
-                      aria-label="Copy"
-                      className="flex items-center gap-1 bg-neutral-100 text-black font-sans text-xs font-semibold rounded-full px-3 py-1.5"
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-                      </svg>
-                      Copy
-                    </button>
-                    <button
-                      data-btn-id="accept"
-                      className={`bg-[#fff700] text-black font-sans text-xs font-bold rounded-full px-4 py-1.5 border border-black transition-shadow duration-200 ${
-                        acceptFlash ? "shadow-[0_0_0_3px_rgba(255,247,0,0.55)]" : ""
-                      }`}
-                    >
-                      Accept
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* TONE BAR — middle slot, right-aligned but kept clear of the yellow
-                  tab (mr) so there's breathing room between them. Opens when the tab
-                  is clicked (step 3). */}
-              <div
-                aria-hidden="true"
-                className="self-end mr-12 sm:mr-16"
-                style={{
-                  zIndex: 20,
-                  pointerEvents: "none",
-                  opacity: animStep >= 3 ? 1 : 0,
-                  transform: animStep >= 3 ? "translateY(0)" : "translateY(8px)",
-                  transition: "opacity 0.45s ease-out, transform 0.45s ease-out",
-                }}
-              >
-                <div className="bg-white rounded-full px-3 py-2 flex items-center gap-1.5 w-fit shadow-[0_6px_20px_rgba(0,0,0,0.18)]">
-                  {[
-                    { label: "Humanize", id: "", step: 99 },
-                    { label: "Unpolished", id: "unpolished", step: 4 },
-                    { label: "Controversial", id: "controversial", step: 5 },
-                    { label: "Direct", id: "", step: 99 },
-                  ].map(({ label, id, step }) => (
-                    <span
-                      key={label}
-                      data-btn-id={id || undefined}
-                      className={`font-sans text-xs font-semibold whitespace-nowrap px-2.5 py-0.5 rounded-full transition-all duration-300 ${
-                        animStep >= step ? "bg-[#fff700] text-black" : "text-neutral-500"
-                      }`}
-                    >
-                      {label}
-                    </span>
-                  ))}
-                  <span
-                    data-btn-id="enter"
-                    className={`ml-1 w-7 h-7 rounded-full border flex-shrink-0 flex items-center justify-center transition-colors duration-300 ${
-                      arrowFlash ? "bg-[#fff700] border-[#fff700] text-black" : "border-neutral-300 text-neutral-400"
-                    }`}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="5" y1="12" x2="19" y2="12" />
-                      <polyline points="12 5 19 12 12 19" />
-                    </svg>
-                  </span>
-                </div>
-              </div>
-
-              {/* Grammarly-style YELLOW TAB — right edge, tracking the tone bar's
-                  measured vertical level. Slides in when text is selected (step 2). */}
-              <div
-                aria-hidden="true"
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: vizPos.bar,
-                  zIndex: 25,
-                  pointerEvents: "none",
-                  transform: `translateY(-50%) translateX(${animStep >= 2 ? "0%" : "110%"})`,
-                  opacity: animStep >= 2 ? 1 : 0,
-                  transition: "transform 0.4s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease",
-                }}
-              >
-                <div className="flex h-14 w-9 items-center justify-center rounded-l-2xl rounded-r-none bg-[#fff700] shadow-[-4px_2px_14px_rgba(0,0,0,0.35)]">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="12" y1="19" x2="12" y2="5" />
-                    <polyline points="5 12 12 5 19 12" />
-                  </svg>
-                </div>
-              </div>
-
-              {/* Gmail-format email card — anchored at the bottom, compact */}
-              <div className="bg-white rounded-2xl overflow-hidden">
-                <div className="flex items-center px-4 py-2.5">
-                  <span
-                    aria-label="Gmail"
-                    className="font-black text-lg leading-none select-none"
-                    style={{
-                      background: "linear-gradient(135deg, #EA4335 0%, #FBBC04 45%, #34A853 72%, #4285F4 100%)",
-                      WebkitBackgroundClip: "text",
-                      WebkitTextFillColor: "transparent",
-                      backgroundClip: "text",
-                    }}
-                  >
-                    M
-                  </span>
-                </div>
-                <div className="h-px bg-neutral-200" />
-                <div data-viz="email" className="px-5 py-4 whitespace-pre-wrap min-h-[200px]">
-                  <span
-                    className={`font-sans text-[13px] leading-[1.75] transition-colors duration-500 ${
-                      animStep >= 8
-                        ? "text-neutral-800"
-                        : animStep >= 2
-                        ? "huu-selecting"
-                        : "text-neutral-800"
-                    }`}
-                  >
-                    {animStep >= 8 ? BENEFIT_REWRITTEN : BENEFIT_ORIGINAL}
-                  </span>
-                </div>
-              </div>
-
+              <video
+                src="/huumanity-demo.mp4"
+                autoPlay
+                loop
+                muted
+                playsInline
+                preload="metadata"
+                className="w-full rounded-2xl shadow-[0_8px_40px_rgba(0,0,0,0.45)]"
+              />
             </div>
           </div>
         </div>
