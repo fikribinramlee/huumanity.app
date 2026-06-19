@@ -283,6 +283,7 @@ export async function POST(req: NextRequest) {
     }
 
     let usageCount = 0;
+    let dailyLimit = FREE_DAILY_LIMIT;
 
     // Signed-in users: enforce plan limits server-side.
     // Anonymous callers: fall through (client-side localStorage gate only).
@@ -295,13 +296,16 @@ export async function POST(req: NextRequest) {
 
       if (!isPro) {
         usageCount = windowedUsage(publicMeta).count;
+        dailyLimit = typeof privateMeta.customDailyLimit === "number"
+          ? privateMeta.customDailyLimit
+          : FREE_DAILY_LIMIT;
 
-        if (usageCount >= FREE_DAILY_LIMIT) {
+        if (usageCount >= dailyLimit) {
           return corsJson(
             {
               error: "usage_limit_reached",
               usageCount,
-              limit: FREE_DAILY_LIMIT,
+              limit: dailyLimit,
             },
             { status: 429 }
           );
@@ -405,7 +409,7 @@ export async function POST(req: NextRequest) {
     return corsJson({
       result,
       usageCount: newUsageCount ?? (userId ? usageCount + 1 : null),
-      limit: FREE_DAILY_LIMIT,
+      limit: dailyLimit,
     });
   } catch (err) {
     console.error("Humanize API error:", err);

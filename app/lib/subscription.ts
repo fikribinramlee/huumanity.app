@@ -25,6 +25,7 @@ export type PrivateMeta = {
   plan?: Plan;
   cancelAtPeriodEnd?: boolean;   // true when user cancelled but period hasn't ended
   currentPeriodEnd?: string;     // ISO date string, e.g. "2026-07-10"
+  customDailyLimit?: number;     // admin-set per-user override; takes precedence over FREE_DAILY_LIMIT
 };
 
 export type PublicMeta = {
@@ -73,6 +74,19 @@ export async function getUserMeta(userId: string) {
     privateMeta: (user.privateMetadata ?? {}) as PrivateMeta,
     publicMeta: (user.publicMetadata ?? {}) as PublicMeta,
   };
+}
+
+/**
+ * Returns the effective daily rewrite limit for a free user.
+ * If an admin has set a customDailyLimit on the account, that wins.
+ * Otherwise falls back to FREE_DAILY_LIMIT.
+ */
+export async function getDailyLimit(userId: string): Promise<number> {
+  const { privateMeta } = await getUserMeta(userId);
+  if (typeof privateMeta.customDailyLimit === "number") {
+    return privateMeta.customDailyLimit;
+  }
+  return FREE_DAILY_LIMIT;
 }
 
 /** Returns true only when the user has an active Pro subscription */
