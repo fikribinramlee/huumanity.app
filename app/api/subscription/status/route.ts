@@ -33,13 +33,17 @@ export async function GET() {
 
     const { count: usageCount, resetsAt } = windowedUsage(publicMeta);
 
+    const dailyLimit = typeof privateMeta.customDailyLimit === "number"
+      ? privateMeta.customDailyLimit
+      : FREE_DAILY_LIMIT;
+
     return NextResponse.json(
       {
         plan: isPro ? "pro" : "free",
         usageCount,
-        limit: FREE_DAILY_LIMIT,
+        limit: dailyLimit,
         unlimited: isPro,
-        remaining: isPro ? null : Math.max(0, FREE_DAILY_LIMIT - usageCount),
+        remaining: isPro ? null : Math.max(0, dailyLimit - usageCount),
         // ISO timestamp when the current 24h window resets (null if no usage yet)
         resetsAt,
         cancelAtPeriodEnd: privateMeta.cancelAtPeriodEnd ?? false,
