@@ -498,17 +498,18 @@ export default function LandingPage() {
   const { isSignedIn, isLoaded, user } = useUser();
   const router = useRouter();
 
-  // If Clerk sends a signed-in user back to "/" (its default "after sign-up"
-  // URL when no dashboard override is set), catch it here and send them to
-  // /download. This is the most reliable redirect path because it doesn't
-  // depend on Clerk's forceRedirectUrl prop reaching the right flow step —
-  // it fires regardless of how the user ended up on the home page while
-  // signed in (email sign-up, Google OAuth, magic link, etc.).
+  // Redirect to /download only for brand-new sign-ups landing on "/".
+  // Clerk's dashboard default sends users to "/" after sign-up, so we catch
+  // them here — but ONLY if their account was created in the last 2 minutes,
+  // so existing signed-in users can freely visit the home page.
   useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      router.replace("/download");
+    if (isLoaded && isSignedIn && user?.createdAt) {
+      const secondsOld = (Date.now() - new Date(user.createdAt).getTime()) / 1000;
+      if (secondsOld < 120) {
+        router.replace("/download");
+      }
     }
-  }, [isLoaded, isSignedIn, router]);
+  }, [isLoaded, isSignedIn, user, router]);
 
   const downloadPlatform = detectDownloadPlatform();
   // Waitlist mode — when this page is rendered at /waitlist, every
