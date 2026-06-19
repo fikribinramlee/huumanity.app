@@ -1431,9 +1431,9 @@ export default function LandingPage() {
         className="bg-white px-4 sm:px-6 pt-24 sm:pt-28 pb-8"
       >
         {/* Big hero card — contains everything */}
-        <div className="huu-hero-card w-full min-h-[78vh] rounded-3xl border border-black/[0.08] shadow-[0_4px_32px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center px-8 py-16 sm:py-20">
+        <div className="huu-hero-card w-full min-h-[78vh] rounded-3xl border border-black/[0.08] shadow-[0_4px_32px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center px-5 sm:px-8 py-14 sm:py-20">
 
-          <h1 className="font-display text-5xl sm:text-6xl md:text-7xl leading-[1.02] text-black max-w-4xl">
+          <h1 className="font-display text-[2rem] sm:text-6xl md:text-7xl leading-[1.05] sm:leading-[1.02] text-black max-w-4xl">
             Fix your f*cking<br />copy on the spot
           </h1>
 
@@ -1469,7 +1469,7 @@ export default function LandingPage() {
             <svg width="20" height="34" viewBox="0 0 18 30" fill="none" aria-hidden="true" className="text-neutral-400">
               <path d="M9 28C9 28 7 18 9 2M9 2L3 10M9 2L15 10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            <p className="font-handwritten text-2xl sm:text-3xl text-neutral-400 -rotate-2">
+            <p className="font-handwritten text-lg sm:text-3xl text-neutral-400 -rotate-2 px-2">
               Grammarly corrects your grammar. Huumanity makes it sound like you.
             </p>
           </div>
@@ -1488,7 +1488,7 @@ export default function LandingPage() {
           <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr]">
 
             {/* ── LEFT COLUMN — headline + CTA ── */}
-            <div className="flex flex-col justify-center gap-7 p-10 sm:p-14 lg:border-r lg:border-white/10">
+            <div className="flex flex-col justify-center gap-6 sm:gap-7 p-7 sm:p-14 lg:border-r lg:border-white/10">
 
               {/* Platform pills */}
               <div className="flex flex-wrap gap-2">
@@ -1506,7 +1506,7 @@ export default function LandingPage() {
                 </span>
               </div>
 
-              <h2 className="font-display text-4xl sm:text-5xl text-white leading-[1.05]">
+              <h2 className="font-display text-3xl sm:text-5xl text-white leading-[1.1] sm:leading-[1.05]">
                 Highlight anything and get a rewrite on the spot
               </h2>
 
@@ -2000,7 +2000,7 @@ export default function LandingPage() {
           </p>
 
           {/* Yellow tab bar + Paste yours button */}
-          <div className="flex items-center justify-center gap-10 mb-6 flex-wrap">
+          <div className="flex items-center justify-center gap-4 sm:gap-10 mb-6 flex-wrap">
             <div className="inline-flex items-center gap-2 p-1.5 rounded-2xl bg-[#fff700] shadow-[0_4px_0_rgba(0,0,0,0.08)]">
               {TABS.map((tab) => (
                 <button
@@ -2384,7 +2384,7 @@ export default function LandingPage() {
 
             {/* LEFT: Headline + description + tags */}
             <div>
-              <h2 className="font-display text-4xl sm:text-5xl lg:text-[3.5rem] leading-[1.0] tracking-tight">
+              <h2 className="font-display text-3xl sm:text-5xl lg:text-[3.5rem] leading-[1.1] sm:leading-[1.0] tracking-tight">
                 Works inside every app you&apos;re already using
               </h2>
               <p className="text-neutral-400 text-base sm:text-lg mt-6 leading-7 max-w-md">
@@ -2420,7 +2420,7 @@ export default function LandingPage() {
 
             {/* RIGHT: Active use case content */}
             <div className="lg:pt-3">
-              <h3 className="font-display text-3xl sm:text-4xl leading-[1.1] mb-5">
+              <h3 className="font-display text-2xl sm:text-4xl leading-[1.15] sm:leading-[1.1] mb-5">
                 {activeUseCase.title}
               </h3>
               <p className="text-neutral-300 text-base sm:text-lg leading-[1.75]">
@@ -2589,7 +2589,7 @@ export default function LandingPage() {
 
           {/* RIGHT: Copy */}
           <div className="flex flex-col gap-6">
-            <h2 className="font-display text-4xl sm:text-5xl leading-[1.05] tracking-tight text-black">
+            <h2 className="font-display text-3xl sm:text-5xl leading-[1.1] sm:leading-[1.05] tracking-tight text-black">
               Stop switching tabs to fix your AI copy
             </h2>
             <p className="font-sans text-neutral-500 text-base sm:text-lg leading-7">
@@ -2623,7 +2623,7 @@ export default function LandingPage() {
       <section id="pricing" className="bg-black text-white px-6 py-24 sm:py-32">
         <div className="max-w-4xl mx-auto">
           {/* Headline + description */}
-          <h2 className="font-display text-4xl sm:text-5xl md:text-6xl text-center leading-[1.05] max-w-3xl mx-auto">
+          <h2 className="font-display text-3xl sm:text-5xl md:text-6xl text-center leading-[1.05] max-w-3xl mx-auto">
             Simple Pricing
           </h2>
           <p className="text-neutral-400 text-base sm:text-lg mt-5 max-w-sm mx-auto text-center leading-7">
@@ -2731,7 +2731,7 @@ export default function LandingPage() {
       {/* 8. FINAL CTA (yellow) */}
       <section className="bg-[#fff700] px-6 py-24 sm:py-32 border-y-2 border-black">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="font-display text-5xl sm:text-6xl md:text-7xl text-black leading-[1.02]">
+          <h2 className="font-display text-[2rem] sm:text-6xl md:text-7xl text-black leading-[1.1] sm:leading-[1.02]">
             Humanize your copy on the spot.
           </h2>
           <p className="text-black/80 text-base sm:text-lg mt-6 mb-10 max-w-xl mx-auto leading-7">
