@@ -1434,11 +1434,11 @@ export default function LandingPage() {
         <div className="huu-hero-card w-full min-h-[78vh] rounded-3xl border border-black/[0.08] shadow-[0_4px_32px_rgba(0,0,0,0.05)] flex flex-col items-center justify-center text-center px-8 py-16 sm:py-20">
 
           <h1 className="font-display text-5xl sm:text-6xl md:text-7xl leading-[1.02] text-black max-w-4xl">
-            Fix your f*cking copy on the spot
+            Fix your f*cking<br />copy on the spot
           </h1>
 
-          <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-2xl">
-            The rephrasing tool that makes copy sound unpolishly human, right where you&apos;re working,<br className="hidden sm:block" /> without switching tabs or losing your flow.
+          <p className="font-sans text-neutral-500 text-lg sm:text-xl mt-6 mb-10 max-w-3xl">
+            The rephrasing tool that makes copy sound unpolishly human,<br className="hidden sm:block" />right where you&apos;re working, without switching tabs or losing your flow.
           </p>
 
           {/* Download CTA — same routing as the header. */}
@@ -2384,7 +2384,7 @@ export default function LandingPage() {
 
             {/* LEFT: Headline + description + tags */}
             <div>
-              <h2 className="font-display text-5xl sm:text-6xl lg:text-[4.5rem] leading-[1.0] tracking-tight">
+              <h2 className="font-display text-4xl sm:text-5xl lg:text-[3.5rem] leading-[1.0] tracking-tight">
                 Works inside every app you&apos;re already using
               </h2>
               <p className="text-neutral-400 text-base sm:text-lg mt-6 leading-7 max-w-md">
